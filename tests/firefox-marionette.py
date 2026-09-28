@@ -27,8 +27,10 @@ def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "support"
     default_seconds = 20 if mode == "youtube-controls" else 55
     seconds = int(sys.argv[2]) if len(sys.argv) > 2 else default_seconds
+    youtube_url = (sys.argv[3] if len(sys.argv) > 3 else
+                   "https://www.youtube.com/watch?v=aqz-KE-bpKQ")
     sock = socket.create_connection(("127.0.0.1", 2828), timeout=30)
-    sock.settimeout(seconds + 120)
+    sock.settimeout(seconds + 180)
     receive(sock)
     sequence = 0
     session_open = False
@@ -90,6 +92,29 @@ def main():
             f"could not click any of {selectors}: {last_error}"
         )
 
+    def prepare_youtube_muted():
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            state = call("WebDriver:ExecuteScript", {
+                "script": """
+                    const video = document.querySelector('video');
+                    const player = document.getElementById('movie_player');
+                    if (!video || !player ||
+                        typeof player.mute !== 'function') {
+                      return null;
+                    }
+                    video.muted = true;
+                    player.mute();
+                    return {paused: video.paused,
+                      readyState: video.readyState};
+                """,
+                "args": [],
+            })["value"]
+            if state:
+                return state
+            time.sleep(0.25)
+        raise RuntimeError("YouTube player did not become ready")
+
     try:
         call("WebDriver:NewSession", {"capabilities": {"alwaysMatch": {
             "pageLoadStrategy": "none"
@@ -99,11 +124,118 @@ def main():
         sock.close()
         raise
     call("WebDriver:SetTimeouts", {
-        "script": (seconds + 90) * 1000,
+        "script": (seconds + 150) * 1000,
         "pageLoad": 90_000,
     })
     try:
-        if mode == "support":
+        if mode == "console":
+            call("Marionette:SetContext", {"value": "chrome"})
+            result = call("WebDriver:ExecuteScript", {
+                "script": """
+                    return Services.console.getMessageArray().slice(-1000)
+                      .map(message => ({
+                        message: message.message || message.errorMessage ||
+                          String(message),
+                        sourceName: message.sourceName || null,
+                        category: message.category || null,
+                        logLevel: message.logLevel || null,
+                        timeStamp: message.timeStamp || null
+                      })).filter(item =>
+                        /youtube|googlevideo|jnn|botguard|attest|integrity|potoken|po.token|error|fail/i
+                          .test(`${item.message} ${item.sourceName} ${item.category}`)
+                      );
+                """,
+                "args": [],
+            })
+        elif mode == "youtube-state":
+            result = call("WebDriver:ExecuteScript", {
+                "script": """
+                    const player = document.getElementById('movie_player');
+                    const video = document.querySelector('video');
+                    const allResources = performance.getEntriesByType(
+                      'resource');
+                    const resourceHosts = {};
+                    for (const entry of allResources) {
+                      try {
+                        const host = new URL(entry.name).hostname;
+                        resourceHosts[host] = (resourceHosts[host] || 0) + 1;
+                      } catch (_) {}
+                    }
+                    const protectedResources = allResources.filter(entry =>
+                      /jnn|attest|botguard|integrity|challenge/i.test(
+                        entry.name)).map(entry => {
+                          const url = new URL(entry.name);
+                          return {
+                            host: url.hostname,
+                            path: url.pathname,
+                            duration: entry.duration,
+                            transferSize: entry.transferSize,
+                            encodedBodySize: entry.encodedBodySize
+                          };
+                        });
+                    const experimentFlags = Object.fromEntries(
+                      Object.entries(window.ytcfg?.data_?.EXPERIMENT_FLAGS || {})
+                        .filter(([key]) =>
+                          /sabr|ump|potoken|po_token|attest|botguard|integrity/i
+                            .test(key))
+                    );
+                    const resources = allResources.slice(-80).map(entry => {
+                        try {
+                          const url = new URL(entry.name);
+                          return {
+                            host: url.hostname,
+                            path: url.pathname,
+                            initiatorType: entry.initiatorType,
+                            duration: entry.duration,
+                            transferSize: entry.transferSize,
+                            encodedBodySize: entry.encodedBodySize
+                          };
+                        } catch (_) {
+                          return null;
+                        }
+                      }).filter(Boolean);
+                    const safeCall = (name) => {
+                      try {
+                        return player && typeof player[name] === 'function' ?
+                          player[name]() : null;
+                      } catch (error) {
+                        return {error: String(error)};
+                      }
+                    };
+                    return {
+                      title: document.title,
+                      url: location.href,
+                      webdriver: navigator.webdriver,
+                      body: document.body.innerText.slice(0, 2500),
+                      playerClass: player ? player.className : null,
+                      playerState: safeCall('getPlayerState'),
+                      debugText: safeCall('getDebugText'),
+                      videoData: safeCall('getVideoData'),
+                      videoStats: safeCall('getVideoStats'),
+                      playerResponse: safeCall('getPlayerResponse'),
+                      errorScreen: document.querySelector(
+                        '.ytp-error, .ytp-error-content-wrap')?.innerText || null,
+                      video: video ? {
+                        currentTime: video.currentTime,
+                        duration: video.duration,
+                        paused: video.paused,
+                        readyState: video.readyState,
+                        networkState: video.networkState,
+                        error: video.error ? {
+                          code: video.error.code,
+                          message: video.error.message
+                        } : null,
+                        quality: video.getVideoPlaybackQuality()
+                      } : null,
+                      resourceHosts,
+                      protectedResources,
+                      experimentFlags,
+                      resources
+                    };
+                """,
+                "args": [],
+            })
+        elif mode == "support":
             call("Marionette:SetContext", {"value": "chrome"})
             result = call("WebDriver:ExecuteAsyncScript", {
                 "script": """
@@ -155,39 +287,69 @@ def main():
                 "args": [seconds],
             })
         elif mode == "youtube":
-            navigate("https://www.youtube.com/watch?v=aqz-KE-bpKQ")
+            navigate(youtube_url)
+            youtube_state = prepare_youtube_muted()
+            if youtube_state["paused"]:
+                click_first(
+                    "button.ytp-large-play-button",
+                    "button.ytp-play-button",
+                )
             result = call("WebDriver:ExecuteAsyncScript", {
                 "script": """
                     const done = arguments[arguments.length - 1];
                     const seconds = arguments[0];
-                    const started = Date.now();
+                    const targetUrl = new URL(arguments[1]);
+                    const expectedVideoId = targetUrl.searchParams.get('v') ||
+                      targetUrl.pathname.split('/').filter(Boolean).pop();
+                    const waitStarted = Date.now();
                     const timer = setInterval(async () => {
+                      if (Date.now() - waitStarted > 120000) {
+                        clearInterval(timer);
+                        done({error: 'target video readiness timed out',
+                          title: document.title});
+                        return;
+                      }
                       const video = document.querySelector('video');
                       const player = document.getElementById('movie_player');
+                      if (player?.classList.contains('ad-showing')) {
+                        document.querySelector(
+                          '.ytp-skip-ad-button, ' +
+                          '.ytp-ad-skip-button-modern, ' +
+                          '.ytp-ad-skip-button'
+                        )?.click();
+                        return;
+                      }
+                      const videoData = player &&
+                        typeof player.getVideoData === 'function' ?
+                        player.getVideoData() : null;
                       if (!video || video.readyState < 1 || !player ||
-                          typeof player.playVideo !== 'function') {
-                        if (Date.now() - started > 60000) {
+                          typeof player.playVideo !== 'function' ||
+                          videoData?.video_id !== expectedVideoId) {
+                        if (Date.now() - waitStarted > 120000) {
                           clearInterval(timer);
-                          done({error: 'video element did not become ready',
+                          done({error: 'target video did not become ready',
                             title: document.title,
                             body: document.body.innerText.slice(0, 2000)});
                         }
                         return;
                       }
                       clearInterval(timer);
-                      // Let YouTube finish replacing its initial media state
-                      // before starting through both its API and the element.
+                      // Let the trusted click start the settled player before
+                      // recording playback quality.
                       setTimeout(async () => {
                         video.muted = true;
                         player.mute();
-                        player.playVideo();
-                        try {
-                          await video.play();
-                        } catch (error) {
-                          done({playError: String(error),
-                            title: document.title});
-                          return;
+                        if (video.paused) {
+                          player.playVideo();
+                          try {
+                            await video.play();
+                          } catch (error) {
+                            done({playError: String(error),
+                              title: document.title});
+                            return;
+                          }
                         }
+                        const started = Date.now();
                         const initial = video.getVideoPlaybackQuality();
                         const initialTime = video.currentTime;
                         const samples = [];
@@ -228,13 +390,13 @@ def main():
                             body: document.body.innerText.slice(0, 2000)
                           });
                         }, seconds * 1000);
-                      }, 5000);
+                      }, 1000);
                     }, 250);
                 """,
-                "args": [seconds],
+                "args": [seconds, youtube_url],
             })
         elif mode == "youtube-controls":
-            navigate("https://www.youtube.com/watch?v=aqz-KE-bpKQ")
+            navigate(youtube_url)
             click_first(
                 "button.ytp-large-play-button",
                 "button.ytp-play-button",
@@ -243,7 +405,10 @@ def main():
                 "script": """
                     const done = arguments[arguments.length - 1];
                     const playSeconds = arguments[0];
-                    const started = Date.now();
+                    const targetUrl = new URL(arguments[1]);
+                    const expectedVideoId = targetUrl.searchParams.get('v') ||
+                      targetUrl.pathname.split('/').filter(Boolean).pop();
+                    let started = Date.now();
                     const sleep = ms => new Promise(resolve =>
                       setTimeout(resolve, ms));
                     const snapshot = (video, player) => ({
@@ -264,8 +429,21 @@ def main():
                       while (Date.now() - started < 60000) {
                         const video = document.querySelector('video');
                         const player = document.getElementById('movie_player');
+                        if (player?.classList.contains('ad-showing')) {
+                          document.querySelector(
+                            '.ytp-skip-ad-button, ' +
+                            '.ytp-ad-skip-button-modern, ' +
+                            '.ytp-ad-skip-button'
+                          )?.click();
+                          await sleep(250);
+                          continue;
+                        }
+                        const videoData = player &&
+                          typeof player.getVideoData === 'function' ?
+                          player.getVideoData() : null;
                         if (video && video.readyState >= 1 && player &&
-                            typeof player.playVideo === 'function') {
+                            typeof player.playVideo === 'function' &&
+                            videoData?.video_id === expectedVideoId) {
                           return {video, player};
                         }
                         await sleep(250);
@@ -276,6 +454,7 @@ def main():
                       try {
                         const {video, player} = await waitForVideo();
                         await sleep(1000);
+                        started = Date.now();
                         video.muted = false;
                         video.volume = 0.2;
                         player.unMute();
@@ -335,7 +514,7 @@ def main():
                       }
                     })();
                 """,
-                "args": [seconds],
+                "args": [seconds, youtube_url],
             })
         else:
             raise RuntimeError(f"unknown mode: {mode}")
