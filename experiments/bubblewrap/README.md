@@ -49,7 +49,7 @@ account database, keyboard binary or package installation is changed.
 | Audio/status/battery/clock | Non-root synthetic speaker-output monitor loopback passed; pavucontrol, Wi-Fi/battery/clock rendered | Audible output/user acceptance, microphone, device switching |
 | Network editing | Settings and Apps use isolated editor/proxy; inactive-profile rename/save/delete passed; clean ff93f2c proxy failure, singleton and R3 cleanup passed | Physical-controller acceptance |
 | Floating utilities and PiP | Audio utility floats; real Firefox PiP floats, shrinks above keyboard, and R3 closes only PiP | Recheck packaged runtime and narrow output |
-| Shared data read/write | All six actual shared mounts passed non-root create/edit/rename/copy/delete and host UID mapping | GUI file-manager acceptance; scripts workflow decision |
+| Shared data read/write | All six mounts passed non-root create/edit/rename/copy/delete and host UID mapping; clean-package Thunar create/rename/permanent-delete passed on backup | Thunar Trash reports filesystem-boundary error; baseline comparison and repair needed; scripts workflow decision |
 | Home persistence | Existing home migrated in place; retained Firefox profile opens; clean ff93f2c uninstall/reinstall retained inode 6291460 and UID/GID 62000 | Future upgrades remain subject to regression testing |
 | Return confirmation and normal restoration | Clean ff93f2c confirmed Return restores ES, exact ACL and removes runtime/apps; narrow keyboard-visible confirmation survives pointer movement and Escape retains Desktop | Physical-controller user acceptance |
 | Crash restoration | Whole cgroup, keyboard, Waybar and compositor SIGKILL recovery passed; early-setup journal cleanup and real reboot passed | Final physical acceptance; abrupt power loss is not tested |
@@ -445,6 +445,25 @@ Screenshots: `/tmp/fresh-narrow-keyboard.png`, `/tmp/fresh-narrow-apps.png`,
 InputPlumber keys and pointer actions, not physical-controller acceptance or
 proof for another device's physical screen. Restored scale 1 and verified
 1920×1080 logical output with Desktop active afterward.
+
+### Clean-package Thunar shared-folder operations
+
+Used Thunar's actual location field to open `/storage/backup`, verified the test
+name did not exist, and created `bwrap-gui-20260928` through its New Folder dialog.
+Host stat reported a directory owned by UID/GID 0:0. Renamed it with the GUI to
+`bwrap-gui-renamed-20260928`; host stat and old-path absence confirmed the rename.
+Normal Delete did **not** trash it: Thunar reported "Unable to trash file ...
+across filesystem boundaries" and offered permanent deletion. Verified the exact
+test folder was empty before clicking Yes; its absence confirmed cleanup. No
+existing user files were deleted. Screenshot `/tmp/fresh-folder-delete.png`
+records the failure. Create/rename screenshots are `/tmp/fresh-folder-create.png`
+and `/tmp/fresh-folder-rename.png`.
+
+This establishes GUI write/rename/permanent-delete, not Trash support. Both dev
+and the research branch bind individual shared directories, so this observation
+alone does not establish a new regression. Investigate mount discovery/Trash
+placement and compare the baseline without treating permanent deletion as a
+substitute for recoverable deletion.
 
 ### Clean-package keyboard input and layers
 
