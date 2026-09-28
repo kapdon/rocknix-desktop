@@ -4,6 +4,24 @@ A handheld-first Sway desktop for the Retroid Pocket 6, with native Wayland
 applications in a Debian 13 ARM64 runtime. Open it from **Tools → Desktop Mode**
 and use **Return to Gaming** to return to EmulationStation.
 
+## Desktop preview
+
+Actual screens captured on the Retroid Pocket 6.
+[Install or update](#install-or-update) · [Controller keybinds](#apps-and-controls)
+
+| Apps at a tap | A keyboard when you need it |
+| --- | --- |
+| ![Apps launcher with Files selected using the D-pad](docs/media/apps.png) | ![Four-row on-screen keyboard filtering Apps with the text fil](docs/media/keyboard.png) |
+| Tap **Apps**, choose with the **D-pad**, then confirm with the **bottom face button**. | **L3** shows or hides the keyboard. Tap **123** for numbers and symbols, or **ABC** to return. |
+
+| Custom settings | Vulkan graphics and floating video |
+| --- | --- |
+| ![Custom Settings menu with audio, network and window-layout options](docs/media/settings.png) | ![Vulkan cube running alongside Firefox Picture-in-Picture on the RP6](docs/media/vulkan-pip.png) |
+| Tap the **status area** for audio, network and window-layout options. | **Turnip on Adreno 740**, with Firefox **Picture-in-Picture** alongside the Vulkan demo. |
+
+[Capture details and media credits](docs/media/README.md) ·
+[View this gallery on GitHub](https://github.com/kapdon/rocknix-desktop/tree/dev#desktop-preview)
+
 ## Support
 
 | Device | Tested ROCKNIX build |
