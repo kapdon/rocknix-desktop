@@ -97,6 +97,14 @@ case "${mode}" in
   apps)
     exec "${fuzzel_args[@]}" --lines="${line_count}"
     ;;
+  confirm-return)
+    # Unsorted dmenu input keeps the safe action selected on every opening.
+    printf '%s\n' \
+      'Cancel — stay in Desktop Mode' \
+      'Return to Gaming — close desktop apps' |
+      "${fuzzel_args[@]}" --dmenu --no-sort --lines=2 \
+        --prompt='RETURN?  ' --placeholder='Save your work before leaving'
+    ;;
   settings)
     selection=$(
       printf '%s\n' \

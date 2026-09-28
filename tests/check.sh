@@ -102,3 +102,4 @@ bash tests/upgrade.sh
 bash tests/release-selection.sh
 bash tests/installer-flow.sh
 python3 tests/session-lifecycle.py
+python3 tests/return-confirmation.py

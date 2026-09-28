@@ -69,6 +69,8 @@ logical dimensions. Firefox ESR and MPV run natively on Wayland.
 In Apps, use the D-pad to move, the bottom face button to launch and the right
 face button to dismiss. Select cycles open apps, and L3 shows or hides the host
 on-screen keyboard. Space remains available for multiword searches.
+Return to Gaming asks for confirmation before closing desktop apps. Cancel is
+selected initially; choose Return to Gaming explicitly after saving your work.
 
 See [the full controller mapping](payload/input/desktop.yaml). Physical button
 positions apply regardless of printed labels. Guide/Quick Access retain their

@@ -2,7 +2,7 @@
 Type=Application
 Name=About ROCKNIX Desktop
 Comment=Show the installed Desktop Mode commit and build date
-Exec=foot --hold --title="About ROCKNIX Desktop" /usr/local/bin/rocknix-version
+Exec=foot --hold --title "About ROCKNIX Desktop" /usr/local/bin/rocknix-version
 Icon=help-about
 Terminal=false
 Categories=System;
