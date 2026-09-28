@@ -39,13 +39,13 @@ account database, keyboard binary or package installation is changed.
 
 | Requirement from dev / migration | Current evidence | Remaining acceptance |
 | --- | --- | --- |
-| Tools → Desktop, one tabbed workspace, persistent host Sway | Actual service starts and renders panel/files | Launch through Tools UI again with final package |
+| Tools → Desktop, one tabbed workspace, persistent host Sway | Clean 8b7e9a0 package launched through actual Tools UI; panel/files render; preview verified after ES refresh | Recheck after remaining runtime changes |
 | Apps favorites/search and keyboard-visible sizing | RP6 Apps launches; screenshot shows unclipped search with keyboard | Narrow logical outputs, long labels on final code |
 | Confirm/back, West/North fields, Select cycle, R3 close | Injected RP6 InputPlumber key events cycle/close/dismiss correctly | Physical-controller user acceptance; West/North recheck |
 | Keyboard Simple/symbols, panel and L3 toggle | wvkbd verified host UID 62000; both toggles exercised | Typing/layers after final migration, crash handling |
 | Firefox | Retained profile, HTTPS rendering, seccomp content/RDD processes, local H.264 playback and PiP verified on RP6 | Hardware video decode, broader streaming/media flow |
 | Vesktop without disabling sandbox | Actual Apps launch reaches Discord login; renderer seccomp=2 and distinct user/PID namespaces | Voice, screen sharing are not established by login screen |
-| GPU | Real-session glmark2 uses freedreno FD740; non-root FFmpeg decodes 30 H.264 frames with Iris | Vulkan, Firefox decoder selection and full media flow |
+| GPU | Real-session glmark2 uses freedreno FD740; non-root FFmpeg decodes 30 H.264 frames with Iris; Wayland vkcube completes 1200 frames on Turnip Adreno 740 | Firefox decoder selection and full media flow |
 | Audio/status/battery/clock | Pulse connection, pavucontrol window, Wi-Fi/battery/clock rendered | Playback/microphone/device switching |
 | Network editing | Status only; UI explains Gaming Mode fallback | **Missing: safe non-root network editor integration** |
 | Floating utilities and PiP | Audio utility floats; real Firefox PiP floats, shrinks above keyboard, and R3 closes only PiP | Recheck packaged runtime and narrow output |
@@ -53,7 +53,7 @@ account database, keyboard binary or package installation is changed.
 | Home persistence | Existing home migrated in place; retained Firefox profile opens; root/SSH maintenance reinstall passed | Upgrade/reinstall and final package permissions |
 | Return confirmation and normal restoration | Latest non-root keyboard runtime: Escape/default Cancel retain desktop; confirmed Return restores ES, exact ACL, and removes all desktop processes/runtime | Recheck clean packaged installation |
 | Crash restoration | Whole cgroup, keyboard-only and Waybar-only SIGKILL restore ES; no app processes; ACL and orphan runtime removed | Compositor loss, interrupted setup/reboot |
-| Build/install/uninstall/provenance | Offline tests pass; archive ownership regression passes; runtime manually deployed from branch | Clean ARM64 build; fresh packaged install/uninstall |
+| Build/install/uninstall/provenance | Offline tests pass; clean 8b7e9a0 bundle built, installed after uninstall, and launched; home inode preserved; native-file hashes unchanged | Final revised package acceptance; GitHub release flow remains untested for this branch |
 
 ## RP6 observations, 2026-09-28
 
@@ -117,6 +117,60 @@ These are local test artifacts, not screenshots of the final release.
 
 ## Reproducible checks
 
+### Clean build and additional GPU check
+
+Clean ARM64 build `8b7e9a0cf696664b8b4f6d9f535e6155e9101c12` completed.
+Bundle SHA-256: `27d9d8fb9513d226ad3585d1393a00fbd47b976af004d0dfb34fced1515730c8`.
+Archive checks show root-owned payload/bwrap, passwd mode 4755 and tmp mode 1777.
+The image is `sha256:fe8c7d47d5c537469282f3192672c80335b3039c99ab7824e7b9764e4d7890eb`.
+The package was subsequently installed on the RP6 as described below; remaining
+feature gaps still prevent final acceptance.
+
+On the manually deployed checkpoint 307aa86, the actual Apps validation entry
+ran `vkcube --wsi wayland --c 1200 --width 640 --height 480` with
+`VK_DRIVER_FILES=/usr/share/vulkan/icd.d/freedreno_icd.json`. It selected Turnip
+Adreno 740 and completed normally as UID/GID 62000, CapEff=0, NoNewPrivs=1.
+A repeat was visually checked in `/tmp/fresh-bwrap-vulkan-live.png`; device log
+is `home/.cache/bubblewrap-vulkan.txt`. This excludes llvmpipe fallback for that
+test, but is not a Vulkan performance benchmark.
+
+### Clean packaged install on RP6
+
+Installed the verified 8b7e9a0 bundle after running the existing uninstaller.
+Deleted the exact archived old runtime (`uninstall.uO54mY`) before installation;
+the consumed incoming bundle directory was also removed after successful tests.
+No recovery copy remains from this replacement. The Desktop home stayed at the
+same path and device/inode, with UID/GID 62000. Installed rootfs/payload ownership
+is now 0:0, passwd retains 4755 and tmp retains 1777.
+Hashes of `/etc/passwd`, `/etc/group`, NetworkManager.conf and the native
+`/usr/bin/wvkbd-mobintl` were unchanged before/after installation and testing.
+
+The actual EmulationStation Tools entry launched the package, not a direct
+service start. ES needed its normal list refresh after reinstall to display the
+new artwork; after restarting ES the preview and description appeared. Release
+date is intentionally Unknown for this unpublished local build rather than
+borrowing the old release date. Screenshot: `/tmp/fresh-bwrap-tools-final.png`.
+
+Clean-package recovery tests retained Sway PID 2515, restored both recorded ACLs,
+left no UID 62000 processes, removed runtime state/work, and reopened Desktop:
+
+- Confirmed Return UI: Gaming restored in 2.75 seconds.
+- Waybar PID 494286 killed: Gaming restored in 0.86 seconds.
+
+Apps search with the keyboard visible had an unclipped header. Clicking the
+on-screen Enter key launched Firefox; F13 hid the keyboard, F14 switched between
+Firefox/Thunar, and F15 closed only Firefox. The retained Firefox profile opened
+and rendered HTTPS example.org. Parent PID 496500 had UID 62000, CapEff=0 and
+NoNewPrivs=1; content PID 496646 and RDD PID 496651 additionally had Seccomp=2.
+Screenshots: `/tmp/fresh-bwrap-clean-launcher.png` and
+`/tmp/fresh-bwrap-clean-firefox.png`. These are injected-input checks, not fresh
+physical-controller user acceptance. Only Thunar was left open afterwards.
+
+Replacing the runtime removed Debian packages added only to the old test rootfs,
+including Vesktop and xdg-dbus-proxy; their prior test results are not tests of
+this clean package. Home/profile data was retained. Network-helper integration
+must add its actual dependency to the build before final packaging.
+
 ### Debian package maintenance (branch-only)
 
 Return to Gaming first. From root SSH, use:
@@ -149,6 +203,13 @@ On the RP6, `/etc/NetworkManager/NetworkManager.conf` already sets
 authentication for unregistered UID 62000, both directly and through the proxy.
 The existing host `nobody` UID 65534 can call `GetPermissions` and receives
 NetworkManager authorization. These were read-only calls, not connection edits.
+
+A follow-up disposable probe ran both the proxy and client as the existing
+host UID 65534. Filtered `GetPermissions` succeeded, while a call to
+`org.freedesktop.systemd1` failed with ServiceUnknown. Temporary mounts and the
+proxy were removed afterwards. No host account or policy was changed. This is
+evidence for a separate, restricted editor helper, not approval to run the
+whole desktop as nobody and not yet a functional network-settings UI.
 
 A disposable systemd DynamicUser service started successfully, but libc
 `pwd.getpwnam('rocknixdesktop')` could not resolve its account even after startup,
