@@ -116,7 +116,11 @@ TOUCHKEYBOARD_ACTIVE=0
 if systemctl is-active --quiet touchkeyboard.service; then
   TOUCHKEYBOARD_ACTIVE=1
 fi
+# ROCKNIX's get_setting reads optional positional parameters directly, so call
+# it with nounset disabled while preserving strict mode for this script.
+set +u
 TOUCHKEYBOARD_SETTING=$(get_setting 'rocknix.touchscreen-keyboard.enabled' || true)
+set -u
 {
   printf 'workspace=%s\n' "${PRIOR_WORKSPACE}"
   printf 'touchkeyboard_active=%s\n' "${TOUCHKEYBOARD_ACTIVE}"

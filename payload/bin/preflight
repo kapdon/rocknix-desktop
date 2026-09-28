@@ -2,6 +2,8 @@
 
 set -Eeuo pipefail
 
+source /etc/profile
+
 BASE=/storage/.local/share/rocknix-xfce
 ROOTFS="${BASE}/rootfs"
 MODEL=$(tr -d '\000' </proc/device-tree/model 2>/dev/null || true)

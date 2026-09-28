@@ -52,6 +52,8 @@ grep -q 'rocknix-keyboard-toggle' rootfs-overlay/etc/xdg/waybar/config.jsonc
 grep -q 'execute=Return KP_Enter space' rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini
 grep -q '2fe08f3bd52c6e795df8353d29deb89596b5099d' Dockerfile.rootfs
 grep -q 'BindsTo=sway.service' payload/systemd/xfce-desktop.service
+grep -q '^source /etc/profile$' payload/bin/preflight
+grep -q 'TOUCHKEYBOARD_SETTING=$(get_setting' payload/bin/launch-sway-desktop
 grep -q 'INPUT_STATE_PRESENT=1' payload/bin/restore-emulationstation
 grep -q 'ROCKNIX_SWAY_RUNTIME=1' rootfs-overlay/etc/rocknix-xfce-release
 grep -q -- '--iidfile' build-rootfs.sh
