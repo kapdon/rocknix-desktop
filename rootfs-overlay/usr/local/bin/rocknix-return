@@ -1,4 +1,8 @@
 #!/bin/sh
 
-exec xfce4-session-logout --logout --fast
+set -eu
 
+FIFO=/run/rocknix-xfce/control
+
+[ -p "${FIFO}" ] || exit 1
+exec timeout 2 /bin/sh -c 'printf "return\n" >"$1"' rocknix-return "${FIFO}"

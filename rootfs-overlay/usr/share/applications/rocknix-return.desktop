@@ -2,9 +2,8 @@
 Type=Application
 Version=1.0
 Name=Return to EmulationStation
-Comment=Log out of XFCE and return to ROCKNIX
+Comment=Close Desktop Mode and return to ROCKNIX
 Exec=/usr/local/bin/rocknix-return
 Icon=system-log-out
 Terminal=false
 Categories=System;
-

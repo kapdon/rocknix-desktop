@@ -2,9 +2,8 @@
 Type=Application
 Version=1.0
 Name=On-Screen Keyboard
-Comment=Open the touchscreen keyboard
-Exec=onboard
+Comment=Show or hide the ROCKNIX Wayland keyboard
+Exec=/usr/local/bin/rocknix-keyboard-toggle
 Icon=input-keyboard
 Terminal=false
 Categories=Utility;Accessibility;
-

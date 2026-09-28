@@ -1,5 +1,0 @@
-Command=/usr/local/bin/rocknix-battery
-UseLabel=0
-Text=
-UpdatePeriod=30000
-Font=Sans 11

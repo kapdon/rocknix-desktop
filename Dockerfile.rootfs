@@ -17,12 +17,16 @@ RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
        bash \
        ca-certificates \
        dbus \
-       dbus-x11 \
        desktop-file-utils \
        fonts-dejavu-core \
+       fonts-liberation \
        fonts-noto-color-emoji \
        fonts-noto-core \
        ffmpeg \
+       firefox-esr \
+       foot \
+       fuzzel \
+       glmark2-wayland \
        gvfs \
        gvfs-backends \
        iproute2 \
@@ -36,42 +40,22 @@ RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
        mpv \
        nano \
        network-manager-gnome \
-       onboard \
        pavucontrol \
        procps \
        pulseaudio-utils \
+       qt6-wayland \
        ristretto \
        shared-mime-info \
        thunar \
        tumbler \
        vulkan-tools \
-       x11-utils \
-       x11-xserver-utils \
+       waybar \
+       wayland-utils \
+       wl-clipboard \
        xdg-user-dirs \
        xdg-utils \
-       xfce4-appfinder \
-       xfce4-genmon-plugin \
-       xfce4-notifyd \
-       xfce4-panel \
-       xfce4-pulseaudio-plugin \
-       xfce4-session \
-       xfce4-settings \
        xfce4-taskmanager \
-       xfce4-terminal \
-       xfce4-whiskermenu-plugin \
-       xfdesktop4 \
-       xfwm4 \
-       xinput \
-       xwayland \
     && rm -f /usr/sbin/policy-rc.d \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-xfce-packages.tsv
-
-# Keep the direct-display dependencies in a separate, cacheable layer.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       xserver-xorg-core xserver-xorg-input-libinput \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-xfce-packages.tsv
@@ -81,9 +65,8 @@ COPY rootfs-overlay/ /
 RUN chmod 0755 \
       /usr/local/bin/rocknix-return \
       /usr/local/bin/rocknix-keyboard-toggle \
-      /usr/local/bin/rocknix-battery \
-      /usr/local/bin/rocknix-xfce-first-run \
-      /usr/local/bin/rocknix-xfce-session \
+      /usr/local/bin/rocknix-firefox \
+      /usr/local/bin/rocknix-sway-session \
     && mkdir -p \
       /home/rocknix-default/Desktop \
       /home/rocknix-default/.config \
@@ -96,7 +79,7 @@ RUN chmod 0755 \
       /storage/roms \
       /storage/scripts \
     && cp /usr/share/applications/rocknix-return.desktop /home/rocknix-default/Desktop/ \
-    && cp /usr/share/applications/rocknix-onboard.desktop /home/rocknix-default/Desktop/ \
+    && cp /usr/share/applications/rocknix-keyboard.desktop /home/rocknix-default/Desktop/ \
     && chmod 0755 /home/rocknix-default/Desktop/*.desktop \
     && chmod 1777 /tmp \
     && rm -f /etc/machine-id

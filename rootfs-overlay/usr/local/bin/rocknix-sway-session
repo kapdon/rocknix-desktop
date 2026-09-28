@@ -1,0 +1,60 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+export HOME=/home/rocknix
+export USER=root
+export LOGNAME=root
+export SHELL=/bin/bash
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export XDG_CONFIG_HOME="${HOME}/.config"
+export XDG_CACHE_HOME="${HOME}/.cache"
+export XDG_DATA_HOME="${HOME}/.local/share"
+export XDG_CONFIG_DIRS=/etc/xdg
+export XDG_DATA_DIRS=/usr/local/share:/usr/share
+
+CONTROL_FIFO=/run/rocknix-xfce/control
+WAYBAR_PID=""
+CONTROL_PID=""
+
+cleanup() {
+  trap - EXIT INT TERM HUP
+  [ -z "${CONTROL_PID}" ] || kill "${CONTROL_PID}" 2>/dev/null || true
+  [ -z "${WAYBAR_PID}" ] || kill "${WAYBAR_PID}" 2>/dev/null || true
+  wait 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 143' TERM HUP
+trap 'exit 130' INT
+
+mkdir -p \
+  "${HOME}/Desktop" \
+  "${XDG_CONFIG_HOME}" \
+  "${XDG_CACHE_HOME}" \
+  "${XDG_DATA_HOME}"
+
+ln -sfn /storage/Desktop "${HOME}/ROCKNIX Desktop"
+ln -sfn /storage/roms "${HOME}/ROCKNIX ROMs"
+ln -sfn /storage/games-internal "${HOME}/ROCKNIX Games"
+
+[ -p "${CONTROL_FIFO}" ] || { printf 'Desktop control FIFO is missing\n' >&2; exit 1; }
+
+waybar -c /etc/xdg/waybar/config.jsonc -s /etc/xdg/waybar/style.css &
+WAYBAR_PID=$!
+
+(
+  read -r command <"${CONTROL_FIFO}"
+  [ "${command}" = return ]
+) &
+CONTROL_PID=$!
+
+thunar /storage >/dev/null 2>&1 &
+
+wait -n "${WAYBAR_PID}" "${CONTROL_PID}"
+if ! kill -0 "${WAYBAR_PID}" 2>/dev/null; then
+  printf 'Waybar exited unexpectedly\n' >&2
+  exit 1
+fi
+
+printf 'Return to EmulationStation requested.\n'
