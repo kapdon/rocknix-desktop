@@ -9,10 +9,9 @@ compositor with native Wayland applications in a Debian 13 ARM64 runtime.
 | --- | --- | --- |
 | Retroid Pocket 6 | Nightly 20260927 (SM8550) | ✅ |
 
-Sway migration checks passed on the RP6. Rockchip compatibility is not implied
+Desktop checks passed on the RP6. Rockchip compatibility is not implied
 by ARM64 support; graphics, orientation, input and media need physical testing.
-`dev` is the Sway development channel. The previous XFCE development tip is
-preserved on `codex/xfce-archive`. The current alpha uses Sway, not XFCE.
+`dev` is the development channel.
 
 ## Install and build
 
@@ -27,9 +26,8 @@ bash /storage/install-desktop.sh --release v0.2.0-alpha.1
 
 Inspect scripts before execution. [Sway alpha v0.2.0-alpha.1](https://github.com/kapdon/rocknix-desktop/releases/tag/v0.2.0-alpha.1)
 pins the package selection; the installer comes from the maintained `dev` branch.
-The original installer at `v0.2.0-alpha.1/install.sh` predates interactive updates.
 
-The updated installer shows installed and available revisions and asks once to
+The installer shows installed and available revisions and asks once to
 install or update. Matching revisions report already up to date. Updates preserve
 home/settings and retain a recovery copy; exit Desktop Mode first. `--yes` confirms
 non-interactively; `--check` only checks the device without downloading or updating.
@@ -40,9 +38,8 @@ For development builds, use the same installer and omit `--release`.
 The rolling `development` release uses
 `latest.json` to select a commit-qualified archive and checksum together.
 Checksums establish integrity, not independent trust. Until a build completes,
-the pointer selects the previous successful build. The Sway installer rejects
-an old XFCE pointer rather than downloading the wrong runtime. Versioned alpha
-assets and their manifest are not replaced after publication.
+the pointer selects the last successful build. Versioned alpha assets and their
+manifest are not replaced after publication.
 
 Build locally with Docker and ARM64 execution support:
 
@@ -74,19 +71,15 @@ InputPlumber UI events; the prior profile and targets are restored on return.
 
 ## Persistence and upgrades
 
-Everything installed is on writable `/storage`. The legacy base path
-`/storage/.local/share/rocknix-xfce` (`BASE`) and `xfce-desktop.service` are retained
-so older installations and recovery tools stay recognizable.
+Everything installed is on writable `/storage`. Inside the installation directory:
 
 | Location | Ownership and persistence |
 | --- | --- |
-| `BASE/home/` | Personal files/settings/app data, mounted at `/home/rocknix`; retained in place across replacement. Back up independently. |
-| `BASE/rootfs/` | Replaceable Debian runtime. Extra packages/edits do not migrate automatically. |
-| `BASE/bin/`, `input/`, `integration/` | Replaceable project-managed scripts, controller defaults and templates. |
-| `BASE/logs/`, `graphics-mode` | Retained; legacy XFCE graphics preference has no effect on Sway. |
-| `BASE/build-info`, `install-info` | Exact source/build and installation metadata. |
-| `/storage/.config/system.d/xfce-desktop.service` | Managed service. |
-| `/storage/.config/autostart/999-rocknix-xfce` | Managed hook recreating the Tools launcher. |
+| `home/` | Personal files/settings/app data, mounted at `/home/rocknix`; retained in place across replacement. Back up independently. |
+| `rootfs/` | Replaceable Debian runtime. Extra packages/edits do not migrate automatically. |
+| `bin/`, `input/`, `integration/` | Replaceable project-managed scripts, controller defaults and templates. |
+| `logs/` | Retained diagnostic logs. |
+| `build-info`, `install-info` | Exact source/build and installation metadata. |
 
 Shared `/storage/Desktop`, `Steam`, `backup`, `games-external`, `games-internal`,
 `roms` and `scripts` are writable real directories, not copies. Uninstall never
@@ -103,20 +96,18 @@ bash upgrade.sh --bundle /storage/rocknix-sway-rp6-arm64.tar.xz --sha256 YOUR_64
 The upgrader checks ownership, provenance, checksum, space and idle state. It
 backs up home, replaces managed components and restores old components on ordinary
 activation failure. Same-commit upgrades are no-ops; hashes do not indicate version
-ordering. Recovery under `rocknix-xfce-upgrade.*` includes `old/`, `home-before.tar`
-and `state`. Even `--check` retains staging. Rollback never overwrites live home.
+ordering. The printed recovery directory includes the previous runtime, a home
+backup and transaction state. Even `--check` retains staging. Rollback never
+overwrites live home.
 
-Older installs without source metadata require home-preserving uninstall/reinstall
-with these new scripts, not fabricated metadata. `uninstall.sh --yes` archives
-runtime/integration under `rocknix-xfce-backup.*`, leaving home, logs and graphics
-preference in place. The `.home-retained` marker allows reinstall to reuse home.
-Unknown content and symlinked homes fail closed. Old published uninstallers instead
-archive the entire home; that recovery copy is not automatically restored.
+`uninstall.sh --yes` keeps a recoverable copy of runtime/integration and leaves
+home and logs in place. Reinstall reuses that home. Unknown content and symlinked
+homes fail closed.
 
 Recognized Return, keyboard and About shortcuts refresh with sibling
 `*.before-refresh.*` backups. Personal collisions and links remain untouched.
-Saved XFCE panel settings do not configure Waybar. Controller defaults are replaced
-with the payload. Applications may migrate settings; back up before downgrading.
+Controller defaults are replaced with the payload. Applications may migrate
+settings; back up before downgrading.
 Automatic power-loss recovery is not implemented.
 Never erase `.upgrade-in-progress` blindly; see [upgrade design](docs/upgrades.md).
 
@@ -125,7 +116,7 @@ Never erase `.upgrade-in-progress` blindly; see [upgrade design](docs/upgrades.m
 Preflight checks RP6, Sway IPC, DSI-1 landscape transform and required tools.
 Desktop Mode saves workspace, keyboard and input state, stops only EmulationStation
 and keeps Sway alive. Private chroot mounts expose host devices/services/storage.
-Clients use workspace `98:Desktop`; there is no Xorg or XFCE session in the runtime.
+Native Wayland clients use workspace `98:Desktop`.
 
 - Mesa Freedreno/Turnip provide Wayland OpenGL/Vulkan.
 - MPV prefers Qualcomm Iris `h264_v4l2m2m`, with normal decoder fallback.
@@ -143,21 +134,15 @@ and shares host devices/storage/services: **not a security sandbox**.
 
 ## Recovery and provenance
 
-```sh
-systemctl stop xfce-desktop.service
-systemctl start sway.service essway.service
-journalctl -u xfce-desktop.service -b --no-pager
-```
-
-Logs are in `BASE/logs/`. Run `bash uninstall.sh --check` before `--yes`; keep the
+Use **Return to Gaming** to leave the desktop. Diagnostic logs are retained in
+the installation's `logs/` directory. Run `bash uninstall.sh --check` before `--yes`; keep the
 printed recovery directory. Mounted runtimes are refused; no personal-data purge
 is provided.
 
 The Debian base digest and FFmpeg source/archive checksum are pinned. Build metadata
-records the source commit and immutable Docker image ID; package versions are in
-`/etc/rocknix-xfce-packages.tsv`. Debian packages still depend on repository state at
+records the source commit and immutable Docker image ID. Debian packages depend on repository state at
 build time. See [FFmpeg notes](experiments/ffmpeg/README.md) and
-[contributor guide](contributor.md). Historical XFCE reports are not Sway results.
+[contributor guide](contributor.md).
 The private FFmpeg source archive, downstream patch and build script ship under
 `/opt/ffmpeg-rpi-7.1.5/share/source/`; its license is retained under `share/licenses/`.
 See [Sway validation](tests/rp6-sway-validation.md) for the exact tested candidate
