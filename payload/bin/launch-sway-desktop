@@ -138,7 +138,9 @@ pkill -x wvkbd-mobintl 2>/dev/null || true
 
 "${BASE}/bin/configure-input"
 
-mkdir -m 0700 -p "${RUNTIME_DIR}"
+mkdir -p "${RUNTIME_DIR}"
+chmod 0700 "${RUNTIME_DIR}"
+rm -f -- "${CONTROL_FIFO}"
 mkfifo -m 0600 "${CONTROL_FIFO}"
 
 /usr/bin/wvkbd-mobintl \
