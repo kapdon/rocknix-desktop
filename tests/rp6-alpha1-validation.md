@@ -38,4 +38,9 @@ Bundle SHA256: `8fa0684f385ecb5c9a6ea6542b0a7ef15771058e6a3d1e354f949cd2b2b85c1a
 - Host systemd printed a sixaxis template-dependency warning during unit verify;
   verification and installation still succeeded.
 
-Frontend launch, physical controls and logout confirmation are pending.
+The user initially reported a missing Tools entry. The executable was present at
+the configured Tools path, but EmulationStation predated the install. Restarted
+only `essway.service` to rescan; both frontend services remained active and the
+entry file persisted. README now gives that explicit post-install step.
+
+Frontend visibility/launch, physical controls and logout confirmation are pending.

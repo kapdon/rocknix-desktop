@@ -30,13 +30,19 @@ the matching versioned release bundle, checks SHA-256, rejects unsupported devic
 and existing installations, and installs only under `/storage`. Checksums detect
 corruption; they are not independent signatures. Trust the repository/release owner.
 
-Refresh EmulationStation's game list (or reboot), then choose **Tools → Desktop
-Mode**. Use **Return to EmulationStation** or log out of XFCE to return. Installing
+While idle in EmulationStation, restart its frontend from SSH to rescan Tools:
+
+```sh
+systemctl restart essway.service
+```
+
+Then choose **Tools → Desktop Mode**. Use **Return to EmulationStation** or log out of XFCE to return. Installing
 does not launch the desktop or change the normal boot target.
 
-This is an alpha release. The desktop behavior was tested on an existing RP6;
-the new download/install flow has automated checks but has not been end-to-end
-tested on a freshly flashed device. It intentionally refuses upgrades/reinstalls.
+This is an alpha release. Uninstall and the published download/install flow were
+tested on an RP6 after removing its previous desktop installation, not on a freshly
+flashed OS. See [validation results](tests/rp6-alpha1-validation.md) for the current
+test status. The installer intentionally refuses upgrades/reinstalls in place.
 
 ## Controls
 
