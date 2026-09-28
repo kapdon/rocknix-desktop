@@ -1,53 +1,68 @@
+/* Art Book Next palette shipped by ROCKNIX: black canvas, quiet surfaces,
+ * white type, and a single high-contrast selection state. */
+@define-color canvas #000000;
+@define-color surface #111111;
+@define-color surface-raised #222222;
+@define-color selected #444444;
+@define-color text #ffffff;
+@define-color text-muted #aaaaaa;
+@define-color warning #d6b768;
+@define-color critical #d35f6e;
+@define-color positive #92d3a2;
+
 * {
   border: none;
   border-radius: 0;
   font-family: "Noto Sans", sans-serif;
-  font-size: 21px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
   min-height: 0;
 }
 
 window#waybar {
-  background: #111318;
-  color: #f5f7fb;
-  border: 2px solid #323844;
-  border-radius: 14px;
+  background: @canvas;
+  color: @text;
+  border-bottom: 2px solid @surface-raised;
+}
+
+.modules-left {
+  margin-left: 8px;
+}
+
+.modules-right {
+  margin-right: 8px;
 }
 
 #custom-apps,
-#custom-browser,
-#workspaces,
-#window,
-#network,
-#pulseaudio,
-#battery,
-#clock,
-#custom-keyboard,
-#custom-return {
-  min-height: 60px;
-  padding: 0 18px;
-  margin: 6px 0;
-  background: #20242d;
+#custom-browser {
+  min-height: 56px;
+  padding: 0 20px;
+  margin: 7px 0;
+  background: @surface;
+}
+
+#custom-apps {
+  border-radius: 10px 0 0 10px;
+}
+
+#custom-browser {
+  margin-right: 10px;
+  border-left: 1px solid @surface-raised;
+  border-radius: 0 10px 10px 0;
+}
+
+#workspaces {
+  padding: 0 4px;
+  margin: 7px 10px 7px 0;
+  background: @surface;
   border-radius: 10px;
 }
 
-#custom-apps,
-#custom-browser,
-#custom-keyboard {
-  color: #9dd6ff;
-}
-
-#custom-return {
-  color: #ffffff;
-  background: #a33b4a;
-  margin-right: 6px;
-}
-
 #workspaces button {
-  min-width: 54px;
-  min-height: 52px;
+  min-width: 52px;
+  min-height: 56px;
   padding: 0 14px;
-  color: #cbd2df;
+  color: @text-muted;
   border-radius: 8px;
 }
 
@@ -56,17 +71,111 @@ window#waybar {
 #custom-apps:hover,
 #custom-browser:hover,
 #custom-keyboard:hover,
-#custom-return:hover {
-  color: #ffffff;
-  background: #356a91;
+#pulseaudio:hover {
+  color: @text;
+  background: @selected;
+}
+
+#workspaces button.focused {
+  box-shadow: inset 0 -3px @text;
+}
+
+#workspaces button.urgent {
+  color: @text;
+  background: @critical;
 }
 
 #window {
-  color: #d7dce6;
+  padding: 0 8px;
+  color: @text-muted;
   font-weight: 400;
+}
+
+#network,
+#pulseaudio,
+#battery,
+#clock {
+  min-height: 56px;
+  padding: 0 14px;
+  margin: 7px 0;
+  color: @text-muted;
+  background: @surface;
+}
+
+#network {
+  border-radius: 10px 0 0 10px;
+}
+
+#pulseaudio,
+#battery {
+  border-left: 1px solid @surface-raised;
+}
+
+#clock {
+  border-left: 1px solid @surface-raised;
+  border-radius: 0 10px 10px 0;
+}
+
+#custom-keyboard {
+  min-height: 56px;
+  padding: 0 18px;
+  margin: 7px 0 7px 10px;
+  background: @surface;
+  border-radius: 10px;
+}
+
+#custom-return {
+  min-height: 56px;
+  padding: 0 22px;
+  margin: 7px 0 7px 8px;
+  color: @canvas;
+  background: @text;
+  border-radius: 10px;
+}
+
+#custom-return:hover {
+  color: @canvas;
+  background: #dddddd;
+}
+
+#custom-apps:active,
+#custom-browser:active,
+#custom-keyboard:active,
+#pulseaudio:active {
+  color: @canvas;
+  background: @text;
+}
+
+#custom-return:active {
+  color: @text;
+  background: @selected;
 }
 
 #network.disconnected,
 #pulseaudio.muted {
-  color: #ffb3bd;
+  color: #e7a6ae;
+}
+
+#battery.warning {
+  color: @warning;
+}
+
+#battery.critical:not(.charging) {
+  color: @critical;
+}
+
+#battery.charging {
+  color: @positive;
+}
+
+tooltip {
+  color: @text;
+  background: @surface;
+  border: 1px solid @selected;
+  border-radius: 10px;
+}
+
+tooltip label {
+  padding: 6px 8px;
+  color: @text;
 }

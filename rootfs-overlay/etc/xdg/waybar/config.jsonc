@@ -1,16 +1,16 @@
 {
   "layer": "top",
   "position": "top",
-  "height": 76,
-  "spacing": 8,
-  "margin-top": 8,
-  "margin-left": 8,
-  "margin-right": 8,
+  "height": 72,
+  "spacing": 0,
+  "margin-top": 0,
+  "margin-left": 0,
+  "margin-right": 0,
   "modules-left": ["custom/apps", "custom/browser", "sway/workspaces", "sway/window"],
   "modules-right": ["network", "pulseaudio", "battery", "clock", "custom/keyboard", "custom/return"],
   "custom/apps": {
     "format": "Apps",
-    "tooltip-format": "Open the application launcher",
+    "tooltip-format": "Open apps • D-pad to move • A to launch • B to close",
     "on-click": "fuzzel"
   },
   "custom/browser": {
@@ -24,9 +24,9 @@
     "format": "{name}"
   },
   "sway/window": {
-    "max-length": 36,
+    "max-length": 30,
     "rewrite": {
-      "": "Desktop"
+      "": "ROCKNIX Desktop"
     }
   },
   "network": {
@@ -44,7 +44,11 @@
   "battery": {
     "interval": 15,
     "format": "Battery {capacity}%",
-    "format-charging": "Charging {capacity}%"
+    "format-charging": "Charging {capacity}%",
+    "states": {
+      "warning": 25,
+      "critical": 10
+    }
   },
   "clock": {
     "interval": 1,
@@ -53,7 +57,7 @@
   },
   "custom/keyboard": {
     "format": "Keyboard",
-    "tooltip-format": "Show or hide the on-screen keyboard (L3)",
+    "tooltip-format": "Show or hide the on-screen keyboard • L3",
     "on-click": "/usr/local/bin/rocknix-keyboard-toggle"
   },
   "custom/return": {

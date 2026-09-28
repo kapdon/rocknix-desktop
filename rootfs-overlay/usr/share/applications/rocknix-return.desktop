@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=Return to EmulationStation
+Name=Return to Gaming
 Comment=Close Desktop Mode and return to ROCKNIX
 Exec=/usr/local/bin/rocknix-return
 Icon=system-log-out
