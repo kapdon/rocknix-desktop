@@ -66,6 +66,8 @@ grep -q '/usr/share/applications/footclient.desktop' Dockerfile.rootfs
 grep -q '^execute=Return KP_Enter$' rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini
 grep -q '^cancel=Escape$' rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini
 grep -q '^radius=0$' rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini
+grep -q '^dpi-aware=no$' rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini
+grep -q -- '--dpi-aware=no' rootfs-overlay/usr/local/bin/rocknix-launcher
 if grep -q '^execute=.*space' rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini; then
   printf 'FAIL: Fuzzel consumes Space instead of allowing multiword search\n' >&2; exit 1
 fi

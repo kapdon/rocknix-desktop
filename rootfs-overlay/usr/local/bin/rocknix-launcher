@@ -84,7 +84,10 @@ fuzzel_args=(
   --vertical-pad="${vertical_pad}"
   --inner-pad=6
   --line-height="${line_height}"
-  --dpi-aware=auto
+  # The rotated RP6 DSI panel reports anisotropic physical dimensions. Fuzzel
+  # 1.12 derives ~406 DPI in auto mode and clips 30pt glyphs out of these
+  # already physically calibrated rows, so keep Fuzzel's own DPI scaling off.
+  --dpi-aware=no
 )
 if [ -n "${output_name}" ]; then
   fuzzel_args+=(--output="${output_name}")
