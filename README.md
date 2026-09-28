@@ -48,8 +48,8 @@ Open **About Desktop Mode** from the desktop or application menu to see that
 commit and build date, or run `rocknix-version` in the desktop terminal. This
 identifies the installed runtime, not whatever currently happens to be on GitHub.
 There are no in-place upgrades yet. See [Updates and user data](#updates-and-user-data)
-before replacing an installation. Home-preserving reinstall is implemented
-locally but still awaits RP6 validation and publication.
+before replacing an installation. Home-preserving reinstall has passed local RP6
+validation but is not yet published; see [test results](tests/rp6-home-preservation-validation.md).
 
 The earlier alpha installation flow was tested on an RP6 after removing its
 previous desktop installation, not on a freshly flashed OS. See
@@ -118,7 +118,7 @@ validated; reflashing or formatting storage may erase it.
 
 ## Updates and user data
 
-**Local implementation, awaiting RP6 validation and publication:** uninstall
+**Locally RP6-tested, not yet published:** uninstall
 leaves `/storage/.local/share/rocknix-xfce/home/`, logs and `graphics-mode` in place.
 Reinstall reuses that same home, not a new copy. The runtime and managed
 integration files are archived separately. No personal-data purge is provided.
