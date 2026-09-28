@@ -45,29 +45,32 @@ discover_sway_environment() {
 [ "${MODEL}" = "Retroid Pocket 6" ] || fail "unsupported device: ${MODEL:-unknown}"
 [ -f "${ROOTFS}/etc/rocknix-xfce-release" ] || fail "runtime marker is missing"
 grep -q '^RUNTIME_ARCH=aarch64$' "${ROOTFS}/etc/rocknix-xfce-release" || fail "runtime architecture marker is invalid"
-[ -x "${ROOTFS}/usr/bin/xfce4-session" ] || fail "xfce4-session is missing"
-[ -x "${ROOTFS}/usr/bin/xfwm4" ] || fail "xfwm4 is missing"
-[ -x "${ROOTFS}/usr/bin/xfce4-panel" ] || fail "xfce4-panel is missing"
-[ -x "${ROOTFS}/usr/bin/Xwayland" ] || fail "runtime Xwayland is missing"
-[ -x "${ROOTFS}/usr/bin/Xorg" ] || fail "runtime Xorg is missing"
-[ -f "${ROOTFS}/etc/X11/rocknix-xfce.conf" ] || fail "Xorg configuration is missing"
+[ -x "${ROOTFS}/usr/bin/waybar" ] || fail "Waybar is missing"
+[ -x "${ROOTFS}/usr/bin/fuzzel" ] || fail "Fuzzel is missing"
+[ -x "${ROOTFS}/usr/bin/foot" ] || fail "foot is missing"
+[ -x "${ROOTFS}/usr/bin/thunar" ] || fail "Thunar is missing"
+[ -x "${ROOTFS}/usr/bin/firefox-esr" ] || fail "Firefox ESR is missing"
+[ -x "${ROOTFS}/usr/local/bin/rocknix-sway-session" ] || fail "desktop session is missing"
 [ -e /dev/dri/card0 ] || fail "DRM display device is missing"
-if [ -f "${BASE}/graphics-mode" ]; then
-  case "$(<"${BASE}/graphics-mode")" in
-    xorg|shm) ;;
-    *) fail "graphics-mode must contain xorg or shm" ;;
-  esac
-fi
 [ -x /usr/bin/swaymsg ] || fail "host swaymsg is missing"
 [ -x /usr/bin/inputplumber ] || fail "host InputPlumber is missing"
+[ -x /usr/bin/wvkbd-mobintl ] || fail "host wvkbd-mobintl is missing"
 [ -f "${BASE}/input/desktop.yaml" ] || fail "desktop input profile is missing"
+[ -x "${BASE}/bin/rocknix-keyboard-toggle" ] || fail "keyboard toggle is missing"
 [ -x /usr/bin/unshare ] || fail "host unshare is missing"
 [ -x /usr/sbin/chroot ] || fail "host chroot is missing"
 systemctl is-active --quiet sway.service || fail "sway.service is not active"
+systemctl is-active --quiet essway.service || fail "start Desktop Mode from EmulationStation"
 discover_sway_environment
-swaymsg -t get_outputs >/dev/null 2>&1 || fail "cannot query the active Sway display"
-[ ! -S /tmp/.X11-unix/X1 ] || fail "X display :1 is already in use"
-[ ! -e /tmp/.X1-lock ] || fail "X display :1 has a stale or active lock"
+swaymsg -r -t get_outputs | jq -e '
+  any(.[]; .name == "DSI-1" and .active == true and
+      .transform == "270" and .rect.width == 1920 and .rect.height == 1080)
+' >/dev/null || fail "DSI-1 is not active in the expected landscape orientation"
+if grep -Rqs -E '(^|[[:space:]])bind(sym|code).*XF86Tools' /storage/.config/sway /etc/sway 2>/dev/null; then
+  fail "XF86Tools already has a persistent Sway binding"
+fi
+command -V get_setting >/dev/null 2>&1 || fail "host get_setting helper is missing"
+command -V set_setting >/dev/null 2>&1 || fail "host set_setting helper is missing"
 /usr/sbin/chroot "${ROOTFS}" /bin/sh -c 'test "$(uname -m)" = aarch64' || fail "runtime binaries cannot execute"
 
 printf 'Desktop Mode preflight passed.\n'

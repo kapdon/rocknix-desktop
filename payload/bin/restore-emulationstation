@@ -2,22 +2,34 @@
 
 set -u
 
+source /etc/profile
+
 STATE_FILE=/run/rocknix-xfce-input-state
+SESSION_STATE=/run/rocknix-xfce-session-state
 DEFAULT_PROFILE=/usr/share/inputplumber/profiles/default.yaml
 ORIGINAL_PROFILE=""
+PRIOR_WORKSPACE=""
+TOUCHKEYBOARD_ACTIVE=0
+TOUCHKEYBOARD_SETTING=""
 declare -a ORIGINAL_TARGETS=()
 
 if [ -f "${STATE_FILE}" ]; then
   while IFS='=' read -r key value; do
     case "${key}" in
-      profile)
-        ORIGINAL_PROFILE=${value}
-        ;;
-      target)
-        ORIGINAL_TARGETS+=("${value}")
-        ;;
+      profile) ORIGINAL_PROFILE=${value} ;;
+      target) ORIGINAL_TARGETS+=("${value}") ;;
     esac
   done <"${STATE_FILE}"
+fi
+
+if [ -f "${SESSION_STATE}" ]; then
+  while IFS='=' read -r key value; do
+    case "${key}" in
+      workspace) PRIOR_WORKSPACE=${value} ;;
+      touchkeyboard_active) TOUCHKEYBOARD_ACTIVE=${value} ;;
+      touchkeyboard_setting) TOUCHKEYBOARD_SETTING=${value} ;;
+    esac
+  done <"${SESSION_STATE}"
 fi
 
 if [ -z "${ORIGINAL_PROFILE}" ] || [ ! -f "${ORIGINAL_PROFILE}" ]; then
@@ -27,9 +39,23 @@ if [ "${#ORIGINAL_TARGETS[@]}" -eq 0 ]; then
   ORIGINAL_TARGETS=(ds5 keyboard)
 fi
 
+if [ -r /run/rocknix-xfce/wvkbd.pid ]; then
+  WVKBD_PID=$(cat /run/rocknix-xfce/wvkbd.pid)
+  case "${WVKBD_PID}" in
+    ''|*[!0-9]*) ;;
+    *) kill -TERM "${WVKBD_PID}" 2>/dev/null || true ;;
+  esac
+fi
+
 if command -v inputplumber >/dev/null 2>&1 && inputplumber devices list >/dev/null 2>&1; then
   inputplumber device 0 profile load "${ORIGINAL_PROFILE}" >/dev/null 2>&1 || true
   inputplumber device 0 targets set "${ORIGINAL_TARGETS[@]}" >/dev/null 2>&1 || true
+fi
+
+if [ -n "${TOUCHKEYBOARD_SETTING}" ]; then
+  set_setting 'rocknix.touchscreen-keyboard.enabled' "${TOUCHKEYBOARD_SETTING}"
+else
+  set_setting 'rocknix.touchscreen-keyboard.enabled' default
 fi
 
 STATE=$(systemctl is-system-running 2>/dev/null || true)
@@ -39,12 +65,32 @@ case "${STATE}" in
     ;;
 esac
 
-if ! systemctl is-active --quiet sway.service; then
-  systemctl start sway.service
-fi
+systemctl start sway.service
+for _ in {1..100}; do
+  systemctl is-active --quiet sway.service && break
+  sleep 0.1
+done
+systemctl is-active --quiet sway.service || { printf 'Sway did not recover\n' >&2; exit 1; }
 
 systemctl start essway.service
+for _ in {1..100}; do
+  systemctl is-active --quiet essway.service && break
+  sleep 0.1
+done
+systemctl is-active --quiet essway.service || { printf 'EmulationStation did not recover\n' >&2; exit 1; }
 
+if [ "${TOUCHKEYBOARD_ACTIVE}" = 1 ]; then
+  systemctl start touchkeyboard.service
+else
+  systemctl stop touchkeyboard.service
+fi
+
+if [ -n "${PRIOR_WORKSPACE}" ]; then
+  swaymsg -- "workspace ${PRIOR_WORKSPACE}" >/dev/null 2>&1 || true
+fi
 if command -v set_kill >/dev/null 2>&1; then
   set_kill set "emulationstation" >/dev/null 2>&1 || true
 fi
+
+rm -f "${STATE_FILE}" "${SESSION_STATE}"
+printf 'EmulationStation and desktop input state restored.\n'

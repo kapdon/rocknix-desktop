@@ -1,14 +1,14 @@
-# InputPlumber profile for ROCKNIX XFCE Desktop Mode.
+# InputPlumber profile for ROCKNIX Sway Desktop Mode.
 version: 1
 kind: DeviceProfile
-name: ROCKNIX XFCE Desktop
+name: ROCKNIX Sway Desktop
 description: Retroid controls mapped to desktop mouse and keyboard actions
 target_devices:
   - ds5
   - keyboard
   - mouse
 mapping:
-  - name: Toggle On-Screen Keyboard
+  - name: Toggle Wayland On-Screen Keyboard
     source_event:
       gamepad:
         button: LeftStick

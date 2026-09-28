@@ -20,7 +20,7 @@ fi
 systemctl reset-failed xfce-desktop.service 2>/dev/null || true
 
 if command -v set_kill >/dev/null 2>&1; then
-  set_kill set "xfce4-session Xorg Xwayland"
+  set_kill set "waybar fuzzel thunar firefox-esr"
 fi
 
 systemctl start --no-block xfce-desktop.service || pause_on_error "Could not start Desktop Mode."

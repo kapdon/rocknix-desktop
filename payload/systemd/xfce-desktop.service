@@ -1,15 +1,15 @@
 [Unit]
-Description=ROCKNIX XFCE Desktop Mode
+Description=ROCKNIX Sway Desktop Mode
 Documentation=file:/storage/.local/share/rocknix-xfce/README.md
-Wants=sway.service
-After=network.target
+Requires=sway.service
+After=network.target sway.service
 ConditionPathIsDirectory=/storage/.local/share/rocknix-xfce/rootfs
 
 [Service]
 Type=simple
 Environment=HOME=/storage
 ExecStartPre=/storage/.local/share/rocknix-xfce/bin/preflight
-ExecStart=/usr/bin/unshare --mount --propagation private -- /storage/.local/share/rocknix-xfce/bin/launch-xfce
+ExecStart=/usr/bin/unshare --mount --propagation private -- /storage/.local/share/rocknix-xfce/bin/launch-sway-desktop
 ExecStopPost=/storage/.local/share/rocknix-xfce/bin/restore-emulationstation
 KillMode=control-group
 TimeoutStopSec=20
