@@ -61,6 +61,7 @@ chmod 1777 "${TEMP_DIR}/rootfs/tmp"
 
 cp -a "${PROJECT_DIR}/payload" "${TEMP_DIR}/payload"
 cp -a "${PROJECT_DIR}/install-device.sh" "${TEMP_DIR}/install-device.sh"
+cp -a "${PROJECT_DIR}/install.sh" "${TEMP_DIR}/install.sh"
 cp -a "${PROJECT_DIR}/README.md" "${TEMP_DIR}/README.md"
 cp -a "${PROJECT_DIR}/uninstall.sh" "${TEMP_DIR}/uninstall.sh"
 cp -a "${PROJECT_DIR}/LICENSE" "${TEMP_DIR}/LICENSE"
@@ -71,6 +72,7 @@ printf 'built=%s\nimage=%s\narchitecture=arm64\ncommit=%s\n' \
   'debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a' \
   "$REVISION" \
   >"${TEMP_DIR}/build-info"
+cp "${TEMP_DIR}/build-info" "${TEMP_DIR}/rootfs/etc/rocknix-xfce-build-info"
 
 tar --numeric-owner -cJf "${OUTPUT}" -C "${TEMP_DIR}" .
 (

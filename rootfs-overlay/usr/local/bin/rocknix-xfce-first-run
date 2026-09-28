@@ -37,6 +37,14 @@ set_xfconf() {
 # Session integration also applies to homes configured by earlier releases.
 # Linux KEY_F13 is XF86Tools in this XKB evdev layout (keycode 191).
 set_xfconf xfce4-keyboard-shortcuts /commands/custom/XF86Tools string rocknix-keyboard-toggle
+set_xfconf xfwm4 /general/use_compositing bool false
+# Refresh only the known battery plugin, never replace a user's panel layout or
+# repurpose another plugin that happens to have the same numeric ID.
+if [ "$(xfconf-query -c xfce4-panel -p /plugins/plugin-20 2>/dev/null)" = genmon ] &&
+   [ "$(xfconf-query -c xfce4-panel -p /plugins/plugin-20/command 2>/dev/null)" = /usr/local/bin/rocknix-battery ]; then
+  set_xfconf xfce4-panel /plugins/plugin-20/command string /usr/local/bin/rocknix-battery
+  set_xfconf xfce4-panel /plugins/plugin-20/update-period int 30000
+fi
 # Remove only our obsolete binding, not an unrelated user shortcut.
 if [ "$(xfconf-query -c xfce4-keyboard-shortcuts -p /commands/custom/F13 2>/dev/null)" = rocknix-keyboard-toggle ]; then
   xfconf-query -c xfce4-keyboard-shortcuts -p /commands/custom/F13 -r
@@ -46,17 +54,20 @@ if [ -e "${MARKER}" ]; then
   exit 0
 fi
 
-set_xfconf xsettings /Net/ThemeName string Adwaita-dark
-set_xfconf xsettings /Net/IconThemeName string Adwaita
-set_xfconf xsettings /Gtk/CursorThemeName string Adwaita
-set_xfconf xsettings /Gtk/CursorThemeSize int 32
-set_xfconf xsettings /Xft/DPI int 144
-set_xfconf xfwm4 /general/use_compositing bool false
-set_xfconf xfce4-desktop /desktop-icons/icon-size uint 48
+# Existing homes may lack our marker. Seed only missing cosmetic settings.
+seed_xfconf() {
+  xfconf-query -c "$1" -p "$2" >/dev/null 2>&1 || set_xfconf "$@"
+}
+seed_xfconf xsettings /Net/ThemeName string Adwaita-dark
+seed_xfconf xsettings /Net/IconThemeName string Adwaita
+seed_xfconf xsettings /Gtk/CursorThemeName string Adwaita
+seed_xfconf xsettings /Gtk/CursorThemeSize int 32
+seed_xfconf xsettings /Xft/DPI int 144
+seed_xfconf xfce4-desktop /desktop-icons/icon-size uint 48
 
 if xfconf-query -c xfce4-panel -p /panels/panel-1 >/dev/null 2>&1; then
-  set_xfconf xfce4-panel /panels/panel-1/size uint 52
-  set_xfconf xfce4-panel /panels/panel-1/icon-size uint 36
+  seed_xfconf xfce4-panel /panels/panel-1/size uint 52
+  seed_xfconf xfce4-panel /panels/panel-1/icon-size uint 36
 fi
 
 touch "${MARKER}"

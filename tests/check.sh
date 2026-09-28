@@ -43,3 +43,4 @@ test "$VERSION" = development
 grep -q 'button: LeftStick' payload/input/desktop.yaml
 grep -q '/commands/custom/XF86Tools' rootfs-overlay/usr/local/bin/rocknix-xfce-first-run
 printf 'PASS: syntax, checksum rejection, CLI and release consistency checks\n'
+bash tests/persistence.sh

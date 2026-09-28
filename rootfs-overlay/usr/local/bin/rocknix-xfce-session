@@ -20,14 +20,16 @@ mkdir -p \
   "${XDG_CACHE_HOME}" \
   "${XDG_DATA_HOME}"
 
-if [ ! -e "${HOME}/.rocknix-xfce-home-v1" ]; then
-  cp -a /home/rocknix-default/. "${HOME}/"
-  touch "${HOME}/.rocknix-xfce-home-v1"
-fi
+source /usr/local/bin/rocknix-home-integration
+refresh_home_integration /home/rocknix-default "$HOME"
 
-ln -sfn /storage/Desktop "${HOME}/ROCKNIX Desktop"
-ln -sfn /storage/roms "${HOME}/ROCKNIX ROMs"
-ln -sfn /storage/games-internal "${HOME}/ROCKNIX Games"
+# Do not replace a personal file (or custom link) with an integration shortcut.
+for mapping in 'Desktop:ROCKNIX Desktop' 'roms:ROCKNIX ROMs' 'games-internal:ROCKNIX Games'; do
+  link="${HOME}/${mapping#*:}"
+  if [ ! -e "$link" ] && [ ! -L "$link" ]; then
+    ln -s "/storage/${mapping%%:*}" "$link"
+  fi
+done
 
 # Stale saved-session clients can prevent a clean session after an abrupt exit.
 rm -rf "${XDG_CACHE_HOME}/sessions"

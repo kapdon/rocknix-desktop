@@ -7,6 +7,20 @@ HOOK=/storage/.config/autostart/999-rocknix-xfce
 ENTRY='/storage/.config/modules/Desktop Mode.sh'
 fail() { printf 'Uninstall failed: %s\n' "$*" >&2; exit 1; }
 
+archive_runtime() {
+  local backup=$1 name
+  mkdir "$backup/installation"
+  # Only managed components move. Personal data never leaves its original path.
+  for name in rootfs bin input integration README.md uninstall.sh build-info install-info; do
+    if [ -e "$BASE/$name" ] || [ -L "$BASE/$name" ]; then
+      mv -- "$BASE/$name" "$backup/installation/$name"
+    fi
+  done
+  [ ! -e "$BASE/.home-retained" ] && [ ! -L "$BASE/.home-retained" ] ||
+    fail 'retained-home marker already exists; investigate partial installation'
+  printf 'home retained after uninstall\n' >"$BASE/.home-retained"
+}
+
 validate() {
   [ "$(id -u)" = 0 ] || fail 'run as root on ROCKNIX'
   . /etc/os-release
@@ -17,6 +31,8 @@ validate() {
   [ -d "$BASE" ] || fail 'no installation found'
   [ "$(realpath "$BASE")" = "$BASE" ] || fail 'refusing a symlinked installation path'
   [ -f "$BASE/rootfs/etc/rocknix-xfce-release" ] || fail 'runtime marker is missing'
+  [ ! -e "$BASE/.home-retained" ] && [ ! -L "$BASE/.home-retained" ] ||
+    fail 'retained-home marker exists with runtime; investigate partial installation'
   local path
   for path in "$UNIT" "$HOOK" "$ENTRY"; do
     [ -f "$path" ] || fail "integration missing: $path"
@@ -37,7 +53,7 @@ main() {
     --check|--yes) ;;
     ''|--help|-h)
       printf 'Usage: bash uninstall.sh --check | --yes\n'
-      printf 'Stops Desktop Mode and archives its runtime, home and integration.\n'
+      printf 'Archives runtime/integration; leaves home, logs and display preference in place.\n'
       return ;;
     *) fail "unknown option: $1" ;;
   esac
@@ -65,11 +81,12 @@ main() {
   mv "$HOOK" "$backup/999-rocknix-xfce"
   mv "$ENTRY" "$backup/Desktop Mode.sh"
   mv "$UNIT" "$backup/xfce-desktop.service"
-  mv "$BASE" "$backup/installation"
+  archive_runtime "$backup"
   systemctl daemon-reload
   systemctl reset-failed xfce-desktop.service 2>/dev/null || true
   sync
-  printf 'Desktop Mode uninstalled. Runtime and home preserved at %s\n' "$backup"
+  printf 'Desktop Mode uninstalled. Runtime recovery copy: %s\n' "$backup"
+  printf 'Your home remains at %s/home and will be reused on reinstall.\n' "$BASE"
   printf 'Refresh the EmulationStation game list to remove a cached Tools entry.\n'
 }
 

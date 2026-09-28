@@ -27,7 +27,7 @@ bash /storage/install-xfce.sh
 
 You can inspect the downloaded script before running it. The installer downloads
 the latest successful development bundle, checks SHA-256, rejects unsupported devices
-and existing installations, and installs only under `/storage`. Checksums detect
+and existing runtimes, and installs only under `/storage`. Checksums detect
 corruption; they are not independent signatures. Trust the repository/release owner.
 
 While idle in EmulationStation, restart its frontend from SSH to rescan Tools:
@@ -44,7 +44,12 @@ push builds and publishes a bundle; until that finishes, the installer selects t
 previous successful build. The rolling `development` release's `latest.json`
 selects a commit-qualified archive and checksum together. The installed
 `/storage/.local/share/rocknix-xfce/build-info` records its exact source commit.
-There are no in-place upgrades: uninstall before testing a newer build.
+Open **About Desktop Mode** from the desktop or application menu to see that
+commit and build date, or run `rocknix-version` in the desktop terminal. This
+identifies the installed runtime, not whatever currently happens to be on GitHub.
+There are no in-place upgrades yet. See [Updates and user data](#updates-and-user-data)
+before replacing an installation. Home-preserving reinstall is implemented
+locally but still awaits RP6 validation and publication.
 
 The earlier alpha installation flow was tested on an RP6 after removing its
 previous desktop installation, not on a freshly flashed OS. See
@@ -75,10 +80,86 @@ InputPlumber UI events; no extra XFCE actions are assigned to them.
 Touchscreen input is supported. XFCE may ask you to trust a desktop launcher on
 first use; the L3 keyboard shortcut does not use that launcher.
 
+## Installation paths and persistence
+
+Everything installed by this project is on ROCKNIX's writable `/storage`
+partition. Here, **runtime rootfs** means the Debian directory below, not the
+device's read-only ROCKNIX root filesystem (`/`). No system partition is replaced.
+
+In this table, `BASE` means exactly `/storage/.local/share/rocknix-xfce`:
+
+| Location on ROCKNIX | Contents and persistence |
+| --- | --- |
+| `BASE/rootfs/` | Debian runtime, XFCE, libraries and system configuration. Persists across reboots, but is a replaceable component, not a safe place for personal files. Extra packages or edits inside it would need to be reapplied after runtime replacement. |
+| `BASE/home/` | Your desktop home; mounted as `/home/rocknix` inside Desktop Mode. Contains personal files, `.config/` settings, `.local/share/` application data and `.cache/`. The new uninstaller leaves it in place for reinstall to reuse. |
+| `BASE/bin/`, `BASE/input/`, `BASE/integration/` | Project-managed launch scripts, controller profile and integration templates. Treat these as replaceable, not supported user customization directories. |
+| `BASE/graphics-mode` | Optional user-selected display mode (`xorg` or `shm`). |
+| `BASE/logs/` | Session diagnostics, not personal documents. |
+| `BASE/build-info`, `BASE/install-info` | Installed bundle commit and device/install metadata. Older experimental installs may lack `build-info`. |
+| `BASE/README.md`, `BASE/uninstall.sh` | Bundled documentation and uninstaller. |
+| `/storage/.config/system.d/xfce-desktop.service` | Project-managed service definition. |
+| `/storage/.config/autostart/999-rocknix-xfce` | Project-managed boot hook. |
+| `/storage/.config/modules/Desktop Mode.sh` | Generated Tools launcher; the boot hook replaces it from the installed template. Do not customize this generated copy. |
+| `/storage/.rocknix-xfce-install.*` | Temporary download/extraction staging. Removed on success; retained with its path printed on failure. |
+| `BASE/.home-retained` | Uninstall marker allowing reinstall to recognize retained data. Do not create this manually to bypass checks. |
+| `/storage/.local/share/rocknix-xfce-backup.*/installation/` | Removed runtime and managed files retained for recovery. The new uninstaller does not move the home here. Not automatically restored or deleted. |
+
+Existing `/storage/Desktop`, `/storage/Steam`, `/storage/backup`,
+`/storage/games-external`, `/storage/games-internal`, `/storage/roms` and
+`/storage/scripts` are exposed at the same paths inside Desktop Mode. They remain
+outside `BASE`; uninstall does not remove them. These are writable shared files,
+not copies: deleting one from the desktop deletes the real file.
+`/home/rocknix/Desktop` is your XFCE desktop folder; `/storage/Desktop` is a
+different, shared ROCKNIX folder.
+
+Persistence does not mean backup. Back up personal files separately. ROCKNIX OTA
+is expected to retain `/storage`, but desktop compatibility after OTA is not yet
+validated; reflashing or formatting storage may erase it.
+
+## Updates and user data
+
+**Local implementation, awaiting RP6 validation and publication:** uninstall
+leaves `/storage/.local/share/rocknix-xfce/home/`, logs and `graphics-mode` in place.
+Reinstall reuses that same home, not a new copy. The runtime and managed
+integration files are archived separately. No personal-data purge is provided.
+An existing runtime still blocks installation: there is no in-place upgrade.
+Only recognized retained data is accepted; unknown content, symlinked retained
+directories and existing integration files stop installation safely.
+
+Older published uninstallers archive the entire installation, including home.
+Their recovery home is `<printed-recovery-directory>/installation/home/` and is
+not automatically restored. Use a matching newly validated installer/uninstaller
+pair once published; an older bundled script does not gain this behavior itself.
+
+On desktop startup, the new implementation refreshes these integration fixes:
+
+- The Return to EmulationStation and On-Screen Keyboard launchers.
+- The recognized battery indicator configuration, without resetting panel layout.
+- The L3 keyboard binding and disabled XFWM compositing.
+- Missing ROCKNIX folder links. Existing personal files or custom links win.
+
+Changed recognized launcher/battery files are copied to unique sibling
+`*.before-refresh.*` backups before replacement. Unrecognized files or symlinks
+at those paths are left alone. Appearance, unrelated shortcuts, documents and
+application data are not reset. The disposable `.cache/sessions` cache is still
+cleared each session. Controller defaults live outside the home at
+`BASE/input/desktop.yaml` and are replaced with the integration payload.
+
+Applications installed into `rootfs/` must be reinstalled after runtime replacement;
+their home-based files/settings remain. Applications can migrate their settings,
+so downgrading may cause compatibility issues even with an intact home. Keep an
+independent backup before changing versions.
+
+Planned upgrades will stage and verify a replacement runtime, preserve `home/`
+and `graphics-mode`, back up managed files, and retain a rollback option. They
+must not silently reset settings or delete user files. This is a design, **not
+an available installer flag**; see [upgrade design](docs/upgrades.md).
+
 ## Architecture and limitations
 
 An ARM64 Debian 13 runtime lives in `/storage/.local/share/rocknix-xfce/rootfs`.
-The home directory is stored separately alongside it. ROCKNIX retains its kernel,
+Its separate home is `/storage/.local/share/rocknix-xfce/home`, mounted at
+`/home/rocknix` inside the desktop. ROCKNIX retains its kernel,
 Wi-Fi, audio and InputPlumber services. Desktop Mode temporarily stops
 EmulationStation/Sway, starts Xorg/XFCE, and restores the previous frontend/input
 profile on exit. No ROCKNIX system partition is remounted or modified.
@@ -124,9 +205,11 @@ bash uninstall.sh --yes
 
 The standalone uninstaller works with the existing alpha runtime. It stops XFCE,
 restores EmulationStation, checks for remaining mounts, and removes the active
-runtime and its three integration files. It **preserves** all removed files in a
-unique `/storage/.local/share/rocknix-xfce-backup.*` recovery directory, including
-your desktop home. It does not free that disk space or erase your games/saves.
+runtime and its three integration files. The new local implementation leaves
+home, logs and display preference in place and **preserves** removed components
+in a unique `/storage/.local/share/rocknix-xfce-backup.*` recovery directory.
+It does not free that disk space or erase your games/saves. Older published
+uninstallers also move home into recovery; see the update notes above.
 Refresh the frontend's game list to clear any cached Tools entry.
 
 Development installations include it at

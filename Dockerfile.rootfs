@@ -79,6 +79,7 @@ RUN apt-get update \
 COPY rootfs-overlay/ /
 
 RUN chmod 0755 \
+      /usr/local/bin/rocknix-version \
       /usr/local/bin/rocknix-return \
       /usr/local/bin/rocknix-keyboard-toggle \
       /usr/local/bin/rocknix-battery \
@@ -97,6 +98,7 @@ RUN chmod 0755 \
       /storage/scripts \
     && cp /usr/share/applications/rocknix-return.desktop /home/rocknix-default/Desktop/ \
     && cp /usr/share/applications/rocknix-onboard.desktop /home/rocknix-default/Desktop/ \
+    && cp /usr/share/applications/rocknix-about.desktop /home/rocknix-default/Desktop/ \
     && chmod 0755 /home/rocknix-default/Desktop/*.desktop \
     && chmod 1777 /tmp \
     && rm -f /etc/machine-id

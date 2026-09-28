@@ -1,0 +1,8 @@
+#!/bin/bash
+set -eu
+printf 'ROCKNIX XFCE Desktop Mode — development build\n\n'
+if [ -r /etc/rocknix-xfce-build-info ]; then
+  cat /etc/rocknix-xfce-build-info
+else
+  printf 'Build metadata unavailable (older runtime).\n'
+fi
