@@ -98,15 +98,26 @@ to the default. The fallback sacrifices accelerated X11 presentation.
 
 An interrupted installation preserves its staging directory and prints its path.
 Do not delete or overwrite your existing runtime/home to retry; inspect the error.
-For removal, stop Desktop Mode, back up its home, and remove only the project's
-runtime directory and these integration files:
 
-- `/storage/.config/system.d/xfce-desktop.service`
-- `/storage/.config/autostart/999-rocknix-xfce`
-- `/storage/.config/modules/Desktop Mode.sh`
+## Uninstall
 
-Run `systemctl daemon-reload` afterward. Removing the runtime directory also
-removes the desktop home unless you have backed it up.
+Save your work first: this closes Desktop Mode. From a checkout containing
+`uninstall.sh`, copy it to the device and run:
+
+```sh
+bash uninstall.sh --check
+bash uninstall.sh --yes
+```
+
+The standalone uninstaller works with the existing alpha runtime. It stops XFCE,
+restores EmulationStation, checks for remaining mounts, and removes the active
+runtime and its three integration files. It **preserves** all removed files in a
+unique `/storage/.local/share/rocknix-xfce-backup.*` recovery directory, including
+your desktop home. It does not free that disk space or erase your games/saves.
+Refresh the frontend's game list to clear any cached Tools entry.
+
+The original `v0.1.0-alpha.1` tag does not contain this new script; its release
+assets are unchanged. Until a newer release includes it, use this branch's script.
 
 ## Build and contribute
 
