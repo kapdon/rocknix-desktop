@@ -45,6 +45,7 @@ discover_sway_environment() {
 [ "$(id -u)" = 0 ] || fail "must run as root"
 [ "$(uname -m)" = aarch64 ] || fail "expected aarch64, found $(uname -m)"
 [ "${MODEL}" = "Retroid Pocket 6" ] || fail "unsupported device: ${MODEL:-unknown}"
+[ ! -e "$BASE/.upgrade-in-progress" ] || fail 'upgrade in progress or recovery required'
 [ -f "${ROOTFS}/etc/rocknix-xfce-release" ] || fail "runtime marker is missing"
 grep -q '^RUNTIME_ARCH=aarch64$' "${ROOTFS}/etc/rocknix-xfce-release" || fail "runtime architecture marker is invalid"
 grep -q '^ROCKNIX_SWAY_RUNTIME=1$' "${ROOTFS}/etc/rocknix-xfce-release" || fail "runtime is not the Sway build"

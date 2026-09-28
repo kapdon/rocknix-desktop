@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=About Desktop Mode
+Comment=Show the installed Desktop Mode commit and build date
+Exec=foot --hold --title="About Desktop Mode" /usr/local/bin/rocknix-version
+Icon=help-about
+Terminal=false
+Categories=System;

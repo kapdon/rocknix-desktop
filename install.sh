@@ -2,12 +2,30 @@
 # Download the versioned desktop bundle; never write the ROCKNIX root image.
 set -Eeuo pipefail
 
-VERSION=v0.2.0-alpha.1
-REPOSITORY=kapdon/rocknix-xfce
+VERSION=development
+REPOSITORY=kapdon/rocknix-desktop
 ASSET=rocknix-sway-rp6-arm64.tar.xz
 BASE=/storage/.local/share/rocknix-xfce
 
 fail() { printf 'Install failed: %s\n' "$*" >&2; exit 1; }
+
+check_install_target() {
+  [ ! -L "$BASE" ] || fail 'installation path must not be a symlink'
+  [ ! -e "$BASE" ] || {
+    [ -d "$BASE" ] && [ "$(realpath "$BASE")" = "$BASE" ] || fail 'invalid installation path'
+    [ -f "$BASE/.home-retained" ] && [ ! -L "$BASE/.home-retained" ] ||
+      fail 'existing installation or unknown directory; uninstall first'
+    local path name
+    while IFS= read -r -d '' path; do
+      name=${path##*/}
+      case "$name" in
+        home|logs) [ -d "$path" ] && [ ! -L "$path" ] || fail "invalid retained directory: $path" ;;
+        graphics-mode|.home-retained) [ -f "$path" ] && [ ! -L "$path" ] || fail "invalid retained file: $path" ;;
+        *) fail "unexpected retained content: $path" ;;
+      esac
+    done < <(find "$BASE" -mindepth 1 -maxdepth 1 -print0)
+  }
+}
 
 check_device() {
   [ "$(id -u)" = 0 ] || fail 'run as root on the ROCKNIX device'
@@ -19,10 +37,10 @@ check_device() {
   model=$(tr -d '\000' </proc/device-tree/model 2>/dev/null || true)
   [ "$model" = 'Retroid Pocket 6' ] || fail "unsupported device: ${model:-unknown}"
   [ -d /storage ] && [ -w /storage ] || fail '/storage must be writable'
-  for command in curl sha256sum tar xz df mktemp systemctl flock; do
+  for command in curl jq sha256sum tar xz df mktemp systemctl flock realpath find; do
     command -v "$command" >/dev/null || fail "missing command: $command"
   done
-  [ ! -e "$BASE" ] || fail "$BASE already exists; updates are not supported"
+  check_install_target
   systemctl is-active --quiet xfce-desktop.service && fail 'Desktop Mode is active'
   [ "$(df -Pk /storage | awk 'END {print $4}')" -ge 4194304 ] ||
     fail 'at least 4 GiB free on /storage is required'
@@ -39,7 +57,7 @@ verify_bundle() {
 main() {
   case "${1:-}" in
     --help|-h)
-      printf 'Usage: bash install.sh [--check]\nFresh RP6 ROCKNIX installs only.\n'
+      printf 'Usage: bash install.sh [--check]\nFresh install or reinstall with retained home; no in-place upgrades.\n'
       return ;;
     ''|--check) ;;
     *) fail "unknown option: $1" ;;
@@ -57,14 +75,23 @@ main() {
   trap 'rc=$?; if [ "$rc" = 0 ]; then rm -rf -- "$STAGING"; else
     printf "Installation stopped. Diagnostics/staging retained at %s\n" "$STAGING" >&2; fi' EXIT
   local url="https://github.com/$REPOSITORY/releases/download/$VERSION"
-  printf 'Downloading ROCKNIX Sway Desktop %s\n' "$VERSION"
+  curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
+    "$url/latest.json" -o "$STAGING/latest.json"
+  local revision expected
+  revision=$(jq -er '.commit' "$STAGING/latest.json")
+  expected=$(jq -er '.sha256' "$STAGING/latest.json")
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || fail 'invalid build commit'
+  [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || fail 'invalid build checksum'
+  ASSET="rocknix-sway-rp6-arm64-$revision.tar.xz"
+  [ "$(jq -er '.asset' "$STAGING/latest.json")" = "$ASSET" ] || fail 'invalid build filename'
+  printf 'Downloading ROCKNIX Desktop (Sway) %s (%s)\n' "$VERSION" "$revision"
   curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
     "$url/$ASSET" -o "$STAGING/$ASSET"
-  curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
-    "$url/$ASSET.sha256" -o "$STAGING/$ASSET.sha256"
+  printf '%s  %s\n' "$expected" "$ASSET" >"$STAGING/$ASSET.sha256"
   verify_bundle "$STAGING"
   mkdir "$STAGING/bundle"
   tar -xJf "$STAGING/$ASSET" -C "$STAGING/bundle"
+  grep -Fxq "commit=$revision" "$STAGING/bundle/build-info" || fail 'bundle provenance mismatch'
   bash "$STAGING/bundle/install-device.sh"
   printf '\nRefresh the EmulationStation game list, then open Tools > Desktop Mode.\n'
 }

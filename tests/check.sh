@@ -40,7 +40,7 @@ fi
 if bash install.sh --invalid >/dev/null 2>&1; then
   printf 'FAIL: unknown argument accepted\n' >&2; exit 1
 fi
-test "$VERSION" = v0.2.0-alpha.1
+test "$VERSION" = development
 test "$ASSET" = rocknix-sway-rp6-arm64.tar.xz
 grep -q 'dist/rocknix-sway-rp6-arm64.tar.xz' README.md
 grep -q 'button: LeftStick' payload/input/desktop.yaml
@@ -80,3 +80,7 @@ if rg -q 'xfce4-session|xfwm4|xserver-xorg|[[:space:]]onboard[[:space:]\\]' Dock
   printf 'FAIL: retired XFCE/Xorg package remains in rootfs\n' >&2; exit 1
 fi
 printf 'PASS: syntax, checksum rejection, lifecycle, shell and release checks\n'
+grep -q 'dev/install.sh' README.md
+bash tests/persistence.sh
+bash tests/upgrade.sh
+python3 tests/session-lifecycle.py

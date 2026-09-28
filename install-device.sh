@@ -22,7 +22,9 @@ mount | grep -q ' on /storage .*rw' || fail "/storage is not writable"
 [ -d "${SELF_DIR}/rootfs" ] || fail "bundle rootfs is missing"
 [ -f "${SELF_DIR}/rootfs/etc/rocknix-xfce-release" ] || fail "runtime marker is missing"
 [ -d "${SELF_DIR}/payload" ] || fail "integration payload is missing"
-[ ! -e "${BASE}" ] || fail "${BASE} already exists; refusing to overwrite it"
+# Share the standalone installer's retained-home safety checks without running it.
+source "${SELF_DIR}/install.sh"
+check_install_target
 for target in /storage/.config/system.d/xfce-desktop.service \
   /storage/.config/autostart/999-rocknix-xfce '/storage/.config/modules/Desktop Mode.sh'; do
   [ ! -e "$target" ] || fail "existing integration would be overwritten: $target"
@@ -48,6 +50,9 @@ cp -a "${SELF_DIR}/payload/bin/." "${BASE}/bin/"
 cp -a "${SELF_DIR}/payload/input/." "${BASE}/input/"
 cp -a "${SELF_DIR}/payload/integration/." "${BASE}/integration/"
 cp -a "${SELF_DIR}/README.md" "${BASE}/README.md"
+cp -a "${SELF_DIR}/uninstall.sh" "${BASE}/uninstall.sh"
+cp -a "${SELF_DIR}/upgrade.sh" "${BASE}/upgrade.sh"
+cp -a "${SELF_DIR}/build-info" "${BASE}/build-info"
 
 chmod 0755 "${BASE}/bin/"* "${BASE}/integration/"*
 chmod 0644 "${BASE}/input/"*
@@ -69,6 +74,7 @@ EOF
 systemctl daemon-reload
 systemd-analyze verify /storage/.config/system.d/xfce-desktop.service
 "${BASE}/bin/preflight"
+rm -f "${BASE}/.home-retained"
 sync
 
 printf 'Desktop Mode installed. It has not been started automatically.\n'

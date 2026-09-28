@@ -22,7 +22,8 @@ cleanup() {
   trap - EXIT INT TERM HUP
   [ -z "${CONTROL_PID}" ] || kill "${CONTROL_PID}" 2>/dev/null || true
   [ -z "${WAYBAR_PID}" ] || kill "${WAYBAR_PID}" 2>/dev/null || true
-  wait 2>/dev/null || true
+  # Never wait for app children such as Thunar. On exit, systemd terminates
+  # the entire desktop cgroup with a bounded timeout.
 }
 trap cleanup EXIT
 trap 'exit 143' TERM HUP
@@ -34,9 +35,14 @@ mkdir -p \
   "${XDG_CACHE_HOME}" \
   "${XDG_DATA_HOME}"
 
-ln -sfn /storage/Desktop "${HOME}/ROCKNIX Desktop"
-ln -sfn /storage/roms "${HOME}/ROCKNIX ROMs"
-ln -sfn /storage/games-internal "${HOME}/ROCKNIX Games"
+source /usr/local/bin/rocknix-home-integration
+refresh_home_integration /home/rocknix-default "$HOME"
+for mapping in 'Desktop:ROCKNIX Desktop' 'roms:ROCKNIX ROMs' 'games-internal:ROCKNIX Games'; do
+  link="${HOME}/${mapping#*:}"
+  if [ ! -e "$link" ] && [ ! -L "$link" ]; then
+    ln -s "/storage/${mapping%%:*}" "$link"
+  fi
+done
 
 [ -p "${CONTROL_FIFO}" ] || { printf 'Desktop control FIFO is missing\n' >&2; exit 1; }
 

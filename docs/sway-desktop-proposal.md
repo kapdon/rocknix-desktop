@@ -1,6 +1,8 @@
 # Native Wayland desktop on ROCKNIX Sway
 
-Status: investigation proposal; no RP6 validation or implementation performed.
+Status: historical investigation proposal, written before implementation.
+The sections below describe the original plan and its evidence at that time;
+see the current README and test reports for implemented behavior and results.
 
 ## Decision
 

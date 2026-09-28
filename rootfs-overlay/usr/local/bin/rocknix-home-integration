@@ -1,0 +1,35 @@
+#!/bin/bash
+# Sourced by the session and by local preservation tests.
+refresh_home_file() {
+  local source=$1 target=$2 signature=$3 parent backup
+  parent=$(dirname "$target")
+  # Never follow user redirects outside the home or overwrite a personal collision.
+  [ "$(realpath -m "$parent")" = "$parent" ] || return 0
+  mkdir -p "$parent"
+  if [ -e "$target" ] || [ -L "$target" ]; then
+    if [ -L "$target" ] || [ ! -f "$target" ] || ! grep -Fxq "$signature" "$target"; then
+      printf 'Keeping unrecognized user file: %s\n' "$target" >&2
+      return 0
+    fi
+    cmp -s "$source" "$target" && return 0
+    # Keep changed integration beside the original, without overwriting backups.
+    backup=$(mktemp "${target}.before-refresh.XXXXXX")
+    cp -p -- "$target" "$backup"
+  fi
+  cp -- "$source" "$target"
+}
+
+refresh_home_integration() {
+  local defaults=$1 home=$2
+  refresh_home_file "$defaults/Desktop/rocknix-return.desktop" \
+    "$home/Desktop/rocknix-return.desktop" 'Exec=/usr/local/bin/rocknix-return'
+  refresh_home_file "$defaults/Desktop/rocknix-keyboard.desktop" \
+    "$home/Desktop/rocknix-keyboard.desktop" 'Exec=/usr/local/bin/rocknix-keyboard-toggle'
+  # Update the recognized XFCE shortcut too; preserve custom files and backups.
+  if [ -e "$home/Desktop/rocknix-onboard.desktop" ]; then
+    refresh_home_file "$defaults/Desktop/rocknix-keyboard.desktop" \
+      "$home/Desktop/rocknix-onboard.desktop" 'Exec=onboard'
+  fi
+  refresh_home_file "$defaults/Desktop/rocknix-about.desktop" \
+    "$home/Desktop/rocknix-about.desktop" 'Comment=Show the installed Desktop Mode commit and build date'
+}

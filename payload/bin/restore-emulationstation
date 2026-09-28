@@ -4,6 +4,15 @@ set -u
 
 source /etc/profile
 
+# ExecStopPost runs after systemd has reaped the desktop cgroup, even when
+# the main process was killed before its EXIT trap finished (e.g. tee SIGPIPE).
+rm -f -- /run/rocknix-xfce/control /run/rocknix-xfce/wvkbd.pid
+rmdir /run/rocknix-xfce 2>/dev/null || true
+if systemctl is-active --quiet sway.service; then
+  swaymsg 'unbindsym XF86Tools' >/dev/null 2>&1 || true
+  swaymsg 'unbindsym F13' >/dev/null 2>&1 || true
+fi
+
 STATE_FILE=/run/rocknix-xfce-input-state
 SESSION_STATE=/run/rocknix-xfce-session-state
 ORIGINAL_PROFILE=""

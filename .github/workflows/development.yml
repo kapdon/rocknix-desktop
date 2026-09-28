@@ -1,0 +1,37 @@
+name: Development bundle
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: development-bundle
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check source
+        run: bash tests/check.sh
+      - name: Set up cached builder
+        uses: docker/setup-buildx-action@v3
+      # Populate this builder from the cross-run cache. build-rootfs.sh uses
+      # the same builder, so its build/load reuses these layers locally.
+      - name: Cache ARM64 runtime layers
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.rootfs
+          platforms: linux/arm64
+          outputs: type=cacheonly
+          cache-from: type=gha,scope=rocknix-xfce-arm64
+          cache-to: type=gha,scope=rocknix-xfce-arm64,mode=max
+      - name: Build ARM64 runtime
+        run: bash build-rootfs.sh
+      - name: Publish rolling bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/publish-development.sh

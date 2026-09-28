@@ -69,7 +69,7 @@ cleanup() {
   fi
   if [ -n "${WVKBD_PID}" ] && kill -0 "${WVKBD_PID}" 2>/dev/null; then
     kill -TERM "${WVKBD_PID}" 2>/dev/null || true
-    wait "${WVKBD_PID}" 2>/dev/null || true
+    # The service cgroup owns this process; do not block return on a client.
   fi
   rm -f "${RUNTIME_DIR}/wvkbd.pid" "${CONTROL_FIFO}"
   rmdir "${RUNTIME_DIR}" 2>/dev/null || true

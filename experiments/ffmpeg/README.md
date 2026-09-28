@@ -16,12 +16,14 @@ only the codecs and helpers needed for the H.264/AAC validation path and is not
 a system FFmpeg replacement.
 
 Firefox ESR does not currently pass the V4L2 `num_capture_buffers` codec option.
-The stock 20-buffer pool decoded 720p60 YouTube normally through 40 seconds and
-then failed, while local 720p30 playback succeeded. This isolated build raises
-the decoder default to 32 buffers to prevent capture-buffer starvation. Mozilla
-independently identified the same cause and sustained 1080p60 playback with a
-32-buffer pool in [bug 1612995 comment 26][buffer-fix]. The longer streaming,
-seek, pause/resume, audio, and decoder-log checks still gate integration.
+This isolated build uses a 32-buffer default. The earlier inference that a
+40-second YouTube stall proved capture-buffer starvation was incorrect: the
+automated session also stalled with confirmed software decoding, with YouTube
+UMP/SPS rejection errors. Normal Firefox without Marionette completed a 5:13
+720p60 video using Iris, with 18,808 decoded frames and normal EOF. Keep this
+tested configuration; it is not evidence that more buffers fix the automated
+stream rejection. [Mozilla's buffer discussion][buffer-fix] is background, not
+a diagnosis of this device's failure.
 
 Source: <https://github.com/RPi-Distro/ffmpeg/tree/2fe08f3bd52c6e795df8353d29deb89596b5099d>
 
