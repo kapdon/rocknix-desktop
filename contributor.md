@@ -1,6 +1,22 @@
 # Contributing
 
+## Pre-release maintainer workflow
+
+Before the first public-ready release, maintainers may work directly on `dev`,
+use temporary branches, and merge locally without opening pull requests. The
+contributor PR and commit-size rules below are not gates for this bootstrap work.
+Do not create a PR for maintainer work unless explicitly requested.
+
+Development history may be consolidated into a clean, working initial release
+before launch. Keep diagnostic evidence and recovery copies locally rather than
+publishing a transcript of development experiments. Preserve meaningful tests,
+accurate support claims, and required third-party attribution. Coordinate history
+rewrites and release-tag changes explicitly; do not break published installer URLs
+or silently replace release artifacts.
+
 ## Branches and pull requests
+
+The following is the default workflow for external contributions:
 
 Create your branch from an up-to-date `dev` and open the pull request against `dev`.
 Use descriptive branch names such as `fix/keyboard-toggle`. Do not push directly
