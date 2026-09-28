@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix="rocknix-package-test-") as temp:
             archive.addfile(item, None if directory else io.BytesIO(data))
         for directory in ("dev", "proc", "run", "sys", "tmp", "etc", "var/lib/service"):
             add(directory, directory=True, uid=101 if directory == "var/lib/service" else 0)
-        required = "bwrap setfacl mount dbus-run-session firefox-esr foot fuzzel glmark2-wayland waybar".split()
+        required = "bwrap setfacl mount dbus-run-session xdg-dbus-proxy firefox-esr foot fuzzel glmark2-wayland waybar".split()
         for name in required:
             add("usr/bin/" + name, b"fixture")
         for name in "wvkbd-rocknix rocknix-launcher rocknix-status rocknix-window-switcher rocknix-sway-session".split():

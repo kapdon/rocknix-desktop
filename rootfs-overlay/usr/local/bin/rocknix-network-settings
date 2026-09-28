@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+if [ "${ROCKNIX_BWRAP:-0}" = 1 ]; then
+  [ -p /run/rocknix-xfce/host-control ] || exit 1
+  exec timeout 2 /bin/sh -c 'printf "network\n" >/run/rocknix-xfce/host-control'
+fi
+exec nm-connection-editor

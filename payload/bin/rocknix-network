@@ -1,0 +1,138 @@
+#!/usr/bin/python3
+"""Fixed non-root NetworkManager editor; invoked only by the host supervisor."""
+import fcntl
+import importlib.machinery
+import importlib.util
+import os
+from pathlib import Path
+import pwd
+import shutil
+import signal
+import socket
+import stat
+import subprocess
+import sys
+
+WORK = Path('/run/rocknix-network')
+UID = 65534
+
+def load_runtime():
+    loader = importlib.machinery.SourceFileLoader('runtime', str(Path(__file__).with_name('rocknix-bwrap')))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    runtime = importlib.util.module_from_spec(spec)
+    loader.exec_module(runtime)
+    runtime.PROBE_UID = UID
+    return runtime
+
+def cleanup_work():
+    if not WORK.exists() and not WORK.is_symlink():
+        return
+    if WORK.is_symlink() or WORK.stat().st_uid != 0 or not WORK.is_dir():
+        raise RuntimeError('unsafe network helper directory')
+    root = WORK / 'rootfs'
+    if root.exists() and (root.is_symlink() or os.path.ismount(root) or any(root.iterdir())):
+        raise RuntimeError('network helper rootfs still mounted or unsafe')
+    shutil.rmtree(WORK)
+
+def command(runtime, root, work, requested, additions):
+    args = runtime.sandbox_command(root, work, requested)
+    separator = args.index('--')
+    args[separator:separator] = additions
+    return args
+
+def stop(child):
+    if child is not None and child.poll() is None:
+        os.killpg(child.pid, signal.SIGKILL)
+        child.wait()
+
+def proxy_command(runtime, root, work, ready_fd):
+    return command(runtime, root, work, [
+        '/usr/bin/xdg-dbus-proxy', f'--fd={ready_fd}',
+        'unix:path=/run/host-system-bus', '/run/proxy/bus',
+        '--filter', '--talk=org.freedesktop.NetworkManager'], [
+        '--ro-bind', '/run/dbus/system_bus_socket', '/run/host-system-bus',
+        '--bind', str(work / 'proxy'), '/run/proxy'])
+
+def editor_command(runtime, root, work, wayland_fd):
+    return command(runtime, root, work, ['/usr/bin/nm-connection-editor'], [
+        '--ro-bind', str(work / 'proxy/bus'), '/run/network-bus',
+        '--setenv', 'DBUS_SYSTEM_BUS_ADDRESS', 'unix:path=/run/network-bus',
+        '--setenv', 'WAYLAND_SOCKET', str(wayland_fd),
+        '--setenv', 'GDK_BACKEND', 'wayland', '--setenv', 'NO_AT_BRIDGE', '1'])
+
+def main():
+    if os.geteuid() != 0 or sys.argv[1:] not in ([], ['--cleanup']):
+        raise SystemExit('host supervisor only; no arbitrary command arguments')
+    lock = os.open('/run/rocknix-network.lock', os.O_CREAT | os.O_NOFOLLOW | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return 0  # A single editor already owns its lifecycle.
+    cleanup_work()
+    if sys.argv[1:] == ['--cleanup']:
+        return 0
+    if pwd.getpwuid(UID).pw_name != 'nobody':
+        raise RuntimeError('expected existing nobody account; no host account will be created')
+    if not Path('/run/rocknix-bwrap-state/socket.json').is_file():
+        raise RuntimeError('Desktop must be running')
+    runtime = load_runtime()
+    source = Path(runtime.DEFAULT_ROOT)
+    if source.is_symlink() or not (source / 'usr/bin/xdg-dbus-proxy').is_file():
+        raise RuntimeError('missing or unsafe network proxy runtime')
+    os.unshare(os.CLONE_NEWNS)
+    subprocess.run(['mount', '--make-rprivate', '/'], check=True)
+    proxy = editor = None
+    mounted = False
+    wayland = parent = child = None
+    def interrupted(signum, frame):
+        raise KeyboardInterrupt(f'network helper interrupted: {signum}')
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, interrupted)
+    try:
+        WORK.mkdir(mode=0o755)
+        root = WORK / 'rootfs'
+        root.mkdir()
+        subprocess.run(['mount', '--bind', str(source), str(root)], check=True)
+        mounted = True
+        subprocess.run(['mount', '-o', 'remount,bind,ro', str(root)], check=True)
+        for name in ('home', 'runtime', 'proxy'):
+            (WORK / name).mkdir(mode=0o700)
+            os.chown(WORK / name, UID, UID)
+        (WORK / 'passwd').write_text(f'root:x:0:0:root:/root:/bin/sh\nrocknix:x:{UID}:{UID}:Network settings:/home/rocknix:/bin/sh\n')
+        (WORK / 'group').write_text(f'root:x:0:\nrocknix:x:{UID}:\n')
+        for name in ('passwd', 'group'):
+            (WORK / name).chmod(0o644)
+        parent, child = socket.socketpair()
+        proxy_args = proxy_command(runtime, root, WORK, child.fileno())
+        proxy = subprocess.Popen(proxy_args, pass_fds=(child.fileno(),),
+            preexec_fn=runtime.drop_privileges, env={'PATH': '/usr/bin:/bin'}, start_new_session=True)
+        child.close()
+        parent.settimeout(5)
+        if not parent.recv(1):
+            raise RuntimeError('network proxy exited before readiness')
+        bus = WORK / 'proxy/bus'
+        if not stat.S_ISSOCK(bus.lstat().st_mode):
+            raise RuntimeError('network proxy endpoint is not a socket')
+        wayland = socket.socket(socket.AF_UNIX)
+        wayland.connect('/var/run/0-runtime-dir/wayland-1')
+        editor_args = editor_command(runtime, root, WORK, wayland.fileno())
+        editor = subprocess.Popen(editor_args, pass_fds=(wayland.fileno(),),
+            preexec_fn=runtime.drop_privileges, env={'PATH': '/usr/bin:/bin'}, start_new_session=True)
+        while True:
+            try:
+                return editor.wait(timeout=0.5)
+            except subprocess.TimeoutExpired:
+                if proxy.poll() is not None:
+                    raise RuntimeError('network proxy exited while editor was active')
+    finally:
+        stop(editor)
+        for endpoint in (wayland, parent, child):
+            if endpoint is not None:
+                endpoint.close()
+        stop(proxy)
+        if mounted:
+            subprocess.run(['umount', str(WORK / 'rootfs')], check=True)
+        cleanup_work()
+
+if __name__ == '__main__':
+    raise SystemExit(main())

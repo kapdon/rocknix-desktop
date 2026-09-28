@@ -70,6 +70,7 @@ RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
        acl \
        bash \
        bubblewrap \
+       xdg-dbus-proxy \
        ca-certificates \
        dbus \
        desktop-file-utils \
@@ -137,6 +138,7 @@ RUN chmod 0755 \
       /usr/local/bin/rocknix-return \
       /usr/local/bin/rocknix-keyboard-toggle \
       /usr/local/bin/rocknix-launcher \
+      /usr/local/bin/rocknix-network-settings \
       /usr/local/bin/rocknix-status \
       /usr/local/bin/rocknix-window-switcher \
       /usr/local/bin/rocknix-firefox \

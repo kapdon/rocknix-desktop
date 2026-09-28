@@ -37,6 +37,16 @@ def desktop_processes():
     return found
 
 assert active('xfce-desktop.service') and active('sway.service')
+network_pids = []
+for process in Path('/proc').iterdir():
+    if not process.name.isdecimal():
+        continue
+    try:
+        if ('xfce-desktop.service' in (process / 'cgroup').read_text()
+                and (process / 'comm').read_text().strip() in ('xdg-dbus-proxy', 'nm-connection-e')):
+            network_pids.append(int(process.name))
+    except (FileNotFoundError, ProcessLookupError):
+        pass
 pid = None
 if args.component != 'return-ui':
     targets = [pid for pid, name in desktop_processes() if name == args.component]
@@ -64,6 +74,8 @@ assert active('sway.service')
 assert output('systemctl', 'show', 'sway.service', '-p', 'MainPID', '--value') == sway
 assert not Path('/run/rocknix-bwrap-state').exists()
 assert not Path(record['work']).exists()
+assert not Path('/run/rocknix-network').exists()
+assert all(not Path(f'/proc/{pid}').exists() for pid in network_pids)
 root = Path('/storage/.local/share/rocknix-xfce/rootfs')
 lib = root / 'usr/lib/aarch64-linux-gnu'
 acl = subprocess.check_output([str(lib / 'ld-linux-aarch64.so.1'), '--library-path', str(lib),
@@ -76,7 +88,8 @@ for grant in record.get('devices', []):
 print(json.dumps({'component': args.component, 'killed_pid': pid,
                   'gaming_recovered_seconds': round(time.monotonic() - started, 2),
                   'sway_pid_unchanged': sway, 'apps_remaining': desktop_processes(),
-                  'acl_restored': True, 'runtime_removed': True}), flush=True)
+                  'acl_restored': True, 'runtime_removed': True,
+                  'network_pids_reaped': network_pids}), flush=True)
 if subprocess.run(['systemctl', 'is-failed', '--quiet', 'xfce-desktop.service']).returncode == 0:
     subprocess.run(['systemctl', 'reset-failed', 'xfce-desktop.service'], check=True)
 subprocess.run(['systemctl', 'start', 'xfce-desktop.service'], check=True)

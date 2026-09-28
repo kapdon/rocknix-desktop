@@ -52,6 +52,8 @@ grep -q '^ROCKNIX_SWAY_RUNTIME=1$' "${ROOTFS}/etc/rocknix-xfce-release" || fail 
 [ -x "${ROOTFS}/usr/bin/waybar" ] || fail "Waybar is missing"
 [ -x "${ROOTFS}/usr/bin/bwrap" ] || fail "bubblewrap is missing"
 [ -x "${ROOTFS}/usr/bin/setfacl" ] || fail "ACL utilities are missing"
+[ -x "${ROOTFS}/usr/bin/xdg-dbus-proxy" ] || fail "network proxy is missing"
+[ -x "${BASE}/bin/rocknix-network" ] || fail "network settings helper is missing"
 [ -x "${BASE}/bin/rocknix-bwrap" ] || fail "bubblewrap session runner is missing"
 [ -x "${ROOTFS}/usr/bin/fuzzel" ] || fail "Fuzzel is missing"
 [ -x "${ROOTFS}/usr/bin/foot" ] || fail "foot is missing"

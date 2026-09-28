@@ -30,7 +30,8 @@ policy_tick() {
         then "pip"
         elif ((($app == "pavucontrol" or $app == "org.pulseaudio.pavucontrol")
                and .name == "Volume Control") or
-              ($app == "nm-connection-editor" and .name == "Network Connections"))
+              ($app == "nm-connection-editor" and
+               (.name == "Network Connections" or ((.name // "") | startswith("Editing ")))))
         then "settings" else "unmanaged" end) as $kind
      | [.id, $kind, $area.x, $area.y, $area.width, $area.height,
         (if (.geometry.width? | dimension) then .geometry.width else 640 end),

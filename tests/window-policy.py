@@ -73,8 +73,9 @@ print('[{"success":true}]')
     assert 'floating disable' in run(workspace([utility], height=622))[0]
     assert run(workspace([main])) == []
     assert run(workspace([window(10, app='unrelated', title='Picture-in-Picture')])) == []
-    assert run(workspace(floating=[dict(window(10, app='nm-connection-editor',
-                    title='Editing Wi-Fi connection'), type='floating_con')])) == []
+    editor = window(10, app='nm-connection-editor', title='Editing Wi-Fi connection')
+    assert 'floating enable' in run(workspace([editor]))[0]
+    assert 'floating disable' in run(workspace([editor], height=622))[0]
     assert run(workspace(floating=[dict(window(10, app='nm-connection-editor',
                     title='Discard changes?'), type='floating_con')])) == []
     assert run(workspace([pip], name='Gaming')) == []

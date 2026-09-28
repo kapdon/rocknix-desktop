@@ -122,3 +122,4 @@ python3 tests/keyboard-layout.py
 python3 tests/bubblewrap.py
 python3 tests/package-rootfs.py
 python3 tests/maintenance.py
+python3 tests/network-helper.py

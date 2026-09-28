@@ -4,6 +4,9 @@ set -u
 
 source /etc/profile
 
+/storage/.local/share/rocknix-xfce/bin/rocknix-network --cleanup || \
+  printf 'WARNING: network helper cleanup failed\n' >&2
+
 # Root-owned state restores the temporary display grant even after SIGKILL.
 /storage/.local/share/rocknix-xfce/bin/rocknix-bwrap --restore-access || \
   printf 'WARNING: bubblewrap display access recovery failed\n' >&2

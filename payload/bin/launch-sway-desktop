@@ -213,6 +213,7 @@ host_control_loop() {
         next) "${BASE}/bin/rocknix-window-cycle" >/dev/null ;;
         layout) swaymsg 'layout toggle tabbed splith' >/dev/null ;;
         keyboard) "${BASE}/bin/rocknix-keyboard-toggle" >/dev/null ;;
+        network) "${BASE}/bin/rocknix-network" & ;;
       esac
     fi
   done

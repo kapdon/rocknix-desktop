@@ -21,7 +21,7 @@ done
 chmod 1777 "${TEMP_DIR}/rootfs/tmp"
 
 for required in \
-  usr/bin/bwrap usr/bin/setfacl usr/bin/mount usr/bin/dbus-run-session \
+  usr/bin/bwrap usr/bin/setfacl usr/bin/mount usr/bin/dbus-run-session usr/bin/xdg-dbus-proxy \
   usr/bin/firefox-esr usr/bin/foot usr/bin/fuzzel usr/bin/glmark2-wayland usr/bin/waybar \
   usr/local/bin/wvkbd-rocknix usr/local/bin/rocknix-launcher usr/local/bin/rocknix-status \
   usr/local/bin/rocknix-window-switcher usr/local/bin/rocknix-sway-session \

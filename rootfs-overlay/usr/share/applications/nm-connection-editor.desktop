@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Network Connections
+Comment=Manage network connection profiles
+Exec=/usr/local/bin/rocknix-network-settings
+Icon=preferences-system-network
+Terminal=false
+Categories=GTK;Settings;Network;

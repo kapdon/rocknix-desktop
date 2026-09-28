@@ -47,7 +47,7 @@ account database, keyboard binary or package installation is changed.
 | Vesktop without disabling sandbox | Actual Apps launch reaches Discord login; renderer seccomp=2 and distinct user/PID namespaces | Voice, screen sharing are not established by login screen |
 | GPU | Real-session glmark2 uses freedreno FD740; non-root FFmpeg decodes 30 H.264 frames with Iris; Wayland vkcube completes 1200 frames on Turnip Adreno 740 | Firefox decoder selection and full media flow |
 | Audio/status/battery/clock | Pulse connection, pavucontrol window, Wi-Fi/battery/clock rendered | Playback/microphone/device switching |
-| Network editing | Status only; UI explains Gaming Mode fallback | **Missing: safe non-root network editor integration** |
+| Network editing | Settings and Apps use isolated editor/proxy; real inactive-profile rename/save/delete passed; R3 and normal/crash cleanup passed | Final package, proxy-failure and single-instance checks; physical-controller acceptance |
 | Floating utilities and PiP | Audio utility floats; real Firefox PiP floats, shrinks above keyboard, and R3 closes only PiP | Recheck packaged runtime and narrow output |
 | Shared data read/write | Desktop create/edit/rename passed; host file remains UID 0 | File-manager workflows on each actual shared mount; scripts workflow |
 | Home persistence | Existing home migrated in place; retained Firefox profile opens; root/SSH maintenance reinstall passed | Upgrade/reinstall and final package permissions |
@@ -246,6 +246,50 @@ and native keyboard hashes remained unchanged. No connection was changed.
 Proxy and private mounts were cleaned afterwards. Pending: production lifecycle
 integration, dependency packaging, fixed Settings request, inactive-profile
 save/delete tests, and failure/exit cleanup. This is still a parity gap.
+
+### Integrated network settings, 2026-09-28
+
+The newer `payload/bin/rocknix-network` replaces the prototype for normal use.
+The root supervisor accepts only the fixed `network` request. Both Settings and
+the Apps Network Connections entry use that request; no command text is accepted.
+The helper uses a single-instance lock and a fixed root-owned temporary directory.
+Both proxy and editor now run in bubblewrap with read-only roots, private PID/user
+namespaces, no capabilities and disposable homes. Only the proxy sandbox sees the
+host system-bus socket; only NetworkManager is allowed through to the editor.
+The editor uses one connected Wayland fd, not a broad host socket/ACL grant.
+The existing shared nobody identity remains a limitation versus a dedicated host
+account; native account files are not changed.
+
+Hardware checks on the 8b7e9a0 package plus branch patches:
+
+- Opened the helper from panel Settings and separately from Apps search.
+- Created disposable inactive Ethernet UUID `9d1409ed-57a8-432f-b4c1-f214d7c779ac`,
+  bound to nonexistent `bwrap-test0` with autoconnect disabled. In the GUI renamed
+  it from `bwrap-parity-test` to `bwrap-saved`, saved, verified by exact UUID, then
+  deleted through the GUI. Active Wi-Fi and loopback UUIDs/devices stayed unchanged.
+- Corrected a real layout defect: `Editing ...` forms now float above the main
+  connection list. With the keyboard visible, both become tabs and the form's
+  Save/Cancel remain visible. The separate unchanged confirmation dialogs still
+  retain Sway's own behavior. A recreated layout fixture was deleted afterwards.
+- Normal R3 close removed `/run/rocknix-network`.
+- Return while editor/proxy active restored Gaming in 3.29 seconds, reaped editor
+  and proxy PIDs 520872/520865, restored original display/decoder ACLs, removed
+  runtime directories, and reopened Desktop.
+- Waybar crash while editor/proxy active restored Gaming in 1.68 seconds, reaped
+  editor and proxy PIDs 523509/523502, performed the same cleanup and reopened.
+  Host Sway PID 2515 stayed unchanged in both cases.
+- Native account, NetworkManager configuration and keyboard binary hashes still
+  matched their pre-install values. No test network profile remains.
+
+Screenshots: `/tmp/fresh-bwrap-network-integrated.png`,
+`/tmp/fresh-bwrap-network-edit-fixed.png`, and
+`/tmp/fresh-bwrap-network-edit-keyboard.png`. Full offline suite passes, including
+new helper policy/cleanup tests. Impeccable guided the scoped window adaptation;
+its mechanical detector returned no findings (not a substitute for these RP6
+screenshots). Packaging now includes xdg-dbus-proxy and the Settings wrapper, but
+this revision has not yet had a clean rebuild/install. Proxy-only failure,
+single-instance interaction, narrower logical widths and physical input remain
+explicit acceptance work; the overall migration is not feature-complete.
 
 Packaging now extracts and repacks the Docker export in one root/fakeroot
 context. `tests/package-rootfs.py` exercises the real packager with a tiny export
