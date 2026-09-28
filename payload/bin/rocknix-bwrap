@@ -1,0 +1,319 @@
+#!/usr/bin/python3
+"""Run Debian clients non-root in bubblewrap, from outside any chroot.
+
+--desktop uses the existing persistent Desktop home. Without it, commands get
+a disposable home and a bounded lifetime for namespace/compatibility probes.
+"""
+import argparse
+import ctypes
+import fcntl
+import json
+import os
+from pathlib import Path
+import pwd
+import shutil
+import signal
+import stat
+import subprocess
+import tempfile
+
+
+DEFAULT_ROOT = "/storage/.local/share/rocknix-xfce/rootfs"
+PROBE_UID = 62000
+STATE = Path("/run/rocknix-bwrap-state")
+SHARED_DATA = ("Desktop", "Steam", "backup", "games-external", "games-internal", "roms")
+
+
+def debian_command(root, executable, *args):
+    lib = root / "usr/lib/aarch64-linux-gnu"
+    return [str(lib / "ld-linux-aarch64.so.1"), "--library-path", str(lib),
+            str(root / executable.lstrip("/")), *args]
+
+
+def sandbox_command(root, work, command, graphical=False, desktop=False, video_nodes=()):
+    uid = str(PROBE_UID)
+    runtime = f"/run/user/{uid}"
+    args = debian_command(root, "/usr/bin/bwrap") + [
+        "--unshare-user", "--uid", uid, "--gid", uid,
+        "--unshare-pid", "--unshare-ipc", "--unshare-uts",
+        "--die-with-parent", "--new-session", "--cap-drop", "ALL",
+        "--ro-bind", str(root), "/",
+        "--proc", "/proc", "--dev", "/dev",
+        "--tmpfs", "/tmp", "--tmpfs", "/run", "--tmpfs", "/sys",
+        "--tmpfs", "/home", "--tmpfs", "/storage",
+        "--ro-bind", str(root / "home/rocknix-default"), "/home/rocknix-default",
+        "--bind", str(work / "home"), "/home/rocknix",
+        "--bind", str(work / "runtime"), runtime,
+        "--ro-bind", str(work / "passwd"), "/etc/passwd",
+        "--ro-bind", str(work / "group"), "/etc/group",
+        "--ro-bind", "/etc/resolv.conf", "/etc/resolv.conf",
+        "--clearenv", "--setenv", "HOME", "/home/rocknix",
+        "--setenv", "USER", "rocknix", "--setenv", "LOGNAME", "rocknix",
+        "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin",
+        "--setenv", "LANG", "C.UTF-8", "--setenv", "XDG_RUNTIME_DIR", runtime,
+        "--chdir", "/home/rocknix",
+    ]
+    if graphical:
+        args += ["--ro-bind", str(work / "wayland"), runtime + "/wayland-1",
+                 "--ro-bind", "/sys", "/sys",
+                 "--dev-bind", "/dev/dri/renderD128", "/dev/dri/renderD128",
+                 "--setenv", "WAYLAND_DISPLAY", "wayland-1",
+                 "--setenv", "XDG_SESSION_TYPE", "wayland",
+                 "--setenv", "XDG_CURRENT_DESKTOP", "sway",
+                 "--setenv", "GDK_BACKEND", "wayland",
+                 "--setenv", "QT_QPA_PLATFORM", "wayland",
+                 "--setenv", "SDL_VIDEODRIVER", "wayland",
+                 "--setenv", "MOZ_ENABLE_WAYLAND", "1",
+                 "--setenv", "PULSE_SERVER", "tcp:127.0.0.1:4713"]
+        for node in video_nodes:
+            args += ["--dev-bind", node, node]
+    if desktop:
+        args += ["--ro-bind", "/run/rocknix-xfce", "/run/rocknix-xfce"]
+        for name in SHARED_DATA:
+            path = work / "shared" / name
+            if path.is_dir():
+                args += ["--bind", str(path), "/storage/" + name]
+        # Host-executed scripts are not ordinary shared data. Keep them readable
+        # pending an explicit privileged editing workflow, not silently rootable.
+        if Path("/storage/scripts").is_dir():
+            args += ["--ro-bind", "/storage/scripts", "/storage/scripts"]
+        for name, value in os.environ.items():
+            if name.startswith("ROCKNIX_") or name == "TZ":
+                args += ["--setenv", name, value]
+        args += ["--setenv", "ROCKNIX_BWRAP", "1"]
+    return args + ["--", "/usr/bin/dbus-run-session", "--", *command]
+
+
+def restore_access(root, cleanup_orphan=False):
+    """Also called by ExecStopPost if SIGKILL prevented normal cleanup."""
+    if not STATE.exists():
+        return
+    info = STATE.stat()
+    if info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
+        raise RuntimeError("unsafe bubblewrap recovery state")
+    record = STATE / "socket.json"
+    if not record.exists():
+        (STATE / "socket.new").unlink(missing_ok=True)
+        STATE.rmdir()
+        return
+    data = json.loads(record.read_text())
+    for grant in [data, *data.get("devices", [])]:
+        path = Path(grant["path"])
+        if path.exists() and [path.stat().st_dev, path.stat().st_ino] == grant["identity"]:
+            subprocess.run(debian_command(root, "/usr/bin/setfacl", "--restore=-"),
+                           input=grant["acl"].encode(), check=True)
+    if cleanup_orphan and data.get("work"):
+        work = Path(data["work"])
+        if work.parent != Path("/run") or not work.name.startswith("rocknix-bwrap-"):
+            raise RuntimeError("unexpected orphan runtime path")
+        if work.exists():
+            if work.is_symlink() or work.stat().st_uid != 0:
+                raise RuntimeError("unsafe orphan runtime directory")
+            # ExecStopPost must not recursively remove a live bind mount.
+            for name in ("rootfs", "home"):
+                target = work / name
+                if target.exists() and (os.path.ismount(target) or any(target.iterdir())):
+                    raise RuntimeError("orphan still contains mounted data")
+            shutil.rmtree(work)
+    record.unlink()
+    (STATE / 'socket.new').unlink(missing_ok=True)
+    STATE.rmdir()
+
+
+def migrate_home(home):
+    # Only this Desktop home; no traversal into symlink targets or other mounts.
+    if home.is_symlink() or not home.is_dir():
+        raise RuntimeError("Desktop home must be a real directory")
+    device = home.stat().st_dev
+    paths = [home]
+    for directory, dirs, files in os.walk(home, followlinks=False):
+        for name in dirs + files:
+            path = Path(directory) / name
+            info = path.lstat()
+            if info.st_dev != device:
+                raise RuntimeError(f"home migration requires review: {path}")
+            if info.st_uid == PROBE_UID and info.st_gid == PROBE_UID:
+                continue
+            if stat.S_ISREG(info.st_mode) and info.st_nlink > 1:
+                raise RuntimeError(f"home migration requires review: {path}")
+            paths.append(path)
+    for path in paths:
+        os.chown(path, PROBE_UID, PROBE_UID, follow_symlinks=False)
+
+
+def drop_privileges():
+    os.setgroups([])
+    os.setresgid(PROBE_UID, PROBE_UID, PROBE_UID)
+    os.setresuid(PROBE_UID, PROBE_UID, PROBE_UID)
+    # Also clear capabilities retained via an unusual caller configuration.
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(38, 1, 0, 0, 0) != 0:  # PR_SET_NO_NEW_PRIVS
+        raise OSError(ctypes.get_errno(), "PR_SET_NO_NEW_PRIVS")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--rootfs", default=DEFAULT_ROOT)
+    parser.add_argument("--graphical", action="store_true")
+    parser.add_argument("--desktop", action="store_true")
+    parser.add_argument("--restore-access", action="store_true")
+    parser.add_argument("--wayland", default="/var/run/0-runtime-dir/wayland-1")
+    parser.add_argument("--timeout", type=int, default=45)
+    parser.add_argument("command", nargs=argparse.REMAINDER)
+    opts = parser.parse_args()
+    command = opts.command
+    if command[:1] == ["--"]:
+        command = command[1:]
+    if (not command and not opts.restore_access) or opts.timeout < 1 or opts.timeout > 600:
+        parser.error("supply a command and a timeout between 1 and 600 seconds")
+    if os.geteuid() != 0:
+        parser.error("host root is required for setup; application runs as UID 62000")
+    lock = os.open("/run/rocknix-bwrap.lock", os.O_CREAT | os.O_NOFOLLOW | os.O_RDWR, 0o600)
+    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        pwd.getpwuid(PROBE_UID)
+    except KeyError:
+        pass
+    else:
+        parser.error("probe UID is already assigned on host")
+    root = Path(opts.rootfs).resolve(strict=True)
+    if opts.restore_access:
+        restore_access(root, cleanup_orphan=True)
+        return 0
+    if opts.desktop:
+        opts.graphical = True
+        restore_access(root, cleanup_orphan=True)
+    elif opts.graphical and STATE.exists():
+        parser.error("another graphical runtime owns the Wayland grant")
+    for line in (root / "etc/passwd").read_text().splitlines():
+        if line.split(":")[2] == str(PROBE_UID):
+            parser.error("probe UID is already assigned in Debian")
+    for executable in ("usr/bin/bwrap", "usr/bin/dbus-run-session"):
+        if not (root / executable).is_file():
+            parser.error(f"missing {executable}; install Debian bubblewrap/dbus first")
+
+    # Root setup gets its OWN mount namespace. Never enter/pivot the desktop's.
+    os.unshare(os.CLONE_NEWNS)
+    subprocess.run(["mount", "--make-rprivate", "/"], check=True)
+    work = Path(tempfile.mkdtemp(prefix="rocknix-bwrap-", dir="/run"))
+    os.chmod(work, 0o755)
+    # /storage/.local is root-only. Expose the rootfs through a private,
+    # read-only bind instead of loosening that host directory's permissions.
+    (work / "rootfs").mkdir()
+    subprocess.run(["mount", "--bind", str(root), str(work / "rootfs")], check=True)
+    root = work / "rootfs"
+    subprocess.run(["mount", "-o", "remount,bind,ro", str(root)], check=True)
+    for name in ("home", "runtime"):
+        (work / name).mkdir(mode=0o700)
+        os.chown(work / name, PROBE_UID, PROBE_UID)
+    home_bound = False
+    shared_mounts = []
+    if opts.desktop:
+        home = Path(opts.rootfs).resolve().parent / "home"
+        migrate_home(home)
+        subprocess.run(["mount", "--bind", str(home), str(work / "home")], check=True)
+        home_bound = True
+    (work / "passwd").write_text(
+        "root:x:0:0:root:/root:/bin/sh\n"
+        f"rocknix:x:{PROBE_UID}:{PROBE_UID}:Desktop probe:/home/rocknix:/bin/bash\n")
+    (work / "group").write_text(f"root:x:0:\nrocknix:x:{PROBE_UID}:\n")
+    os.chmod(work / "passwd", 0o644)
+    os.chmod(work / "group", 0o644)
+    acl = None
+    bound = False
+    child = None
+    video_nodes = []
+    def interrupted(signum, frame):
+        raise KeyboardInterrupt(f"probe interrupted by signal {signum}")
+    for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(sig, interrupted)
+    try:
+        if opts.desktop:
+            (work / "shared").mkdir(mode=0o755)
+            for name in SHARED_DATA:
+                source = Path("/storage") / name
+                if not source.is_dir():
+                    continue
+                target = work / "shared" / name
+                target.mkdir(mode=0o755)
+                subprocess.run(debian_command(root, "/usr/bin/mount", "--bind", "-o",
+                    f"X-mount.idmap=b:0:{PROBE_UID}:1", str(source), str(target)), check=True)
+                shared_mounts.append(target)
+        if opts.graphical:
+            if not stat.S_ISSOCK(os.stat(opts.wayland).st_mode):
+                raise RuntimeError("Wayland path is not a socket")
+            (work / "wayland").touch()
+            subprocess.run(["mount", "--bind", opts.wayland, str(work / "wayland")], check=True)
+            bound = True
+            acl = subprocess.check_output(debian_command(
+                root, "/usr/bin/getfacl", "-p", str(work / "wayland")))
+            original_acl = subprocess.check_output(debian_command(
+                root, "/usr/bin/getfacl", "-p", opts.wayland)).decode()
+            info = os.stat(opts.wayland)
+            STATE.mkdir(mode=0o700)
+            access = {
+                "path": opts.wayland, "identity": [info.st_dev, info.st_ino],
+                "acl": original_acl, "work": str(work), "devices": []}
+            (STATE / "socket.new").write_text(json.dumps(access))
+            (STATE / "socket.new").replace(STATE / "socket.json")
+            subprocess.run(debian_command(root, "/usr/bin/setfacl", "-m",
+                f"u:{PROBE_UID}:rw", str(work / "wayland")), check=True)
+            # RP6 decoder only. Do not expose cameras, encoders or all of /dev.
+            name = Path('/sys/class/video4linux/video0/name')
+            node = Path('/dev/video0')
+            if name.is_file() and name.read_text().strip() == 'qcom-iris-decoder':
+                info = node.lstat()
+                if not stat.S_ISCHR(info.st_mode):
+                    raise RuntimeError('decoder path is not a character device')
+                access['devices'].append({
+                    'path': str(node), 'identity': [info.st_dev, info.st_ino],
+                    'acl': subprocess.check_output(debian_command(
+                        root, '/usr/bin/getfacl', '-p', str(node))).decode()})
+                # Journal before granting so ExecStopPost can recover SIGKILL.
+                (STATE / 'socket.new').write_text(json.dumps(access))
+                (STATE / 'socket.new').replace(STATE / 'socket.json')
+                subprocess.run(debian_command(root, '/usr/bin/setfacl', '-m',
+                    f'u:{PROBE_UID}:rw', str(node)), check=True)
+                video_nodes.append(str(node))
+        args = sandbox_command(root, work, command, opts.graphical, opts.desktop, video_nodes)
+        print(json.dumps({"work": str(work), "uid": PROBE_UID,
+                          "command": command, "graphical": opts.graphical}), flush=True)
+        child = subprocess.Popen(args, preexec_fn=drop_privileges,
+                                 env={"PATH": "/usr/bin:/bin"}, start_new_session=True)
+        print(f"Host bubblewrap PID: {child.pid}", flush=True)
+        try:
+            rc = child.wait(timeout=None if opts.desktop else opts.timeout)
+        except subprocess.TimeoutExpired:
+            print("Bounded probe timeout; terminating its process group", flush=True)
+            os.killpg(child.pid, signal.SIGTERM)
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(child.pid, signal.SIGKILL)
+                child.wait()
+            rc = 124
+    finally:
+        if child is not None and child.poll() is None:
+            os.killpg(child.pid, signal.SIGKILL)
+            child.wait()
+        if acl is not None:
+            subprocess.run(debian_command(root, "/usr/bin/setfacl", "--restore=-"),
+                           input=acl, check=True)
+            print("Wayland ACL restored", flush=True)
+            restore_access(root)
+        if bound:
+            subprocess.run(["umount", str(work / "wayland")], check=True)
+        for target in reversed(shared_mounts):
+            subprocess.run(["umount", str(target)], check=True)
+        if home_bound:
+            subprocess.run(["umount", str(work / "home")], check=True)
+        subprocess.run(["umount", str(root)], check=True)
+        if opts.desktop:
+            shutil.rmtree(work)
+        else:
+            print(f"Probe data retained at {work}; no production home used", flush=True)
+    return rc
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

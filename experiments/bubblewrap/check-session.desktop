@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Bubblewrap validation
+Exec=/bin/bash /usr/local/bin/bubblewrap-check-session
+Terminal=false
+Categories=System;

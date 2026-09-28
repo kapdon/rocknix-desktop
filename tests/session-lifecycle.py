@@ -11,7 +11,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'rootfs-overlay/usr/local/bin/rocknix-sway-session').read_text()
 
-for mode, expected in [('return', 0), ('invalid', 1), ('term', 143), ('waybar', 1)]:
+for mode, expected in [('return', 0), ('invalid', 1), ('term', 143), ('waybar', 1), ('keyboard', 1)]:
     with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryFile() as log:
         home = Path(directory) / 'home'
         home.mkdir()
@@ -19,13 +19,16 @@ for mode, expected in [('return', 0), ('invalid', 1), ('term', 143), ('waybar', 
         runtime.mkdir()
         fifo = Path(directory) / 'control'
         os.mkfifo(fifo)
+        keyboard_fifo = Path(directory) / 'keyboard-control'
+        os.mkfifo(keyboard_fifo)
         # Override only machine-specific paths; execute production lifecycle code.
         script = SOURCE.replace('export HOME=/home/rocknix',
                                 f'export HOME={shlex.quote(str(home))}')
         script = script.replace('CONTROL_FIFO=/run/rocknix-xfce/control',
                                 f'CONTROL_FIFO={shlex.quote(str(fifo))}')
-        script = script.replace('RUNTIME_DIR=/run/rocknix-xfce',
+        script = script.replace('RUNTIME_DIR=${XDG_RUNTIME_DIR:?}',
                                 f'RUNTIME_DIR={shlex.quote(str(runtime))}')
+        script = script.replace('/run/rocknix-xfce/keyboard-control', str(keyboard_fifo))
         script = script.replace('/etc/xdg/waybar/config.jsonc',
                                 shlex.quote(str(ROOT / 'rootfs-overlay/etc/xdg/waybar/config.jsonc')))
         script = script.replace('/etc/xdg/waybar/style.css',
@@ -33,8 +36,11 @@ for mode, expected in [('return', 0), ('invalid', 1), ('term', 143), ('waybar', 
         script = script.replace('source /usr/local/bin/rocknix-home-integration', ':')
         script = script.replace('refresh_home_integration /home/rocknix-default "$HOME"', ':')
         bar = 'sleep 0.2; return 1' if mode == 'waybar' else 'exec sleep 600'
-        mocks = f'waybar() {{ {bar}; }}\nthunar() {{ exec sleep 600; }}\n'
+        keyboard = 'sleep 0.2; return 1' if mode == 'keyboard' else 'exec sleep 600'
+        mocks = f'waybar() {{ {bar}; }}\nthunar() {{ exec sleep 600; }}\nwvkbd-rocknix() {{ {keyboard}; }}\n'
         proc = subprocess.Popen(['bash', '-c', mocks + script],
+                                env={**os.environ, 'ROCKNIX_KEYBOARD_HEIGHT': '378',
+                                     'ROCKNIX_KEYBOARD_FONT_SIZE': '30', 'ROCKNIX_OUTPUT_NAME': 'test'},
                                 stdout=log, stderr=log, start_new_session=True)
         try:
             if mode in ('return', 'invalid'):

@@ -135,7 +135,7 @@ No personal-data purge or automatic power-loss recovery is provided.
 
 ## Build and contribute
 
-With Docker and ARM64 execution support:
+With Docker, ARM64 execution support, and `fakeroot` (to preserve Debian archive ownership):
 
 ```sh
 bash tests/check.sh

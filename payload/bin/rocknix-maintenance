@@ -1,0 +1,78 @@
+#!/usr/bin/python3
+"""Root/SSH-only Debian maintenance. Desktop must be stopped first.
+
+This trusts the administrator and Debian package scripts; it is not an untrusted
+package sandbox. It never supplies a root elevation endpoint to desktop apps.
+"""
+import argparse
+import fcntl
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+
+BASE = Path('/storage/.local/share/rocknix-xfce')
+CAPS = ('CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'FSETID', 'SETGID', 'SETUID',
+        'SETPCAP', 'SYS_CHROOT', 'SETFCAP')
+
+def command(root, policy, requested):
+    lib = root / 'usr/lib/aarch64-linux-gnu'
+    args = [str(lib / 'ld-linux-aarch64.so.1'), '--library-path', str(lib),
+            str(root / 'usr/bin/bwrap'), '--unshare-pid', '--unshare-ipc',
+            '--unshare-uts', '--die-with-parent', '--new-session',
+            '--cap-drop', 'ALL']
+    for cap in CAPS:
+        args += ['--cap-add', 'CAP_' + cap]
+    args += ['--bind', str(root), '/', '--proc', '/proc', '--dev', '/dev',
+             '--tmpfs', '/run', '--tmpfs', '/tmp', '--tmpfs', '/home',
+             '--tmpfs', '/root', '--tmpfs', '/storage', '--tmpfs', '/sys',
+             '--ro-bind', '/etc/resolv.conf', '/etc/resolv.conf',
+             '--ro-bind', str(policy), '/usr/sbin/policy-rc.d',
+             '--clearenv', '--setenv', 'PATH', '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+             '--setenv', 'HOME', '/root', '--setenv', 'LANG', 'C.UTF-8',
+             '--setenv', 'TERM', 'xterm-256color', '--chdir', '/', '--', *requested]
+    return args
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('command', nargs=argparse.REMAINDER,
+                        help='trusted Debian command, e.g. -- apt-get install PACKAGE')
+    opts = parser.parse_args()
+    requested = opts.command
+    if requested[:1] == ['--']:
+        requested = requested[1:]
+    if not requested:
+        parser.error('supply a Debian command after --')
+    if os.geteuid() != 0:
+        parser.error('run from host root SSH, not the Desktop terminal')
+    # Share the installer lock and runtime lock. Hold both for the full command,
+    # including package children, to prevent concurrent rootfs replacement/use.
+    locks = []
+    for path in ('/storage/.rocknix-xfce-install.lock', '/run/rocknix-bwrap.lock'):
+        fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        locks.append(fd)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            parser.error('Desktop or an installer is running; return to Gaming first')
+    state = subprocess.check_output(['systemctl', 'show', 'xfce-desktop.service',
+                                     '-p', 'ActiveState', '--value'], text=True).strip()
+    if state not in ('inactive', 'failed'):
+        parser.error('return to Gaming before maintenance')
+    if (BASE / '.upgrade-in-progress').exists() or (BASE / '.upgrade-in-progress').is_symlink():
+        parser.error('unfinished upgrade requires recovery first')
+    root = BASE / 'rootfs'
+    if root.is_symlink() or not root.is_dir():
+        parser.error('runtime directory is missing or a symlink')
+    if 'ROCKNIX_SWAY_RUNTIME=1' not in (root / 'etc/rocknix-xfce-release').read_text().splitlines():
+        parser.error('unrecognized runtime')
+    with tempfile.TemporaryDirectory(prefix='rocknix-maintenance-', dir='/run') as work:
+        policy = Path(work) / 'policy-rc.d'
+        policy.write_text('#!/bin/sh\nexit 101\n')
+        policy.chmod(0o755)
+        # Do not inherit SSH/session variables, loader overrides, or bus paths.
+        return subprocess.call(command(root, policy, requested),
+                               env={'PATH': '/usr/bin:/bin'}, pass_fds=tuple(locks))
+
+if __name__ == '__main__':
+    raise SystemExit(main())

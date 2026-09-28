@@ -49,10 +49,16 @@ fi
 
 # Reserve room for the keyboard even while it is hidden. The launcher then
 # remains usable when L3 reveals wvkbd after the launcher is already open.
-available_height=$((logical_height - bar_height - keyboard_height - 48))
+inner_pad=6
+# Reserve the search row, both outer pads and the prompt/list gap as well as
+# breathing room. Drop result rows on short outputs instead of forcing four
+# rows beyond the space left by the keyboard.
+available_height=$((logical_height - bar_height - keyboard_height - 48 - 2 * vertical_pad - inner_pad))
 line_count=$((available_height / line_height - 1))
-[ "${line_count}" -ge 4 ] || line_count=4
+[ "${line_count}" -ge 1 ] || line_count=1
 [ "${line_count}" -le 8 ] || line_count=8
+settings_lines=$((line_count < 3 ? line_count : 3))
+confirmation_lines=$((line_count < 2 ? line_count : 2))
 
 cache_dir=${XDG_CACHE_HOME:-${HOME}/.cache}
 cache=${cache_dir}/rocknix-fuzzel
@@ -81,8 +87,9 @@ fuzzel_args=(
   --width="${menu_width}"
   --horizontal-pad="${horizontal_pad}"
   --vertical-pad="${vertical_pad}"
-  --inner-pad=6
-  --line-height="${line_height}"
+  --inner-pad="${inner_pad}"
+  # Fuzzel defaults to points; our output metrics and height budget are pixels.
+  --line-height="${line_height}px"
   # The rotated RP6 DSI panel reports anisotropic physical dimensions. Fuzzel
   # 1.12 derives ~406 DPI in auto mode and clips 30pt glyphs out of these
   # already physically calibrated rows, so keep Fuzzel's own DPI scaling off.
@@ -101,7 +108,7 @@ case "${mode}" in
     printf '%s\n' \
       'Cancel — stay in Desktop Mode' \
       'Return to Gaming — close desktop apps' |
-      "${fuzzel_args[@]}" --cache=/dev/null --dmenu --no-sort --lines=2 \
+      "${fuzzel_args[@]}" --cache=/dev/null --dmenu --no-sort --lines="${confirmation_lines}" \
         --prompt='RETURN?  ' --placeholder='Save your work before leaving'
     ;;
   settings)
@@ -113,13 +120,20 @@ case "${mode}" in
         "${fuzzel_args[@]}" \
           --cache=/dev/null \
           --dmenu \
-          --lines=3 \
+          --lines="${settings_lines}" \
           --prompt='SETTINGS  ' \
           --placeholder='Choose a setting'
     ) || exit 0
     case "${selection}" in
       'Audio settings') pavucontrol >/dev/null 2>&1 & ;;
-      'Network settings') nm-connection-editor >/dev/null 2>&1 & ;;
+      'Network settings')
+        if [ "${ROCKNIX_BWRAP:-0}" = 1 ]; then
+          printf '%s\n' 'Network editing is available in Gaming Mode' |
+            "${fuzzel_args[@]}" --dmenu --lines=1 --prompt='NETWORK  ' >/dev/null || true
+        else
+          nm-connection-editor >/dev/null 2>&1 &
+        fi
+        ;;
       'Toggle tabbed / split layout') /usr/local/bin/rocknix-window-switcher layout ;;
     esac
     ;;

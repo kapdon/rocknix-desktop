@@ -9,8 +9,12 @@ esac
 
 network=Offline
 state_class=offline
-if command -v nmcli >/dev/null 2>&1; then
-  device_state=$(timeout 2 nmcli --terse --fields TYPE,STATE device status 2>/dev/null || true)
+if [ -r /run/rocknix-xfce/network-state ] || command -v nmcli >/dev/null 2>&1; then
+  if [ "${ROCKNIX_BWRAP:-0}" = 1 ]; then
+    device_state=$(cat /run/rocknix-xfce/network-state 2>/dev/null || true)
+  else
+    device_state=$(timeout 2 nmcli --terse --fields TYPE,STATE device status 2>/dev/null || true)
+  fi
   if printf '%s\n' "${device_state}" | grep -q '^wifi:connected$'; then
     signal=$(timeout 2 nmcli --terse --fields IN-USE,SIGNAL device wifi list --rescan no 2>/dev/null |
       awk -F: '$1 == "*" { print $2; exit }')

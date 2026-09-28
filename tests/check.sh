@@ -15,7 +15,7 @@ paths = list(Path('rootfs-overlay/usr/local/bin').iterdir())
 paths.append(Path('tests/firefox-marionette.py'))
 paths.extend(Path('payload/bin').iterdir())
 for path in paths:
-    if path.read_text().startswith('#!/usr/bin/python3'):
+    if path.is_file() and path.read_text().startswith('#!/usr/bin/python3'):
         ast.parse(path.read_text(), filename=str(path))
 PY
 
@@ -53,7 +53,8 @@ if grep -q 'systemctl stop sway.service' payload/bin/launch-sway-desktop; then
   printf 'FAIL: Sway compositor would be stopped\n' >&2; exit 1
 fi
 grep -q 'rocknix-keyboard-toggle' rootfs-overlay/etc/xdg/waybar/config.jsonc
-grep -q 'kill -34' payload/bin/rocknix-keyboard-toggle
+grep -q 'keyboard-control' payload/bin/rocknix-keyboard-toggle
+grep -q 'kill -34' rootfs-overlay/usr/local/bin/rocknix-sway-session
 grep -q 'kill -34' rootfs-overlay/usr/local/bin/rocknix-keyboard-toggle
 grep -q 'systemctl start --no-block "${unit}"' payload/bin/restore-emulationstation
 if grep -q '^systemctl start sway.service$' payload/bin/restore-emulationstation; then
@@ -118,3 +119,6 @@ python3 tests/window-policy.py
 python3 tests/controller-fields.py
 python3 tests/tools-metadata.py
 python3 tests/keyboard-layout.py
+python3 tests/bubblewrap.py
+python3 tests/package-rootfs.py
+python3 tests/maintenance.py

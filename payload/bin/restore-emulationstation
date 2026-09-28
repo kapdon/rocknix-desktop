@@ -4,6 +4,10 @@ set -u
 
 source /etc/profile
 
+# Root-owned state restores the temporary display grant even after SIGKILL.
+/storage/.local/share/rocknix-xfce/bin/rocknix-bwrap --restore-access || \
+  printf 'WARNING: bubblewrap display access recovery failed\n' >&2
+
 # ExecStopPost runs after systemd has reaped the desktop cgroup, even when
 # the main process was killed before its EXIT trap finished (e.g. tee SIGPIPE).
 if [ -f /run/rocknix-xfce/sway-style-owned ] && systemctl is-active --quiet sway.service; then
@@ -12,6 +16,7 @@ fi
 rm -f -- \
   /run/rocknix-xfce/control \
   /run/rocknix-xfce/host-control \
+  /run/rocknix-xfce/keyboard-control \
   /run/rocknix-xfce/keyboard-visible \
   /run/rocknix-xfce/sway-style-owned \
   /run/rocknix-xfce/waybar-config.jsonc \
@@ -19,6 +24,7 @@ rm -f -- \
   /run/rocknix-xfce/window-count \
   /run/rocknix-xfce/window-count.new \
   /run/rocknix-xfce/wvkbd.pid
+rm -f -- /run/rocknix-xfce/network-state /run/rocknix-xfce/network-state.new
 if [ -f /run/rocknix-xfce/bindings-owned ] && systemctl is-active --quiet sway.service; then
   swaymsg 'unbindsym XF86Tools' >/dev/null 2>&1 || true
   swaymsg 'unbindsym F13' >/dev/null 2>&1 || true

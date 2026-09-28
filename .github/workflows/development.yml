@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
+      - name: Install archive ownership support
+        run: sudo apt-get update && sudo apt-get install -y fakeroot
       - name: Check source
         run: bash tests/check.sh
       - name: Set up cached builder

@@ -61,7 +61,9 @@ RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
     && apt-get install -y --no-install-recommends \
        adwaita-icon-theme \
        alsa-utils \
+       acl \
        bash \
+       bubblewrap \
        ca-certificates \
        dbus \
        desktop-file-utils \
@@ -124,6 +126,7 @@ COPY --from=ffmpeg-rpi-builder /tmp/ffmpeg-rpi.tar.gz /opt/ffmpeg-rpi-7.1.5/shar
 COPY --from=ffmpeg-rpi-builder /usr/local/bin/build-firefox-ffmpeg /opt/ffmpeg-rpi-7.1.5/share/source/build.sh
 
 RUN chmod 0755 \
+      /usr/sbin/policy-rc.d \
       /usr/local/bin/rocknix-version \
       /usr/local/bin/rocknix-return \
       /usr/local/bin/rocknix-keyboard-toggle \

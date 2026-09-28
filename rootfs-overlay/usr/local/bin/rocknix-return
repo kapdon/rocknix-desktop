@@ -6,7 +6,7 @@ FIFO=/run/rocknix-xfce/control
 
 [ -p "${FIFO}" ] || exit 1
 # Repeated taps must not queue a second confirmation behind the first.
-exec 9>/run/rocknix-xfce/return-confirm.lock
+exec 9>"${XDG_RUNTIME_DIR:-/run/rocknix-xfce}/return-confirm.lock"
 flock -n 9 || exit 0
 selection=$(/usr/local/bin/rocknix-launcher confirm-return) || exit 0
 [ "${selection}" = 'Return to Gaming — close desktop apps' ] || exit 0

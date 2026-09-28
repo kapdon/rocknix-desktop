@@ -22,6 +22,7 @@ fi
 WVKBD_PID=""
 HOST_CONTROL_PID=""
 WINDOW_WATCH_PID=""
+NETWORK_WATCH_PID=""
 BINDING_INSTALLED=0
 OUTPUT_NAME=""
 LOGICAL_WIDTH=0
@@ -211,8 +212,17 @@ host_control_loop() {
       case "${command}" in
         next) "${BASE}/bin/rocknix-window-cycle" >/dev/null ;;
         layout) swaymsg 'layout toggle tabbed splith' >/dev/null ;;
+        keyboard) "${BASE}/bin/rocknix-keyboard-toggle" >/dev/null ;;
       esac
     fi
+  done
+}
+
+network_status_loop() {
+  while :; do
+    timeout 2 nmcli --terse --fields TYPE,STATE device status >"${RUNTIME_DIR}/network-state.new" 2>/dev/null || true
+    mv -f "${RUNTIME_DIR}/network-state.new" "${RUNTIME_DIR}/network-state"
+    sleep 5
   done
 }
 
@@ -234,6 +244,9 @@ cleanup() {
   fi
   if [ -n "${WINDOW_WATCH_PID}" ]; then
     kill -TERM "${WINDOW_WATCH_PID}" 2>/dev/null || true
+  fi
+  if [ -n "${NETWORK_WATCH_PID}" ]; then
+    kill -TERM "${NETWORK_WATCH_PID}" 2>/dev/null || true
   fi
   if [ -f "${SWAY_STYLE_MARKER}" ] && systemctl is-active --quiet sway.service; then
     swaymsg reload >/dev/null 2>&1 || true
@@ -259,7 +272,10 @@ cleanup() {
     "${RUNTIME_DIR}/window-count.new" \
     "${RUNTIME_DIR}/waybar-config.jsonc" \
     "${RUNTIME_DIR}/waybar-style.css" \
+    "${RUNTIME_DIR}/network-state" \
+    "${RUNTIME_DIR}/network-state.new" \
     "${HOST_CONTROL_FIFO}" \
+    "${RUNTIME_DIR}/keyboard-control" \
     "${CONTROL_FIFO}"
   rmdir "${RUNTIME_DIR}" 2>/dev/null || true
 
@@ -281,33 +297,6 @@ if [ "${DISPLAY_PPI}" -gt 0 ]; then
     "$((DISPLAY_DIAGONAL_TENTHS / 10))" "$((DISPLAY_DIAGONAL_TENTHS % 10))" "${DISPLAY_PPI}"
 fi
 printf '; panel %spx, keyboard %spx\n' "${BAR_HEIGHT}" "${KEYBOARD_HEIGHT}"
-
-mkdir -p \
-  "${ROOTFS}/dev" \
-  "${ROOTFS}/proc" \
-  "${ROOTFS}/run" \
-  "${ROOTFS}/sys" \
-  "${ROOTFS}/tmp" \
-  "${ROOTFS}/home/rocknix"
-
-mount_rbind /dev "${ROOTFS}/dev"
-mount -t proc proc "${ROOTFS}/proc"
-mount_rbind /sys "${ROOTFS}/sys"
-mount_rbind /run "${ROOTFS}/run"
-mount --bind /tmp "${ROOTFS}/tmp"
-mount --bind "${HOME_SOURCE}" "${ROOTFS}/home/rocknix"
-
-for shared in Desktop Steam backup games-external games-internal roms scripts; do
-  if [ -d "/storage/${shared}" ]; then
-    mkdir -p "${ROOTFS}/storage/${shared}"
-    mount --bind "/storage/${shared}" "${ROOTFS}/storage/${shared}"
-  fi
-done
-
-if [ -f /etc/resolv.conf ]; then
-  touch "${ROOTFS}/etc/resolv.conf"
-  mount --bind /etc/resolv.conf "${ROOTFS}/etc/resolv.conf"
-fi
 
 PRIOR_WORKSPACE=$(swaymsg -r -t get_workspaces | jq -er '.[] | select(.focused).name')
 TOUCHKEYBOARD_ACTIVE=0
@@ -337,31 +326,19 @@ pkill -x wvkbd-mobintl 2>/dev/null || true
 "${BASE}/bin/configure-input"
 
 mkdir -p "${RUNTIME_DIR}"
-chmod 0700 "${RUNTIME_DIR}"
+chmod 0755 "${RUNTIME_DIR}"
 rm -f -- "${CONTROL_FIFO}" "${HOST_CONTROL_FIFO}" "${RUNTIME_DIR}/keyboard-visible"
 mkfifo -m 0600 "${CONTROL_FIFO}"
 mkfifo -m 0600 "${HOST_CONTROL_FIFO}"
+rm -f "${RUNTIME_DIR}/keyboard-control"
+mkfifo -m 0640 "${RUNTIME_DIR}/keyboard-control"
+chown 0:62000 "${RUNTIME_DIR}/keyboard-control"
+chown 0:62000 "${CONTROL_FIFO}" "${HOST_CONTROL_FIFO}"
+chmod 0660 "${CONTROL_FIFO}"
+chmod 0620 "${HOST_CONTROL_FIFO}"
 
-# Desktop-owned upstream Simple plus a four-row symbols page. The host keyboard
-# stays untouched; its service/settings are restored by the existing cleanup.
-/usr/sbin/chroot "${ROOTFS}" /usr/bin/env -i \
-  HOME=/home/rocknix LANG=C.UTF-8 \
-  XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
-  /usr/local/bin/wvkbd-rocknix \
-  -H "${KEYBOARD_HEIGHT}" -L "${KEYBOARD_HEIGHT}" \
-  -fg 222222 -fg-sp 111111 -bg 000000 -R 0 \
-  --text ffffff --text-sp ffffff -press 444444 --press-sp 444444 \
-  -fn "Roboto ${KEYBOARD_FONT_SIZE}" -l simple,special \
-  --landscape-layers simple,special \
-  --hidden --output "${OUTPUT_NAME}" >>"${LOG}" 2>&1 &
-WVKBD_PID=$!
-printf '%s\n' "${WVKBD_PID}" >"${RUNTIME_DIR}/wvkbd.pid"
-
-for _ in {1..50}; do
-  kill -0 "${WVKBD_PID}" 2>/dev/null && break
-  sleep 0.1
-done
-kill -0 "${WVKBD_PID}" 2>/dev/null || { printf 'wvkbd failed to start\n' >&2; exit 1; }
+# The private keyboard now starts inside the non-root session. Controller
+# requests pass through a fixed-command FIFO, never a user-supplied host PID.
 
 BINDING_INSTALLED=1
 touch "${RUNTIME_DIR}/bindings-owned"
@@ -409,14 +386,16 @@ host_control_loop &
 HOST_CONTROL_PID=$!
 window_count_loop &
 WINDOW_WATCH_PID=$!
+network_status_loop &
+NETWORK_WATCH_PID=$!
 
 TZ_VALUE=$(timedatectl show -p Timezone --value 2>/dev/null || true)
 TZ_VALUE=${TZ_VALUE:-UTC}
 DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}
 PULSE_SERVER=${PULSE_SERVER:-unix:${XDG_RUNTIME_DIR}/pulse/native}
 
-printf '%s Starting native Wayland desktop clients\n' "$(date -Is)"
-/usr/sbin/chroot "${ROOTFS}" /usr/bin/env -i \
+printf '%s Starting non-root bubblewrap desktop clients\n' "$(date -Is)"
+/usr/bin/env -i \
   HOME=/home/rocknix \
   USER=root \
   LOGNAME=root \
@@ -446,6 +425,7 @@ printf '%s Starting native Wayland desktop clients\n' "$(date -Is)"
   ROCKNIX_STATUS_FONT_SIZE="${STATUS_FONT_SIZE}" \
   ROCKNIX_BAR_PADDING="${BAR_PADDING}" \
   ROCKNIX_KEYBOARD_HEIGHT="${KEYBOARD_HEIGHT}" \
+  ROCKNIX_KEYBOARD_FONT_SIZE="${KEYBOARD_FONT_SIZE}" \
   ROCKNIX_DISPLAY_PPI="${DISPLAY_PPI}" \
   ROCKNIX_LAUNCHER_FONT_SIZE="${LAUNCHER_FONT_SIZE}" \
   ROCKNIX_LAUNCHER_LINE_HEIGHT="${LAUNCHER_LINE_HEIGHT}" \
@@ -453,4 +433,4 @@ printf '%s Starting native Wayland desktop clients\n' "$(date -Is)"
   ROCKNIX_LAUNCHER_VERTICAL_PAD="${LAUNCHER_VERTICAL_PAD}" \
   MESA_LOADER_DRIVER_OVERRIDE=msm \
   GALLIUM_DRIVER=freedreno \
-  /usr/local/bin/rocknix-sway-session
+  "${BASE}/bin/rocknix-bwrap" --desktop -- /usr/local/bin/rocknix-sway-session

@@ -2,6 +2,10 @@
 
 set -eu
 
+if [ "${ROCKNIX_BWRAP:-0}" = 1 ]; then
+  exec timeout 2 /bin/sh -c 'printf "keyboard\n" >/run/rocknix-xfce/host-control'
+fi
+
 PID_FILE=/run/rocknix-xfce/wvkbd.pid
 VISIBLE_MARKER=/run/rocknix-xfce/keyboard-visible
 

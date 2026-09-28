@@ -3,8 +3,8 @@
 set -Eeuo pipefail
 
 export HOME=/home/rocknix
-export USER=root
-export LOGNAME=root
+export USER=rocknix
+export LOGNAME=rocknix
 export SHELL=/bin/bash
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
@@ -15,16 +15,20 @@ export XDG_CONFIG_DIRS=/etc/xdg
 export XDG_DATA_DIRS=/usr/local/share:/usr/share
 
 CONTROL_FIFO=/run/rocknix-xfce/control
-RUNTIME_DIR=/run/rocknix-xfce
+RUNTIME_DIR=${XDG_RUNTIME_DIR:?}
 WAYBAR_CONFIG=${RUNTIME_DIR}/waybar-config.jsonc
 WAYBAR_STYLE=${RUNTIME_DIR}/waybar-style.css
 WAYBAR_PID=""
 CONTROL_PID=""
+WVKBD_PID=""
+KEYBOARD_CONTROL_PID=""
 
 cleanup() {
   trap - EXIT INT TERM HUP
   [ -z "${CONTROL_PID}" ] || kill "${CONTROL_PID}" 2>/dev/null || true
   [ -z "${WAYBAR_PID}" ] || kill "${WAYBAR_PID}" 2>/dev/null || true
+  [ -z "${KEYBOARD_CONTROL_PID}" ] || kill "${KEYBOARD_CONTROL_PID}" 2>/dev/null || true
+  [ -z "${WVKBD_PID}" ] || kill "${WVKBD_PID}" 2>/dev/null || true
   # Never wait for app children such as Thunar. On exit, systemd terminates
   # the entire desktop cgroup with a bounded timeout.
 }
@@ -82,6 +86,22 @@ done
 
 [ -p "${CONTROL_FIFO}" ] || { printf 'Desktop control FIFO is missing\n' >&2; exit 1; }
 
+wvkbd-rocknix \
+  -H "${ROCKNIX_KEYBOARD_HEIGHT}" -L "${ROCKNIX_KEYBOARD_HEIGHT}" \
+  -fg 222222 -fg-sp 111111 -bg 000000 -R 0 \
+  --text ffffff --text-sp ffffff -press 444444 --press-sp 444444 \
+  -fn "Roboto ${ROCKNIX_KEYBOARD_FONT_SIZE}" -l simple,special \
+  --landscape-layers simple,special --hidden --output "${ROCKNIX_OUTPUT_NAME}" &
+WVKBD_PID=$!
+(
+  while IFS= read -r command </run/rocknix-xfce/keyboard-control; do
+    if [ "${command}" = toggle ]; then
+      kill -34 "${WVKBD_PID}"
+    fi
+  done
+) &
+KEYBOARD_CONTROL_PID=$!
+
 waybar -c "${WAYBAR_CONFIG}" -s "${WAYBAR_STYLE}" &
 WAYBAR_PID=$!
 
@@ -93,9 +113,13 @@ CONTROL_PID=$!
 
 thunar /storage >/dev/null 2>&1 &
 
-wait -n "${WAYBAR_PID}" "${CONTROL_PID}"
+wait -n "${WAYBAR_PID}" "${CONTROL_PID}" "${WVKBD_PID}" "${KEYBOARD_CONTROL_PID}"
 if ! kill -0 "${WAYBAR_PID}" 2>/dev/null; then
   printf 'Waybar exited unexpectedly\n' >&2
+  exit 1
+fi
+if ! kill -0 "${WVKBD_PID}" 2>/dev/null || ! kill -0 "${KEYBOARD_CONTROL_PID}" 2>/dev/null; then
+  printf 'Desktop keyboard exited unexpectedly\n' >&2
   exit 1
 fi
 

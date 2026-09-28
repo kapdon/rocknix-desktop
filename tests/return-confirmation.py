@@ -25,7 +25,8 @@ with tempfile.TemporaryDirectory() as directory:
         ('Return to Gaming — close desktop apps', '0', b'return\n'),
     ]:
         subprocess.run(['sh', str(script)], check=True, timeout=5,
-                       env={**os.environ, 'ANSWER': answer, 'RESULT': result})
+                       env={**os.environ, 'ANSWER': answer, 'RESULT': result,
+                            'XDG_RUNTIME_DIR': directory})
         try:
             actual = os.read(reader, 4096)
         except BlockingIOError:

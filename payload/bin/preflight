@@ -50,6 +50,9 @@ discover_sway_environment() {
 grep -q '^RUNTIME_ARCH=aarch64$' "${ROOTFS}/etc/rocknix-xfce-release" || fail "runtime architecture marker is invalid"
 grep -q '^ROCKNIX_SWAY_RUNTIME=1$' "${ROOTFS}/etc/rocknix-xfce-release" || fail "runtime is not the Sway build"
 [ -x "${ROOTFS}/usr/bin/waybar" ] || fail "Waybar is missing"
+[ -x "${ROOTFS}/usr/bin/bwrap" ] || fail "bubblewrap is missing"
+[ -x "${ROOTFS}/usr/bin/setfacl" ] || fail "ACL utilities are missing"
+[ -x "${BASE}/bin/rocknix-bwrap" ] || fail "bubblewrap session runner is missing"
 [ -x "${ROOTFS}/usr/bin/fuzzel" ] || fail "Fuzzel is missing"
 [ -x "${ROOTFS}/usr/bin/foot" ] || fail "foot is missing"
 [ -x "${ROOTFS}/usr/bin/thunar" ] || fail "Thunar is missing"
@@ -69,7 +72,8 @@ grep -q '^ROCKNIX_SWAY_RUNTIME=1$' "${ROOTFS}/etc/rocknix-xfce-release" || fail 
 [ -x "${BASE}/bin/rocknix-window-cycle" ] || fail "window cycle helper is missing"
 [ -x "${BASE}/bin/rocknix-window-policy" ] || fail "window policy helper is missing"
 [ -x /usr/bin/unshare ] || fail "host unshare is missing"
-[ -x /usr/sbin/chroot ] || fail "host chroot is missing"
+[ -x /usr/bin/python3 ] || fail "host Python is missing"
+/usr/bin/python3 -c 'import os; assert hasattr(os, "unshare")' || fail "host Python lacks namespace support"
 systemctl is-active --quiet sway.service || fail "sway.service is not active"
 systemctl is-active --quiet essway.service || fail "start Desktop Mode from EmulationStation"
 discover_sway_environment
@@ -82,6 +86,8 @@ if grep -Rqs -E '(^|[[:space:]])bind(sym|code).*(XF86Tools|F13|F14|F15)' /storag
 fi
 command -V get_setting >/dev/null 2>&1 || fail "host get_setting helper is missing"
 command -V set_setting >/dev/null 2>&1 || fail "host set_setting helper is missing"
-/usr/sbin/chroot "${ROOTFS}" /bin/sh -c 'test "$(uname -m)" = aarch64' || fail "runtime binaries cannot execute"
+"${ROOTFS}/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1" \
+  --library-path "${ROOTFS}/usr/lib/aarch64-linux-gnu" \
+  "${ROOTFS}/usr/bin/bwrap" --version || fail "bubblewrap cannot execute on host"
 
 printf 'Desktop Mode preflight passed.\n'

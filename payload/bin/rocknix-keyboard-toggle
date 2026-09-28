@@ -2,18 +2,11 @@
 
 set -eu
 
-PID_FILE=/run/rocknix-xfce/wvkbd.pid
+CONTROL=/run/rocknix-xfce/keyboard-control
 VISIBLE_MARKER=/run/rocknix-xfce/keyboard-visible
 
-[ -r "${PID_FILE}" ] || exit 1
-pid=$(cat "${PID_FILE}")
-case "${pid}" in
-  ''|*[!0-9]*) exit 1 ;;
-esac
-kill -0 "${pid}" 2>/dev/null || exit 1
-# BusyBox kill on ROCKNIX does not accept the RTMIN name. Linux assigns
-# SIGRTMIN signal 34 on this architecture, which is wvkbd's toggle signal.
-kill -34 "${pid}"
+[ -p "${CONTROL}" ] || exit 1
+timeout 2 /bin/sh -c 'printf "toggle\n" >"$1"' rocknix-keyboard "${CONTROL}"
 if [ -e "${VISIBLE_MARKER}" ]; then
   rm -f "${VISIBLE_MARKER}"
 else
