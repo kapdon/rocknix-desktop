@@ -47,7 +47,7 @@ account database, keyboard binary or package installation is changed.
 | Vesktop without disabling sandbox | Actual Apps launch reaches Discord login; renderer seccomp=2 and distinct user/PID namespaces | Voice, screen sharing are not established by login screen |
 | GPU | Real-session glmark2 uses freedreno FD740; non-root FFmpeg decodes 30 H.264 frames with Iris; Wayland vkcube completes 1200 frames on Turnip Adreno 740 | Firefox decoder selection and full media flow |
 | Audio/status/battery/clock | Pulse connection, pavucontrol window, Wi-Fi/battery/clock rendered | Playback/microphone/device switching |
-| Network editing | Settings and Apps use isolated editor/proxy; real inactive-profile rename/save/delete passed; R3 and normal/crash cleanup passed | Final package, proxy-failure and single-instance checks; physical-controller acceptance |
+| Network editing | Settings and Apps use isolated editor/proxy; real inactive-profile rename/save/delete, proxy-only failure, singleton, R3 and normal/crash cleanup passed | Final package; physical-controller acceptance |
 | Floating utilities and PiP | Audio utility floats; real Firefox PiP floats, shrinks above keyboard, and R3 closes only PiP | Recheck packaged runtime and narrow output |
 | Shared data read/write | Desktop create/edit/rename passed; host file remains UID 0 | File-manager workflows on each actual shared mount; scripts workflow |
 | Home persistence | Existing home migrated in place; retained Firefox profile opens; root/SSH maintenance reinstall passed | Upgrade/reinstall and final package permissions |
@@ -301,8 +301,15 @@ physical-controller acceptance test.
 Startup cleanup now also covers rootfs bind/remount and home preparation, before
 the display-access journal is created. Offline failure injection verifies that
 each failure removes the temporary runtime and only unmounts a successful bind.
-This hardening is not yet deployed or hardware-tested. SIGKILL during pre-journal
-setup and reboot recovery still need separate validation.
+`check-early-setup.py` then passed on RP6 against candidate f5aefcb: injected
+remount and home-preparation failures after a real rootfs bind each removed the
+runtime and left Gaming active, with no display ACL journal created and without
+calling home migration. The candidate was installed and normal confirmed Return
+restored Gaming in 2.23 seconds, restored ACLs, removed all application processes
+and runtime, and retained host Sway PID 2515. Desktop reopened with its non-root
+panel and keyboard. Native account, NetworkManager and keyboard hashes matched.
+This is still the older clean package plus branch patches, not a new bundle.
+SIGKILL during pre-journal setup and reboot recovery still need separate validation.
 
 Packaging now extracts and repacks the Docker export in one root/fakeroot
 context. `tests/package-rootfs.py` exercises the real packager with a tiny export
