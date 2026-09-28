@@ -1,19 +1,19 @@
-/* Art Book Next palette shipped by ROCKNIX: black canvas, quiet surfaces,
- * white type, and a single high-contrast selection state. */
+/* Visual reference: Art Book Next 9a50ef366e750aabfab29e6915a2867607212971.
+ * Keep its black help rail, Roboto typography, translucent secondary text,
+ * and flat #444 selector instead of translating the palette into UI cards. */
 @define-color canvas #000000;
 @define-color surface #111111;
-@define-color surface-raised #222222;
 @define-color selected #444444;
 @define-color text #ffffff;
-@define-color text-muted #aaaaaa;
-@define-color warning #d6b768;
-@define-color critical #d35f6e;
-@define-color positive #92d3a2;
+@define-color text-secondary rgba(255, 255, 255, 0.67);
+@define-color text-muted rgba(255, 255, 255, 0.47);
 
 * {
   border: none;
   border-radius: 0;
-  font-family: "Noto Sans", sans-serif;
+  box-shadow: none;
+  text-shadow: none;
+  font-family: "Roboto", sans-serif;
   font-size: 20px;
   font-weight: 700;
   min-height: 0;
@@ -22,160 +22,81 @@
 window#waybar {
   background: @canvas;
   color: @text;
-  border-bottom: 2px solid @surface-raised;
 }
 
 .modules-left {
-  margin-left: 8px;
+  margin-left: 18px;
 }
 
 .modules-right {
-  margin-right: 8px;
+  margin-right: 10px;
 }
 
 #custom-apps,
-#custom-browser {
-  min-height: 56px;
-  padding: 0 20px;
-  margin: 7px 0;
-  background: @surface;
-}
-
-#custom-apps {
-  border-radius: 10px 0 0 10px;
-}
-
-#custom-browser {
-  margin-right: 10px;
-  border-left: 1px solid @surface-raised;
-  border-radius: 0 10px 10px 0;
-}
-
-#workspaces {
-  padding: 0 4px;
-  margin: 7px 10px 7px 0;
-  background: @surface;
-  border-radius: 10px;
-}
-
-#workspaces button {
-  min-width: 52px;
-  min-height: 56px;
-  padding: 0 14px;
-  color: @text-muted;
-  border-radius: 8px;
-}
-
-#workspaces button.focused,
-#workspaces button:hover,
-#custom-apps:hover,
-#custom-browser:hover,
-#custom-keyboard:hover,
-#pulseaudio:hover {
-  color: @text;
-  background: @selected;
-}
-
-#workspaces button.focused {
-  box-shadow: inset 0 -3px @text;
-}
-
-#workspaces button.urgent {
-  color: @text;
-  background: @critical;
-}
-
-#window {
-  padding: 0 8px;
-  color: @text-muted;
-  font-weight: 400;
+#custom-browser,
+#custom-keyboard,
+#custom-return,
+#pulseaudio {
+  min-height: 64px;
+  padding: 0 18px;
+  color: @text-secondary;
+  background: transparent;
 }
 
 #network,
-#pulseaudio,
 #battery,
 #clock {
-  min-height: 56px;
-  padding: 0 14px;
-  margin: 7px 0;
-  color: @text-muted;
-  background: @surface;
-}
-
-#network {
-  border-radius: 10px 0 0 10px;
-}
-
-#pulseaudio,
-#battery {
-  border-left: 1px solid @surface-raised;
-}
-
-#clock {
-  border-left: 1px solid @surface-raised;
-  border-radius: 0 10px 10px 0;
+  min-height: 64px;
+  padding: 0 12px;
+  color: @text-secondary;
+  background: transparent;
+  font-size: 18px;
 }
 
 #custom-keyboard {
-  min-height: 56px;
-  padding: 0 18px;
-  margin: 7px 0 7px 10px;
-  background: @surface;
-  border-radius: 10px;
+  margin-left: 14px;
 }
 
 #custom-return {
-  min-height: 56px;
-  padding: 0 22px;
-  margin: 7px 0 7px 8px;
-  color: @canvas;
-  background: @text;
-  border-radius: 10px;
+  padding-right: 22px;
+  color: @text;
 }
 
-#custom-return:hover {
-  color: @canvas;
-  background: #dddddd;
-}
-
+#custom-apps:hover,
 #custom-apps:active,
 #custom-browser:active,
+#custom-browser:hover,
 #custom-keyboard:active,
-#pulseaudio:active {
-  color: @canvas;
-  background: @text;
-}
-
-#custom-return:active {
+#custom-keyboard:hover,
+#custom-return:active,
+#custom-return:hover,
+#pulseaudio:active,
+#pulseaudio:hover {
   color: @text;
   background: @selected;
 }
 
 #network.disconnected,
 #pulseaudio.muted {
-  color: #e7a6ae;
+  color: @text-muted;
 }
 
-#battery.warning {
-  color: @warning;
-}
-
+#battery.warning,
 #battery.critical:not(.charging) {
-  color: @critical;
-}
-
-#battery.charging {
-  color: @positive;
+  color: @text;
 }
 
 tooltip {
   color: @text;
   background: @surface;
   border: 1px solid @selected;
-  border-radius: 10px;
+  border-radius: 0;
 }
 
 tooltip label {
-  padding: 6px 8px;
+  padding: 8px 10px;
   color: @text;
+  font-family: "Roboto", sans-serif;
+  font-size: 16px;
+  font-weight: 400;
 }

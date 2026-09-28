@@ -48,6 +48,7 @@ RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
        fonts-liberation \
        fonts-noto-color-emoji \
        fonts-noto-core \
+       fonts-roboto \
        ffmpeg \
        firefox-esr \
        foot \

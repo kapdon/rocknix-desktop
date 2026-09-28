@@ -1,12 +1,13 @@
 {
   "layer": "top",
-  "position": "top",
-  "height": 72,
+  "position": "bottom",
+  "height": 64,
   "spacing": 0,
   "margin-top": 0,
+  "margin-bottom": 0,
   "margin-left": 0,
   "margin-right": 0,
-  "modules-left": ["custom/apps", "custom/browser", "sway/workspaces", "sway/window"],
+  "modules-left": ["custom/apps", "custom/browser"],
   "modules-right": ["network", "pulseaudio", "battery", "clock", "custom/keyboard", "custom/return"],
   "custom/apps": {
     "format": "Apps",
@@ -18,17 +19,6 @@
     "tooltip-format": "Open Firefox ESR",
     "on-click": "/usr/local/bin/rocknix-firefox"
   },
-  "sway/workspaces": {
-    "disable-scroll": true,
-    "all-outputs": false,
-    "format": "{name}"
-  },
-  "sway/window": {
-    "max-length": 30,
-    "rewrite": {
-      "": "ROCKNIX Desktop"
-    }
-  },
   "network": {
     "interval": 5,
     "format-wifi": "Wi-Fi {signalStrength}%",
@@ -37,13 +27,13 @@
     "tooltip-format": "{ifname}: {ipaddr}"
   },
   "pulseaudio": {
-    "format": "Audio {volume}%",
-    "format-muted": "Audio muted",
+    "format": "Volume {volume}%",
+    "format-muted": "Muted",
     "on-click": "pavucontrol"
   },
   "battery": {
     "interval": 15,
-    "format": "Battery {capacity}%",
+    "format": "{capacity}%",
     "format-charging": "Charging {capacity}%",
     "states": {
       "warning": 25,
@@ -52,7 +42,7 @@
   },
   "clock": {
     "interval": 1,
-    "format": "{:%I:%M %p}",
+    "format": "{:%H:%M}",
     "tooltip-format": "{:%A, %B %d}"
   },
   "custom/keyboard": {
