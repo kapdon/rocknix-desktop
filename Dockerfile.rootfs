@@ -1,5 +1,31 @@
 # syntax=docker/dockerfile:1
 
+FROM --platform=$BUILDPLATFORM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS ffmpeg-rpi-builder
+
+ARG TARGETARCH
+
+RUN test "${TARGETARCH}" = "arm64" \
+    && dpkg --add-architecture arm64 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+       build-essential \
+       ca-certificates \
+       gcc-aarch64-linux-gnu \
+       libc6-dev-arm64-cross \
+       libdrm-dev:arm64 \
+       libudev-dev:arm64 \
+       patch \
+       pkg-config \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+ADD --checksum=sha256:f864a7d595b7d7ad50e2600c5002efa824e939cac941ebde487bf326f80f533a \
+  https://github.com/RPi-Distro/ffmpeg/archive/2fe08f3bd52c6e795df8353d29deb89596b5099d.tar.gz \
+  /tmp/ffmpeg-rpi.tar.gz
+COPY experiments/ffmpeg/build.sh /usr/local/bin/build-firefox-ffmpeg
+RUN chmod 0755 /usr/local/bin/build-firefox-ffmpeg \
+    && /usr/local/bin/build-firefox-ffmpeg
+
 FROM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 
 ARG TARGETARCH
@@ -61,6 +87,7 @@ RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
     && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-xfce-packages.tsv
 
 COPY rootfs-overlay/ /
+COPY --from=ffmpeg-rpi-builder /opt/ffmpeg-rpi-7.1.5/ /opt/ffmpeg-rpi-7.1.5/
 
 RUN chmod 0755 \
       /usr/local/bin/rocknix-return \
