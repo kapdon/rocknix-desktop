@@ -1,0 +1,72 @@
+* {
+  border: none;
+  border-radius: 0;
+  font-family: "Noto Sans", sans-serif;
+  font-size: 21px;
+  font-weight: 600;
+  min-height: 0;
+}
+
+window#waybar {
+  background: #111318;
+  color: #f5f7fb;
+  border: 2px solid #323844;
+  border-radius: 14px;
+}
+
+#custom-apps,
+#custom-browser,
+#workspaces,
+#window,
+#network,
+#pulseaudio,
+#battery,
+#clock,
+#custom-keyboard,
+#custom-return {
+  min-height: 60px;
+  padding: 0 18px;
+  margin: 6px 0;
+  background: #20242d;
+  border-radius: 10px;
+}
+
+#custom-apps,
+#custom-browser,
+#custom-keyboard {
+  color: #9dd6ff;
+}
+
+#custom-return {
+  color: #ffffff;
+  background: #a33b4a;
+  margin-right: 6px;
+}
+
+#workspaces button {
+  min-width: 54px;
+  min-height: 52px;
+  padding: 0 14px;
+  color: #cbd2df;
+  border-radius: 8px;
+}
+
+#workspaces button.focused,
+#workspaces button:hover,
+#custom-apps:hover,
+#custom-browser:hover,
+#custom-keyboard:hover,
+#custom-return:hover {
+  color: #ffffff;
+  background: #356a91;
+}
+
+#window {
+  color: #d7dce6;
+  font-weight: 400;
+}
+
+#network.disconnected,
+#pulseaudio.muted {
+  color: #ffb3bd;
+}

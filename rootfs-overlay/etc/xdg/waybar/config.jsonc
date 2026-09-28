@@ -1,0 +1,64 @@
+{
+  "layer": "top",
+  "position": "top",
+  "height": 76,
+  "spacing": 8,
+  "margin-top": 8,
+  "margin-left": 8,
+  "margin-right": 8,
+  "modules-left": ["custom/apps", "custom/browser", "sway/workspaces", "sway/window"],
+  "modules-right": ["network", "pulseaudio", "battery", "clock", "custom/keyboard", "custom/return"],
+  "custom/apps": {
+    "format": "Apps",
+    "tooltip-format": "Open the application launcher",
+    "on-click": "fuzzel"
+  },
+  "custom/browser": {
+    "format": "Firefox",
+    "tooltip-format": "Open Firefox ESR",
+    "on-click": "/usr/local/bin/rocknix-firefox"
+  },
+  "sway/workspaces": {
+    "disable-scroll": true,
+    "all-outputs": false,
+    "format": "{name}"
+  },
+  "sway/window": {
+    "max-length": 36,
+    "rewrite": {
+      "": "Desktop"
+    }
+  },
+  "network": {
+    "interval": 5,
+    "format-wifi": "Wi-Fi {signalStrength}%",
+    "format-ethernet": "Network",
+    "format-disconnected": "Offline",
+    "tooltip-format": "{ifname}: {ipaddr}"
+  },
+  "pulseaudio": {
+    "format": "Audio {volume}%",
+    "format-muted": "Audio muted",
+    "on-click": "pavucontrol"
+  },
+  "battery": {
+    "interval": 15,
+    "format": "Battery {capacity}%",
+    "format-charging": "Charging {capacity}%"
+  },
+  "clock": {
+    "interval": 1,
+    "format": "{:%-I:%M %p}",
+    "tooltip-format": "{:%A, %B %-d}"
+  },
+  "custom/keyboard": {
+    "format": "Keyboard",
+    "tooltip-format": "Show or hide the on-screen keyboard (L3)",
+    "on-click": "/usr/local/bin/rocknix-keyboard-toggle"
+  },
+  "custom/return": {
+    "format": "Return to Gaming",
+    "tooltip-format": "Close Desktop Mode and restore EmulationStation",
+    "on-click": "/usr/local/bin/rocknix-return"
+  }
+}
