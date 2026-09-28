@@ -15,9 +15,14 @@ The result is installed under `/opt/ffmpeg-rpi-7.1.5`. Only
 only the codecs and helpers needed for the H.264/AAC validation path and is not
 a system FFmpeg replacement.
 
-Prior isolated testing proved Firefox imported Iris-decoded DMA-BUF frames and
-played a 45-second local 720p30 file with no drops. A YouTube test later stopped
-around 39 seconds, so integration is not complete until a longer streaming run,
-seek, pause/resume, audio, and decoder-log checks pass on this branch.
+Firefox ESR does not currently pass the V4L2 `num_capture_buffers` codec option.
+The stock 20-buffer pool decoded 720p60 YouTube normally through 40 seconds and
+then failed, while local 720p30 playback succeeded. This isolated build raises
+the decoder default to 32 buffers to prevent capture-buffer starvation. Mozilla
+independently identified the same cause and sustained 1080p60 playback with a
+32-buffer pool in [bug 1612995 comment 26][buffer-fix]. The longer streaming,
+seek, pause/resume, audio, and decoder-log checks still gate integration.
 
 Source: <https://github.com/RPi-Distro/ffmpeg/tree/2fe08f3bd52c6e795df8353d29deb89596b5099d>
+
+[buffer-fix]: https://bugzilla.mozilla.org/show_bug.cgi?id=1612995#c26

@@ -10,4 +10,6 @@ case "${pid}" in
   ''|*[!0-9]*) exit 1 ;;
 esac
 kill -0 "${pid}" 2>/dev/null || exit 1
-kill -RTMIN "${pid}"
+# BusyBox kill on ROCKNIX does not accept the RTMIN name. Linux assigns
+# SIGRTMIN signal 34 on this architecture, which is wvkbd's toggle signal.
+kill -34 "${pid}"

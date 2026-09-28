@@ -10,7 +10,9 @@ done < <(git ls-files --cached --others --exclude-standard)
 python3 - <<'PY'
 import ast
 from pathlib import Path
-for path in Path('rootfs-overlay/usr/local/bin').iterdir():
+paths = list(Path('rootfs-overlay/usr/local/bin').iterdir())
+paths.append(Path('tests/firefox-marionette.py'))
+for path in paths:
     if path.read_text().startswith('#!/usr/bin/python3'):
         ast.parse(path.read_text(), filename=str(path))
 PY
@@ -49,8 +51,14 @@ if grep -q 'systemctl stop sway.service' payload/bin/launch-sway-desktop; then
   printf 'FAIL: Sway compositor would be stopped\n' >&2; exit 1
 fi
 grep -q 'rocknix-keyboard-toggle' rootfs-overlay/etc/xdg/waybar/config.jsonc
+grep -q 'kill -34' payload/bin/rocknix-keyboard-toggle
+grep -q 'kill -34' rootfs-overlay/usr/local/bin/rocknix-keyboard-toggle
+grep -q '/usr/share/applications/firefox-esr.desktop' Dockerfile.rootfs
+grep -q '/usr/share/applications/foot-server.desktop' Dockerfile.rootfs
+grep -q '/usr/share/applications/footclient.desktop' Dockerfile.rootfs
 grep -q 'execute=Return KP_Enter space' rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini
 grep -q '2fe08f3bd52c6e795df8353d29deb89596b5099d' Dockerfile.rootfs
+grep -q 'i64 = 32' experiments/ffmpeg/build.sh
 grep -q 'BindsTo=sway.service' payload/systemd/xfce-desktop.service
 grep -q '^source /etc/profile$' payload/bin/preflight
 grep -q 'TOUCHKEYBOARD_SETTING=$(get_setting' payload/bin/launch-sway-desktop

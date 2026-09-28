@@ -118,6 +118,8 @@ launches no X server.
 - Firefox alone receives an isolated FFmpeg 7.1.5 build from the pinned
   Raspberry Pi `pios/trixie` source. Its DRM-PRIME/V4L2 patch is never placed in
   the global loader path and does not alter MPV or system libraries.
+- That isolated build uses 32 V4L2 capture buffers instead of the stock 20 to
+  prevent the Iris buffer starvation reproduced during 720p60 streaming.
 - Firefox disables AV1 and WebM in the dedicated profile so the current H.264
   hardware-validation path is selected on YouTube.
 

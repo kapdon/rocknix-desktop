@@ -48,7 +48,7 @@
   },
   "clock": {
     "interval": 1,
-    "format": "{:%-I:%M %p}",
+    "format": "{:%I:%M %p}",
     "tooltip-format": "{:%A, %B %-d}"
   },
   "custom/keyboard": {

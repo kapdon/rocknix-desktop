@@ -11,6 +11,7 @@ chmod 0700 "${BROWSER_HOME}" "${PROFILE}"
 
 cat >"${PROFILE}/user.js" <<'EOF'
 user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.aboutwelcome.enabled", false);
 user_pref("browser.startup.homepage", "about:blank");
 user_pref("browser.tabs.warnOnClose", false);
 user_pref("media.av1.enabled", false);

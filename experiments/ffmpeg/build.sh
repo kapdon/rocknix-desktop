@@ -13,6 +13,20 @@ cd "${SOURCE}"
 # source archive and this patch are both pinned by the Dockerfile checksum/SHA.
 patch -p1 <debian/patches/ffmpeg-7.1.5-rpi_29.patch
 
+# Firefox ESR does not pass codec-private V4L2 options to avcodec_open2().
+# Twenty capture buffers starve during 720p60 YouTube playback on Iris, so use
+# the 32-buffer pool independently validated for sustained Qualcomm playback.
+capture_options=libavcodec/v4l2_m2m_dec.c
+grep -Fq \
+  'OFFSET(num_capture_buffers), AV_OPT_TYPE_INT, {.i64 = 20}, 2, INT_MAX, FLAGS },' \
+  "${capture_options}"
+sed -i \
+  's/{.i64 = 20}, 2, INT_MAX, FLAGS }/{.i64 = 32}, 2, INT_MAX, FLAGS }/' \
+  "${capture_options}"
+grep -Fq \
+  'OFFSET(num_capture_buffers), AV_OPT_TYPE_INT, {.i64 = 32}, 2, INT_MAX, FLAGS },' \
+  "${capture_options}"
+
 export PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig
 ./configure \
   --prefix="${PREFIX}" \

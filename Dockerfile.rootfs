@@ -81,6 +81,10 @@ RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
        xdg-user-dirs \
        xdg-utils \
        xfce4-taskmanager \
+    && rm -f \
+       /usr/share/applications/firefox-esr.desktop \
+       /usr/share/applications/foot-server.desktop \
+       /usr/share/applications/footclient.desktop \
     && rm -f /usr/sbin/policy-rc.d \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
