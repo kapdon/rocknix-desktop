@@ -1,0 +1,42 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+export HOME=/home/rocknix
+export USER=root
+export LOGNAME=root
+export SHELL=/bin/bash
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export XDG_CONFIG_HOME="${HOME}/.config"
+export XDG_CACHE_HOME="${HOME}/.cache"
+export XDG_DATA_HOME="${HOME}/.local/share"
+export XDG_CONFIG_DIRS=/etc/xdg
+export XDG_DATA_DIRS=/usr/local/share:/usr/share
+
+mkdir -p \
+  "${HOME}/Desktop" \
+  "${XDG_CONFIG_HOME}" \
+  "${XDG_CACHE_HOME}" \
+  "${XDG_DATA_HOME}"
+
+if [ ! -e "${HOME}/.rocknix-xfce-home-v1" ]; then
+  cp -a /home/rocknix-default/. "${HOME}/"
+  touch "${HOME}/.rocknix-xfce-home-v1"
+fi
+
+ln -sfn /storage/Desktop "${HOME}/ROCKNIX Desktop"
+ln -sfn /storage/roms "${HOME}/ROCKNIX ROMs"
+ln -sfn /storage/games-internal "${HOME}/ROCKNIX Games"
+
+# Stale saved-session clients can prevent a clean session after an abrupt exit.
+rm -rf "${XDG_CACHE_HOME}/sessions"
+mkdir -p "${XDG_CACHE_HOME}/sessions"
+
+if ! grep -Eq '^[[:xdigit:]]{32}$' /etc/machine-id 2>/dev/null; then
+  rm -f /etc/machine-id
+fi
+dbus-uuidgen --ensure=/etc/machine-id
+xsetroot -solid '#1b1d24'
+
+exec dbus-run-session -- xfce4-session
