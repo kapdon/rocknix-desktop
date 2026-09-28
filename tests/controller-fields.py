@@ -53,3 +53,19 @@ for direction, key in [('left', 'A'), ('right', 'D'), ('up', 'W'), ('down', 'S')
     assert 'name: LeftStick\n' in entry and 'deadzone: 0.3\n' in entry
     assert entry.split('    target_events:\n')[1].strip() == f'- keyboard: Key{key}'
 print('PASS: field-navigation chord order and all preserved controller actions')
+
+launcher = (root / 'payload/bin/launch-sway-desktop').read_text()
+restore = (root / 'payload/bin/restore-emulationstation').read_text()
+for symbol, helper in [('XF86Launch5', 'rocknix-window-cycle'),
+                       ('XF86Launch6', 'rocknix-close-window')]:
+    line = next(line for line in launcher.splitlines()
+                if f'bindsym --no-repeat {symbol} ' in line)
+    assert helper in line
+    assert f"unbindsym {symbol}" in launcher
+    assert f"unbindsym {symbol}" in restore
+assert launcher.index('touch "${SWAY_STYLE_MARKER}"') < launcher.index("swaymsg 'focus_follows_mouse no'")
+assert 'swaymsg reload' in restore
+fuzzel = (root / 'rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini').read_text()
+assert 'exit-on-keyboard-focus-loss=no' in fuzzel
+assert 'keyboard-focus=exclusive' in fuzzel
+print('PASS: host key-symbol aliases, cleanup and stable menu focus contracts')

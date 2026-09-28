@@ -24,6 +24,8 @@ if [ -f /run/rocknix-xfce/bindings-owned ] && systemctl is-active --quiet sway.s
   swaymsg 'unbindsym F13' >/dev/null 2>&1 || true
   swaymsg 'unbindsym F14' >/dev/null 2>&1 || true
   swaymsg 'unbindsym F15' >/dev/null 2>&1 || true
+  swaymsg 'unbindsym XF86Launch5' >/dev/null 2>&1 || true
+  swaymsg 'unbindsym XF86Launch6' >/dev/null 2>&1 || true
 fi
 rm -f -- /run/rocknix-xfce/bindings-owned
 rmdir /run/rocknix-xfce 2>/dev/null || true

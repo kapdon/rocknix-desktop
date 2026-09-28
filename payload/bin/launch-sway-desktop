@@ -244,6 +244,8 @@ cleanup() {
     swaymsg 'unbindsym F13' >/dev/null 2>&1 || true
     swaymsg 'unbindsym F14' >/dev/null 2>&1 || true
     swaymsg 'unbindsym F15' >/dev/null 2>&1 || true
+    swaymsg 'unbindsym XF86Launch5' >/dev/null 2>&1 || true
+    swaymsg 'unbindsym XF86Launch6' >/dev/null 2>&1 || true
     rm -f "${RUNTIME_DIR}/bindings-owned"
   fi
   if [ -n "${WVKBD_PID}" ] && kill -0 "${WVKBD_PID}" 2>/dev/null; then
@@ -363,10 +365,15 @@ swaymsg -- "bindsym --no-repeat F14 exec env SWAYSOCK=${SWAYSOCK} XDG_RUNTIME_DI
 # Resolve a leaf window explicitly: Sway's focused-container criterion can also
 # match a parent. No-repeat prevents a held R3 from closing successive apps.
 swaymsg -- "bindsym --no-repeat F15 exec env SWAYSOCK=${SWAYSOCK} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} ${BASE}/bin/rocknix-close-window" >/dev/null
+# The host evdev XKB map translates KEY_F14/F15 to these multimedia symbols.
+# Keep the plain aliases for hosts that retain the function-key symbols.
+swaymsg -- "bindsym --no-repeat XF86Launch5 exec env SWAYSOCK=${SWAYSOCK} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} ${BASE}/bin/rocknix-window-cycle" >/dev/null
+swaymsg -- "bindsym --no-repeat XF86Launch6 exec env SWAYSOCK=${SWAYSOCK} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} ${BASE}/bin/rocknix-close-window" >/dev/null
 
 # Mark ownership before the first temporary workspace-style mutation. If the
 # service is interrupted below, ExecStopPost will still reload the host config.
 touch "${SWAY_STYLE_MARKER}"
+swaymsg 'focus_follows_mouse no' >/dev/null
 swaymsg -- "workspace ${DESKTOP_WORKSPACE}" >/dev/null
 # A surviving floating utility can receive focus on workspace entry. Layout
 # commands target that focused view, and Sway rejects them for floating views.
