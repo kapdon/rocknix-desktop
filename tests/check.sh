@@ -112,3 +112,5 @@ python3 tests/return-confirmation.py
 python3 tests/launcher-cache.py
 python3 tests/window-close.py
 python3 tests/window-policy.py
+
+python3 tests/controller-fields.py

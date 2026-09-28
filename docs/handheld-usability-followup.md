@@ -61,9 +61,9 @@ empty/foreign workspaces, repeat ticks, keyboard changes and cross-layer cycling
    it is not a universal localized PiP detector. Unknown titles stay unchanged.
 2. Evaluate quick audio/network actions in the existing settings menu, leaving
    advanced settings as explicit app entries.
-3. Evaluate Tab/Shift-Tab controller navigation and visible controller help
-   in the separately requested task.
-   West/North currently type `f`/`r`, which can unexpectedly edit focused fields.
+3. Validate the separately implemented West/North field navigation on hardware;
+   see [controller field navigation](controller-field-navigation.md). Visible
+   controller help remains a follow-up.
 
 Sway has separate floating/tiling focus operations, and its native Wayland
 implementation already considers parented/fixed-size windows for floating.

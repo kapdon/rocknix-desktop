@@ -135,19 +135,22 @@ mapping:
     target_events:
       - keyboard: KeyEnter
 
-  - name: Refresh
+  # InputPlumber presses targets in order and releases them in reverse order.
+  # Keep Shift first so North emits Shift+Tab, then releases both on button-up.
+  - name: Previous Field
     source_event:
       gamepad:
         button: North
     target_events:
-      - keyboard: KeyR
+      - keyboard: KeyLeftShift
+      - keyboard: KeyTab
 
-  - name: Find
+  - name: Next Field
     source_event:
       gamepad:
         button: West
     target_events:
-      - keyboard: KeyF
+      - keyboard: KeyTab
 
   - name: Back
     source_event:
