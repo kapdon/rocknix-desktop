@@ -39,21 +39,21 @@ account database, keyboard binary or package installation is changed.
 
 | Requirement from dev / migration | Current evidence | Remaining acceptance |
 | --- | --- | --- |
-| Tools → Desktop, one tabbed workspace, persistent host Sway | Clean 8b7e9a0 package launched through actual Tools UI; panel/files render; preview verified after ES refresh | Recheck after remaining runtime changes |
-| Apps favorites/search and keyboard-visible sizing | RP6 Apps launches; screenshot shows unclipped search with keyboard | Narrow logical outputs, long labels on final code |
+| Tools → Desktop, one tabbed workspace, persistent host Sway | Clean ff93f2c package launched through actual Tools UI, including after reboot; panel/files and preview render | Physical-controller user acceptance |
+| Apps favorites/search and keyboard-visible sizing | Clean ff93f2c RP6 Apps launches; keyboard-visible search and long confirmation labels fit at 960×540 logical; multiword search launches | Other physical devices are not established by RP6 scaling |
 | Confirm/back, West/North fields, Select cycle, R3 close | Injected RP6 InputPlumber key events cycle/close/dismiss correctly | Physical-controller user acceptance; West/North recheck |
-| Keyboard Simple/symbols, panel and L3 toggle | wvkbd verified host UID 62000; both toggles exercised | Typing/layers after final migration, crash handling |
+| Keyboard Simple/symbols, panel and L3 toggle | Clean ff93f2c on-screen letters, 123/ABC and Shift typed qa1A; F13 shows/hides; UID 62000 and keyboard-crash restoration previously verified | Physical touch/controller user acceptance; compose variants not rechecked |
 | Firefox | Retained profile, HTTPS rendering, seccomp content/RDD, real V4L2 H.264 frame output and PiP verified on RP6 | Broader streaming/media flow; final package |
 | Vesktop without disabling sandbox | Actual Apps launch reaches Discord login; renderer seccomp=2 and distinct user/PID namespaces | Voice, screen sharing are not established by login screen |
 | GPU | Real-session glmark2 uses freedreno FD740; non-root FFmpeg and Firefox use Iris; Wayland vkcube completes 1200 frames on Turnip Adreno 740 | Full media flow; final package |
 | Audio/status/battery/clock | Non-root synthetic speaker-output monitor loopback passed; pavucontrol, Wi-Fi/battery/clock rendered | Audible output/user acceptance, microphone, device switching |
-| Network editing | Settings and Apps use isolated editor/proxy; real inactive-profile rename/save/delete, proxy-only failure, singleton, R3 and normal/crash cleanup passed | Final package; physical-controller acceptance |
+| Network editing | Settings and Apps use isolated editor/proxy; inactive-profile rename/save/delete passed; clean ff93f2c proxy failure, singleton and R3 cleanup passed | Physical-controller acceptance |
 | Floating utilities and PiP | Audio utility floats; real Firefox PiP floats, shrinks above keyboard, and R3 closes only PiP | Recheck packaged runtime and narrow output |
 | Shared data read/write | All six actual shared mounts passed non-root create/edit/rename/copy/delete and host UID mapping | GUI file-manager acceptance; scripts workflow decision |
-| Home persistence | Existing home migrated in place; retained Firefox profile opens; root/SSH maintenance reinstall passed | Upgrade/reinstall and final package permissions |
-| Return confirmation and normal restoration | Latest non-root keyboard runtime: Escape/default Cancel retain desktop; confirmed Return restores ES, exact ACL, and removes all desktop processes/runtime | Recheck clean packaged installation |
+| Home persistence | Existing home migrated in place; retained Firefox profile opens; clean ff93f2c uninstall/reinstall retained inode 6291460 and UID/GID 62000 | Future upgrades remain subject to regression testing |
+| Return confirmation and normal restoration | Clean ff93f2c confirmed Return restores ES, exact ACL and removes runtime/apps; narrow keyboard-visible confirmation survives pointer movement and Escape retains Desktop | Physical-controller user acceptance |
 | Crash restoration | Whole cgroup, keyboard, Waybar and compositor SIGKILL recovery passed; early-setup journal cleanup and real reboot passed | Final physical acceptance; abrupt power loss is not tested |
-| Build/install/uninstall/provenance | Offline tests pass; clean 8b7e9a0 bundle built, installed after uninstall, and launched; home inode preserved; native-file hashes unchanged | Final revised package acceptance; GitHub release flow remains untested for this branch |
+| Build/install/uninstall/provenance | Offline tests pass; clean ff93f2c bundle built, installed after uninstall, and launched; home inode preserved; native-file hashes unchanged | Remaining final-package media checks; GitHub release flow untested for this branch and requires publication approval |
 
 ## RP6 observations, 2026-09-28
 
@@ -427,6 +427,36 @@ values. Desktop then reopened with its non-root panel and keyboard. This was a
 real compositor crash, not merely restarting Desktop. Its recovery is slower
 than panel-only failure. Neither this test nor orderly reboot proves abrupt
 power-loss durability.
+
+### Narrow logical output on clean package
+
+On the RP6, temporarily set DSI-1 to scale 2 (960×540 logical), then restarted
+Desktop so sizing was derived from the actual output. The panel selected 44px
+and the four-row keyboard 189px. Apps with the keyboard visible showed its
+search header and results without clipping. Multiword `network connections`
+search launched the intended utility; its narrow keyboard-visible window used
+the tabbed workspace. F14 cycled between it and Thunar, and F15 closed only the
+utility. Return confirmation retained both full labels, survived pointer
+movement, and Escape dismissed it without ending Desktop.
+
+Screenshots: `/tmp/fresh-narrow-keyboard.png`, `/tmp/fresh-narrow-apps.png`,
+`/tmp/fresh-narrow-search.png`, `/tmp/fresh-narrow-network.png`, and
+`/tmp/fresh-narrow-confirm.png`. These are real-device tests using injected
+InputPlumber keys and pointer actions, not physical-controller acceptance or
+proof for another device's physical screen. Restored scale 1 and verified
+1920×1080 logical output with Desktop active afterward.
+
+### Clean-package keyboard input and layers
+
+At restored 1920×1080 logical resolution, F13 displayed the non-root keyboard.
+Opened Apps and clicked the actual on-screen q/a keys, switched with 123, entered
+1, returned with ABC, and used Shift then a. The launcher displayed exactly
+`qa1A`; uppercase reset to lowercase after entry. Both pages remained four rows
+without a navigation page. Escape dismissed Apps and F13 hid the keyboard.
+Screenshots: `/tmp/fresh-keyboard-final.png`, `/tmp/fresh-symbols-final.png`,
+`/tmp/fresh-typing-final.png`. These pointer-injected key clicks exercise wvkbd's
+actual input path, not physical touchscreen or controller acceptance. No text
+was submitted to an application or retained as user data.
 
 Packaging now extracts and repacks the Docker export in one root/fakeroot
 context. `tests/package-rootfs.py` exercises the real packager with a tiny export
