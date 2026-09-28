@@ -309,7 +309,18 @@ restored Gaming in 2.23 seconds, restored ACLs, removed all application processe
 and runtime, and retained host Sway PID 2515. Desktop reopened with its non-root
 panel and keyboard. Native account, NetworkManager and keyboard hashes matched.
 This is still the older clean package plus branch patches, not a new bundle.
-SIGKILL during pre-journal setup and reboot recovery still need separate validation.
+The next revision journals a random runtime path before creating it or mounting
+anything. `check-early-setup.py ... kill-home` sent real SIGKILL after rootfs bind
+and before home migration on RP6. The separate `--restore-access` invocation
+removed the exact journaled runtime (`rocknix-bwrap-b7359aaeeb134173ade21c0042d7516a`)
+and journal; Gaming remained active. This exercises the recovery command used by
+ExecStopPost, not automatic service failure at that exact injection point.
+After deploying the candidate, Waybar PID 541641 SIGKILL restored Gaming in 1.39
+seconds with exact ACL restoration, runtime/process cleanup and unchanged Sway
+PID 2515. Desktop reopened and native hashes matched. Full offline suite passed.
+An older abandoned runtime `rocknix-bwrap-aav1g7eh` was separately identified;
+its rootfs/home were empty and no live process mount namespace referenced it.
+It was removed, not kept as a recovery copy. Reboot recovery remains unverified.
 
 Packaging now extracts and repacks the Docker export in one root/fakeroot
 context. `tests/package-rootfs.py` exercises the real packager with a tiny export

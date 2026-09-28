@@ -16,11 +16,13 @@ import signal
 import stat
 import subprocess
 import tempfile
+import uuid
 
 
 DEFAULT_ROOT = "/storage/.local/share/rocknix-xfce/rootfs"
 PROBE_UID = 62000
 STATE = Path("/run/rocknix-bwrap-state")
+WORK_ROOT = Path("/run")
 SHARED_DATA = ("Desktop", "Steam", "backup", "games-external", "games-internal", "roms")
 
 
@@ -89,22 +91,21 @@ def restore_access(root, cleanup_orphan=False):
     if not STATE.exists():
         return
     info = STATE.stat()
-    if info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
+    if STATE.is_symlink() or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
         raise RuntimeError("unsafe bubblewrap recovery state")
     record = STATE / "socket.json"
-    if not record.exists():
-        (STATE / "socket.new").unlink(missing_ok=True)
-        STATE.rmdir()
-        return
-    data = json.loads(record.read_text())
-    for grant in [data, *data.get("devices", [])]:
+    setup = STATE / "setup.json"
+    data = json.loads(record.read_text()) if record.exists() else (
+        json.loads(setup.read_text()) if setup.exists() else {})
+    grants = [data, *data.get("devices", [])] if "path" in data else []
+    for grant in grants:
         path = Path(grant["path"])
         if path.exists() and [path.stat().st_dev, path.stat().st_ino] == grant["identity"]:
             subprocess.run(debian_command(root, "/usr/bin/setfacl", "--restore=-"),
                            input=grant["acl"].encode(), check=True)
     if cleanup_orphan and data.get("work"):
         work = Path(data["work"])
-        if work.parent != Path("/run") or not work.name.startswith("rocknix-bwrap-"):
+        if work.parent != WORK_ROOT or work == STATE or not work.name.startswith("rocknix-bwrap-"):
             raise RuntimeError("unexpected orphan runtime path")
         if work.exists():
             if work.is_symlink() or work.stat().st_uid != 0:
@@ -115,7 +116,9 @@ def restore_access(root, cleanup_orphan=False):
                 if target.exists() and (os.path.ismount(target) or any(target.iterdir())):
                     raise RuntimeError("orphan still contains mounted data")
             shutil.rmtree(work)
-    record.unlink()
+    record.unlink(missing_ok=True)
+    setup.unlink(missing_ok=True)
+    (STATE / 'setup.new').unlink(missing_ok=True)
     (STATE / 'socket.new').unlink(missing_ok=True)
     STATE.rmdir()
 
@@ -195,7 +198,15 @@ def main():
     # Root setup gets its OWN mount namespace. Never enter/pivot the desktop's.
     os.unshare(os.CLONE_NEWNS)
     subprocess.run(["mount", "--make-rprivate", "/"], check=True)
-    work = Path(tempfile.mkdtemp(prefix="rocknix-bwrap-", dir="/run"))
+    # Journal the path BEFORE creating it: SIGKILL at any later setup stage can
+    # be recovered by ExecStopPost without scanning unrelated /run directories.
+    if opts.desktop:
+        STATE.mkdir(mode=0o700)
+        work = WORK_ROOT / f"rocknix-bwrap-{uuid.uuid4().hex}"
+        (STATE / "setup.new").write_text(json.dumps({"work": str(work)}))
+        (STATE / "setup.new").replace(STATE / "setup.json")
+    else:
+        work = Path(tempfile.mkdtemp(prefix="rocknix-bwrap-", dir=str(WORK_ROOT)))
     root_bound = False
     home_bound = False
     shared_mounts = []
@@ -208,6 +219,8 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
         signal.signal(sig, interrupted)
     try:
+        if opts.desktop:
+            work.mkdir(mode=0o755)
         os.chmod(work, 0o755)
         # Protect setup failures too: an incomplete runtime must not leave its
         # root-owned directory behind before the graphical journal exists.
@@ -252,7 +265,7 @@ def main():
             original_acl = subprocess.check_output(debian_command(
                 root, "/usr/bin/getfacl", "-p", opts.wayland)).decode()
             info = os.stat(opts.wayland)
-            STATE.mkdir(mode=0o700)
+            STATE.mkdir(mode=0o700, exist_ok=opts.desktop)
             access = {
                 "path": opts.wayland, "identity": [info.st_dev, info.st_ino],
                 "acl": original_acl, "work": str(work), "devices": []}
@@ -303,16 +316,25 @@ def main():
                            input=acl, check=True)
             print("Wayland ACL restored", flush=True)
             restore_access(root)
-        if bound:
+        # A signal can arrive after mount succeeds but before its flag/list is
+        # updated. Check actual mountpoints before any recursive removal, too.
+        if bound or os.path.ismount(work / "wayland"):
             subprocess.run(["umount", str(work / "wayland")], check=True)
+        shared = work / "shared"
+        if shared.is_dir():
+            for target in shared.iterdir():
+                if target not in shared_mounts and os.path.ismount(target):
+                    shared_mounts.append(target)
         for target in reversed(shared_mounts):
             subprocess.run(["umount", str(target)], check=True)
-        if home_bound:
+        if home_bound or os.path.ismount(work / "home"):
             subprocess.run(["umount", str(work / "home")], check=True)
-        if root_bound:
-            subprocess.run(["umount", str(root)], check=True)
+        if root_bound or os.path.ismount(work / "rootfs"):
+            subprocess.run(["umount", str(work / "rootfs")], check=True)
         if opts.desktop:
-            shutil.rmtree(work)
+            if work.exists():
+                shutil.rmtree(work)
+            restore_access(Path(opts.rootfs).resolve())
         else:
             print(f"Probe data retained at {work}; no production home used", flush=True)
     return rc

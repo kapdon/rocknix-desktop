@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """RP6-only real mount cleanup check, while Desktop is stopped in Gaming.
 
-Usage: check-early-setup.py /tmp/rocknix-bwrap-candidate remount|home
+Usage: check-early-setup.py /tmp/rocknix-bwrap-candidate remount|home|kill-home
 Runs candidate setup with a deliberate failure, without launching applications
 or changing the production home. No native config or device ACL is granted.
 """
@@ -10,9 +10,11 @@ import importlib.util
 from pathlib import Path
 import subprocess
 import sys
+import os
+import signal
 
 candidate, stage = sys.argv[1:]
-assert stage in ('remount', 'home')
+assert stage in ('remount', 'home', 'kill-home')
 def active(unit):
     return subprocess.run(['systemctl', 'is-active', '--quiet', unit]).returncode == 0
 assert active('essway.service') and not active('xfce-desktop.service')
@@ -30,6 +32,10 @@ def run(args, **kwargs):
         raise InjectedFailure('before readonly remount')
     return real_run(args, **kwargs)
 def migrate(home):
+    if stage == 'kill-home':
+        assert (runtime.STATE / 'setup.json').is_file()
+        print('Injecting SIGKILL before home migration; recovery must run separately', flush=True)
+        os.kill(os.getpid(), signal.SIGKILL)
     raise InjectedFailure('before home migration')
 runtime.subprocess.run = run
 runtime.migrate_home = migrate

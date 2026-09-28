@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 import subprocess
 from contextlib import ExitStack
+from types import SimpleNamespace
 from unittest.mock import patch
 
 path = Path(__file__).resolve().parents[1] / "payload/bin/rocknix-bwrap"
@@ -69,8 +70,7 @@ for failure in ("bind", "remount", "home"):
         (root / "usr/bin").mkdir(parents=True)
         for executable in ("bwrap", "dbus-run-session"):
             (root / "usr/bin" / executable).touch()
-        work = Path(directory) / "work"
-        work.mkdir()
+        work = Path(directory) / "rocknix-bwrap-test"
         calls = []
         def run(args, **kwargs):
             calls.append(args)
@@ -92,6 +92,9 @@ for failure in ("bind", "remount", "home"):
         mocks.enter_context(patch.object(runtime.os, "CLONE_NEWNS", 0, create=True))
         mocks.enter_context(patch.object(runtime.os, "chown"))
         mocks.enter_context(patch.object(runtime.signal, "signal"))
+        mocks.enter_context(patch.object(runtime, "STATE", Path(directory) / "state"))
+        mocks.enter_context(patch.object(runtime, "WORK_ROOT", Path(directory)))
+        mocks.enter_context(patch.object(runtime.uuid, "uuid4", return_value=SimpleNamespace(hex="test")))
         mocks.enter_context(patch.object(runtime.tempfile, "mkdtemp", return_value=str(work)))
         mocks.enter_context(patch.object(runtime, "restore_access"))
         mocks.enter_context(patch.object(runtime, "migrate_home", side_effect=RuntimeError("home failure")))
@@ -106,3 +109,30 @@ for failure in ("bind", "remount", "home"):
         unmounts = [args for args in calls if args[0] == "umount"]
         assert unmounts == ([] if failure == "bind" else [["umount", str(work / "rootfs")]])
 print("PASS: root bind, read-only remount and home setup failure cleanup")
+
+with tempfile.TemporaryDirectory() as directory:
+    state = Path(directory) / 'state'
+    state.mkdir(mode=0o700)
+    work = Path(directory) / 'rocknix-bwrap-test'
+    work.mkdir()
+    (work / 'rootfs').mkdir()
+    (state / 'setup.json').write_text(runtime.json.dumps({'work': str(work)}))
+    real_stat = Path.stat
+    def root_stat(path, *args, **kwargs):
+        fields = list(real_stat(path, *args, **kwargs))
+        fields[4] = 0  # fixture represents a root-owned journal/runtime
+        return os.stat_result(fields)
+    with patch.object(runtime, 'STATE', state), patch.object(runtime, 'WORK_ROOT', Path(directory)), patch.object(Path, 'stat', root_stat):
+        # A visible mounted-data lookalike must fail closed, preserving journal.
+        (work / 'rootfs' / 'keep').touch()
+        try:
+            runtime.restore_access(Path('/unused'), cleanup_orphan=True)
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError('nonempty orphan rootfs accepted')
+        assert (state / 'setup.json').exists() and (work / 'rootfs/keep').exists()
+        (work / 'rootfs/keep').unlink()
+        runtime.restore_access(Path('/unused'), cleanup_orphan=True)
+        assert not state.exists() and not work.exists()
+print('PASS: pre-display journal recovery removes only safe empty mountpoints')
