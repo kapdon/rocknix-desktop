@@ -6,10 +6,10 @@ compositor with native Wayland applications in a Debian 13 ARM64 runtime.
 ## Support
 
 Only **Retroid Pocket 6**, tested on ROCKNIX nightly 20260927 (SM8550).
-Sway migration validation is in progress. Rockchip compatibility is not implied
+Sway migration checks passed on the RP6. Rockchip compatibility is not implied
 by ARM64 support; graphics, orientation, input and media need physical testing.
-`dev` is the development channel. XFCE history remains recoverable separately
-when the Sway candidate passes the migration gate.
+`dev` is the Sway development channel. The previous XFCE development tip is
+preserved on `codex/xfce-archive`; the immutable XFCE alpha release remains available.
 
 ## Install and build
 
@@ -142,3 +142,7 @@ records the source commit and immutable Docker image ID; package versions are in
 `/etc/rocknix-xfce-packages.tsv`. Debian packages still depend on repository state at
 build time. See [FFmpeg notes](experiments/ffmpeg/README.md) and
 [contributor guide](contributor.md). Historical XFCE reports are not Sway results.
+The private FFmpeg source archive, downstream patch and build script ship under
+`/opt/ffmpeg-rpi-7.1.5/share/source/`; its license is retained under `share/licenses/`.
+See [Sway validation](tests/rp6-sway-validation.md) for the exact tested candidate
+and the distinction between hardware acceptance and subsequent publishing checks.

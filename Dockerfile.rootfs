@@ -92,6 +92,10 @@ RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
 
 COPY rootfs-overlay/ /
 COPY --from=ffmpeg-rpi-builder /opt/ffmpeg-rpi-7.1.5/ /opt/ffmpeg-rpi-7.1.5/
+# Distribute the exact source (including the RPi patch) and build/adjustment
+# script beside our privately rebuilt LGPL libraries, not only an upstream URL.
+COPY --from=ffmpeg-rpi-builder /tmp/ffmpeg-rpi.tar.gz /opt/ffmpeg-rpi-7.1.5/share/source/ffmpeg-rpi.tar.gz
+COPY --from=ffmpeg-rpi-builder /usr/local/bin/build-firefox-ffmpeg /opt/ffmpeg-rpi-7.1.5/share/source/build.sh
 
 RUN chmod 0755 \
       /usr/local/bin/rocknix-version \

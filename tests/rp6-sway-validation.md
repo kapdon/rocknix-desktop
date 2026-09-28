@@ -10,8 +10,10 @@
 - Private raw logs, hashes and screenshots retained on the test device; no SSH
   credentials or private device addresses are published here.
 
-Automated results below pass. Final physical touch/controller/audio confirmation
-is pending; this is not a claim of complete device acceptance or Rockchip support.
+Automated results below pass. The operator also confirmed **all checks pass** for
+touch/orientation, stick/click, D-pad/face buttons in Apps, L3 keyboard show/hide,
+Firefox YouTube picture/audio, and Return to Gaming on this installation.
+This supports RP6 feature-parity promotion, not Rockchip or universal-app support.
 
 ## Features brought forward from XFCE dev
 
@@ -102,10 +104,10 @@ Earlier Sway evidence, **not rerun as full-duration tests on this commit**:
 
 See [RAM measurements](rp6-idle-ram-20260928.md) for controlled idle comparisons.
 
-## Remaining promotion gates
+## Promotion and publication
 
 - Physical touch/orientation, stick/click, D-pad/face-button, L3 keyboard,
-  YouTube picture/audio and Return-to-Gaming confirmation on this installation.
+  YouTube picture/audio and Return-to-Gaming confirmation: operator passed.
 - Preserve the exact XFCE `dev` tip before promoting Sway; do not rewrite/delete
   historical release artifacts. Rename the public repository to `rocknix-desktop`
   only as part of the approved promotion.
