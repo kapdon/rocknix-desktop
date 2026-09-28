@@ -46,7 +46,7 @@ account database, keyboard binary or package installation is changed.
 | Firefox | Retained profile, HTTPS rendering, seccomp content/RDD, real V4L2 H.264 frame output and PiP verified on RP6 | Broader streaming/media flow; final package |
 | Vesktop without disabling sandbox | Actual Apps launch reaches Discord login; renderer seccomp=2 and distinct user/PID namespaces | Voice, screen sharing are not established by login screen |
 | GPU | Real-session glmark2 uses freedreno FD740; non-root FFmpeg and Firefox use Iris; Wayland vkcube completes 1200 frames on Turnip Adreno 740 | Full media flow; final package |
-| Audio/status/battery/clock | Pulse connection, pavucontrol window, Wi-Fi/battery/clock rendered | Playback/microphone/device switching |
+| Audio/status/battery/clock | Non-root synthetic speaker-output monitor loopback passed; pavucontrol, Wi-Fi/battery/clock rendered | Audible output/user acceptance, microphone, device switching |
 | Network editing | Settings and Apps use isolated editor/proxy; real inactive-profile rename/save/delete, proxy-only failure, singleton, R3 and normal/crash cleanup passed | Final package; physical-controller acceptance |
 | Floating utilities and PiP | Audio utility floats; real Firefox PiP floats, shrinks above keyboard, and R3 closes only PiP | Recheck packaged runtime and narrow output |
 | Shared data read/write | Desktop create/edit/rename passed; host file remains UID 0 | File-manager workflows on each actual shared mount; scripts workflow |
@@ -347,6 +347,24 @@ Logs saved locally in `/tmp/rocknix-firefox-decoder-evidence/`; screenshots
 R3 closed Firefox and the temporary Apps entry was removed. Existing profiles
 and media were retained. This proves local H.264 decode, not streaming-service,
 DRM-content, audio-output or final clean-package acceptance.
+
+### Non-root audio output path
+
+`check-audio.sh` ran through a temporary Apps entry as UID 62000 against the
+normal Pulse TCP endpoint. It refused concurrent playback streams, generated a
+one-second 440 Hz signal, and captured only the default Speaker sink's output
+monitor (not a microphone). With explicit 50 ms stream latency, it captured
+201600 bytes including 47920 nonzero samples. Sink volume remained 20%, mute
+remained off and the default route did not change. No pacat/parec process remained.
+The first short captures used Pulse's default latency and returned no samples;
+those attempts were not counted as passes. The runtime lacks Python and jq, so
+the final harness uses its existing shell/awk/Pulse tools without added packages.
+
+This proves the application-to-PipeWire speaker-output path, not audibility,
+speaker quality, microphone capture or route switching. Temporary launcher and
+harness files were removed, and generated audio was discarded. The text log is
+saved locally at `/tmp/rocknix-audio-check.log`. Desktop remained active and
+native account/NetworkManager/keyboard hashes still matched.
 
 Packaging now extracts and repacks the Docker export in one root/fakeroot
 context. `tests/package-rootfs.py` exercises the real packager with a tiny export
