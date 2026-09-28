@@ -37,6 +37,16 @@ account database, keyboard binary or package installation is changed.
 
 ## Parity and acceptance ledger
 
+Latest consistency audit (source `c83a8b0`): all 22 installed host scripts and
+`/usr/local/bin` overlay scripts SHA-256-match this worktree. Changes after the
+installed ff93f2c source are documentation and experiment/test helpers only;
+there is no newer runtime implementation awaiting a rebuild. The complete
+`bash tests/check.sh` suite passed, including ownership-preserving packaging,
+early-failure cleanup, network helper, launcher sizing and controller contracts.
+Live origin/dev remains `39fa395a34578d2373ce20b618bfc150f3eaa892`.
+This audit does not replace the outstanding physical acceptance or scripts
+privilege-policy decision below.
+
 | Requirement from dev / migration | Current evidence | Remaining acceptance |
 | --- | --- | --- |
 | Tools → Desktop, one tabbed workspace, persistent host Sway | Clean ff93f2c package launched through actual Tools UI, including after reboot; panel/files and preview render | Physical-controller user acceptance |
