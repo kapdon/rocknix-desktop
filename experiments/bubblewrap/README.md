@@ -508,6 +508,16 @@ the reproduction tests that topology, not an actual reinstalled dev bundle.
 Do not widen host storage exposure or substitute permanent deletion to hide
 this inherited layout limitation. Recoverable Trash remains unverified.
 
+Upstream investigation found [GNOME bug 637800](https://bugzilla.gnome.org/show_bug.cgi?id=637800),
+which describes this same bind-mounted-home failure. Its historical discussion
+considers pathname-prefix checks and copy/unlink fallback, with race and policy
+concerns; its obsolete status is not proof of a fix in the installed GLib.
+Simply precreating a mount-local Trash directory cannot repair the home-device
+selection branch. Do not add a broad host-storage mount, blind cross-filesystem
+copy/delete fallback or a global unreviewed GLib replacement as a quick fix.
+A repair needs mount-aware destination selection plus trash discovery, restore,
+collision, symlink and interrupted-operation tests before deployment.
+
 ### Clean-package keyboard input and layers
 
 At restored 1920×1080 logical resolution, F13 displayed the non-root keyboard.
