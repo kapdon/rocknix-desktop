@@ -5,6 +5,8 @@ import importlib.util
 import os
 from pathlib import Path
 import tempfile
+import subprocess
+from contextlib import ExitStack
 from unittest.mock import patch
 
 path = Path(__file__).resolve().parents[1] / "payload/bin/rocknix-bwrap"
@@ -56,3 +58,51 @@ with tempfile.TemporaryDirectory() as directory:
             pass
         chown.assert_not_called()
 print("PASS: bubblewrap identity, environment, mount policy and bounded home migration")
+
+# Exercise failures before the graphical access journal exists. Never perform
+# real mounts, privilege changes, signal changes or host lock operations here.
+for failure in ("bind", "remount", "home"):
+    with tempfile.TemporaryDirectory() as directory, ExitStack() as mocks:
+        root = Path(directory) / "rootfs"
+        (root / "etc").mkdir(parents=True)
+        (root / "etc/passwd").write_text("root:x:0:0:root:/root:/bin/sh\n")
+        (root / "usr/bin").mkdir(parents=True)
+        for executable in ("bwrap", "dbus-run-session"):
+            (root / "usr/bin" / executable).touch()
+        work = Path(directory) / "work"
+        work.mkdir()
+        calls = []
+        def run(args, **kwargs):
+            calls.append(args)
+            if ((failure == "bind" and args[:2] == ["mount", "--bind"])
+                    or (failure == "remount" and "remount,bind,ro" in args)):
+                raise subprocess.CalledProcessError(1, args)
+        mocks.enter_context(patch("sys.argv", [str(path), "--rootfs", str(root),
+                                                "--desktop", "--", "/bin/true"]))
+        mocks.enter_context(patch.object(runtime.os, "geteuid", return_value=0))
+        real_open = os.open
+        def open_file(name, *args, **kwargs):
+            if name == "/run/rocknix-bwrap.lock":
+                return 99
+            return real_open(name, *args, **kwargs)
+        mocks.enter_context(patch.object(runtime.os, "open", side_effect=open_file))
+        mocks.enter_context(patch.object(runtime.fcntl, "flock"))
+        mocks.enter_context(patch.object(runtime.pwd, "getpwuid", side_effect=KeyError))
+        mocks.enter_context(patch.object(runtime.os, "unshare", create=True))
+        mocks.enter_context(patch.object(runtime.os, "CLONE_NEWNS", 0, create=True))
+        mocks.enter_context(patch.object(runtime.os, "chown"))
+        mocks.enter_context(patch.object(runtime.signal, "signal"))
+        mocks.enter_context(patch.object(runtime.tempfile, "mkdtemp", return_value=str(work)))
+        mocks.enter_context(patch.object(runtime, "restore_access"))
+        mocks.enter_context(patch.object(runtime, "migrate_home", side_effect=RuntimeError("home failure")))
+        mocks.enter_context(patch.object(runtime.subprocess, "run", side_effect=run))
+        try:
+            runtime.main()
+        except (subprocess.CalledProcessError, RuntimeError):
+            pass
+        else:
+            raise AssertionError(f"{failure} failure was not injected")
+        assert not work.exists(), (failure, calls)
+        unmounts = [args for args in calls if args[0] == "umount"]
+        assert unmounts == ([] if failure == "bind" else [["umount", str(work / "rootfs")]])
+print("PASS: root bind, read-only remount and home setup failure cleanup")

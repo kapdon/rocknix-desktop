@@ -287,9 +287,22 @@ Screenshots: `/tmp/fresh-bwrap-network-integrated.png`,
 new helper policy/cleanup tests. Impeccable guided the scoped window adaptation;
 its mechanical detector returned no findings (not a substitute for these RP6
 screenshots). Packaging now includes xdg-dbus-proxy and the Settings wrapper, but
-this revision has not yet had a clean rebuild/install. Proxy-only failure,
-single-instance interaction, narrower logical widths and physical input remain
+this revision has not yet had a clean rebuild/install. Narrower logical widths and physical input remain
 explicit acceptance work; the overall migration is not feature-complete.
+
+`check-network-lifecycle.py` subsequently passed on the same patched RP6:
+proxy PID 527668 and editor PID 527675 had UID 65534, zero effective/bounding
+capabilities, no-new-privileges and private PID namespaces. Reopening Settings
+kept exactly that one pair. Killing only the proxy closed the editor and removed
+its runtime without stopping Desktop. Reopening then R3-closing cleaned up again.
+This test changed no NetworkManager profiles. It uses injected input, not a
+physical-controller acceptance test.
+
+Startup cleanup now also covers rootfs bind/remount and home preparation, before
+the display-access journal is created. Offline failure injection verifies that
+each failure removes the temporary runtime and only unmounts a successful bind.
+This hardening is not yet deployed or hardware-tested. SIGKILL during pre-journal
+setup and reboot recovery still need separate validation.
 
 Packaging now extracts and repacks the Docker export in one root/fakeroot
 context. `tests/package-rootfs.py` exercises the real packager with a tiny export

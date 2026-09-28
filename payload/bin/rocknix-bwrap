@@ -196,29 +196,9 @@ def main():
     os.unshare(os.CLONE_NEWNS)
     subprocess.run(["mount", "--make-rprivate", "/"], check=True)
     work = Path(tempfile.mkdtemp(prefix="rocknix-bwrap-", dir="/run"))
-    os.chmod(work, 0o755)
-    # /storage/.local is root-only. Expose the rootfs through a private,
-    # read-only bind instead of loosening that host directory's permissions.
-    (work / "rootfs").mkdir()
-    subprocess.run(["mount", "--bind", str(root), str(work / "rootfs")], check=True)
-    root = work / "rootfs"
-    subprocess.run(["mount", "-o", "remount,bind,ro", str(root)], check=True)
-    for name in ("home", "runtime"):
-        (work / name).mkdir(mode=0o700)
-        os.chown(work / name, PROBE_UID, PROBE_UID)
+    root_bound = False
     home_bound = False
     shared_mounts = []
-    if opts.desktop:
-        home = Path(opts.rootfs).resolve().parent / "home"
-        migrate_home(home)
-        subprocess.run(["mount", "--bind", str(home), str(work / "home")], check=True)
-        home_bound = True
-    (work / "passwd").write_text(
-        "root:x:0:0:root:/root:/bin/sh\n"
-        f"rocknix:x:{PROBE_UID}:{PROBE_UID}:Desktop probe:/home/rocknix:/bin/bash\n")
-    (work / "group").write_text(f"root:x:0:\nrocknix:x:{PROBE_UID}:\n")
-    os.chmod(work / "passwd", 0o644)
-    os.chmod(work / "group", 0o644)
     acl = None
     bound = False
     child = None
@@ -228,6 +208,28 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
         signal.signal(sig, interrupted)
     try:
+        os.chmod(work, 0o755)
+        # Protect setup failures too: an incomplete runtime must not leave its
+        # root-owned directory behind before the graphical journal exists.
+        (work / "rootfs").mkdir()
+        subprocess.run(["mount", "--bind", str(root), str(work / "rootfs")], check=True)
+        root = work / "rootfs"
+        root_bound = True
+        subprocess.run(["mount", "-o", "remount,bind,ro", str(root)], check=True)
+        for name in ("home", "runtime"):
+            (work / name).mkdir(mode=0o700)
+            os.chown(work / name, PROBE_UID, PROBE_UID)
+        if opts.desktop:
+            home = Path(opts.rootfs).resolve().parent / "home"
+            migrate_home(home)
+            subprocess.run(["mount", "--bind", str(home), str(work / "home")], check=True)
+            home_bound = True
+        (work / "passwd").write_text(
+            "root:x:0:0:root:/root:/bin/sh\n"
+            f"rocknix:x:{PROBE_UID}:{PROBE_UID}:Desktop probe:/home/rocknix:/bin/bash\n")
+        (work / "group").write_text(f"root:x:0:\nrocknix:x:{PROBE_UID}:\n")
+        os.chmod(work / "passwd", 0o644)
+        os.chmod(work / "group", 0o644)
         if opts.desktop:
             (work / "shared").mkdir(mode=0o755)
             for name in SHARED_DATA:
@@ -307,7 +309,8 @@ def main():
             subprocess.run(["umount", str(target)], check=True)
         if home_bound:
             subprocess.run(["umount", str(work / "home")], check=True)
-        subprocess.run(["umount", str(root)], check=True)
+        if root_bound:
+            subprocess.run(["umount", str(root)], check=True)
         if opts.desktop:
             shutil.rmtree(work)
         else:
