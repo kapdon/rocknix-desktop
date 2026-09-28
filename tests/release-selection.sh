@@ -15,6 +15,9 @@ for tag in '../dev' 'v0.2.0-alpha.1/extra' '--check' ''; do
 done
 if (main --release) >/dev/null 2>&1; then exit 1; fi
 if (main --check unexpected) >/dev/null 2>&1; then exit 1; fi
-grep -Fq 'v0.2.0-alpha.1/install.sh' README.md
+grep -Fq 'dev/install.sh' README.md
 grep -Fq 'bash /storage/install-desktop.sh --release v0.2.0-alpha.1' README.md
+if grep -Eiq 'xfce|fxce|legacy' README.md; then
+  printf 'FAIL: retired desktop references in README\n' >&2; exit 1
+fi
 printf 'PASS: pinned alpha, rolling default and invalid release selection\n'
