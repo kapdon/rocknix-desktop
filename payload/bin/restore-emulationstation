@@ -1,0 +1,50 @@
+#!/bin/bash
+
+set -u
+
+STATE_FILE=/run/rocknix-xfce-input-state
+DEFAULT_PROFILE=/usr/share/inputplumber/profiles/default.yaml
+ORIGINAL_PROFILE=""
+declare -a ORIGINAL_TARGETS=()
+
+if [ -f "${STATE_FILE}" ]; then
+  while IFS='=' read -r key value; do
+    case "${key}" in
+      profile)
+        ORIGINAL_PROFILE=${value}
+        ;;
+      target)
+        ORIGINAL_TARGETS+=("${value}")
+        ;;
+    esac
+  done <"${STATE_FILE}"
+fi
+
+if [ -z "${ORIGINAL_PROFILE}" ] || [ ! -f "${ORIGINAL_PROFILE}" ]; then
+  ORIGINAL_PROFILE=${DEFAULT_PROFILE}
+fi
+if [ "${#ORIGINAL_TARGETS[@]}" -eq 0 ]; then
+  ORIGINAL_TARGETS=(ds5 keyboard)
+fi
+
+if command -v inputplumber >/dev/null 2>&1 && inputplumber devices list >/dev/null 2>&1; then
+  inputplumber device 0 profile load "${ORIGINAL_PROFILE}" >/dev/null 2>&1 || true
+  inputplumber device 0 targets set "${ORIGINAL_TARGETS[@]}" >/dev/null 2>&1 || true
+fi
+
+STATE=$(systemctl is-system-running 2>/dev/null || true)
+case "${STATE}" in
+  stopping|offline)
+    exit 0
+    ;;
+esac
+
+if ! systemctl is-active --quiet sway.service; then
+  systemctl start sway.service
+fi
+
+systemctl start essway.service
+
+if command -v set_kill >/dev/null 2>&1; then
+  set_kill set "emulationstation" >/dev/null 2>&1 || true
+fi
