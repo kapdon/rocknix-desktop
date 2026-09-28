@@ -72,6 +72,9 @@ grep -q 'INPUT_STATE_PRESENT=1' payload/bin/restore-emulationstation
 grep -q 'ROCKNIX_SWAY_RUNTIME=1' rootfs-overlay/etc/rocknix-xfce-release
 grep -q -- '--iidfile' build-rootfs.sh
 python3 -m json.tool rootfs-overlay/etc/xdg/waybar/config.jsonc >/dev/null
+if rg -q '%-' rootfs-overlay/etc/xdg/waybar/config.jsonc; then
+  printf 'FAIL: Waybar chrono format contains an unsupported modifier\n' >&2; exit 1
+fi
 if rg -q 'xfce4-session|xfwm4|xserver-xorg|[[:space:]]onboard[[:space:]\\]' Dockerfile.rootfs; then
   printf 'FAIL: retired XFCE/Xorg package remains in rootfs\n' >&2; exit 1
 fi
