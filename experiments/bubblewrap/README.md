@@ -379,6 +379,34 @@ These are real filesystem operations in the normal app environment, not yet a
 complete Thunar UI acceptance run. Scripts remains intentionally unwritable in
 the current code, with its privileged-editing parity decision still outstanding.
 
+### Clean ff93f2c package checkpoint
+
+Built and installed the clean ARM64 bundle from
+`ff93f2ce42fa1963b2e63cad11cb83ceeda4291f`, built 2026-09-28T18:54:53Z.
+Image: `sha256:65fd6eeec279976495e87eb0d253df165ed3505bd616814c4cfce26571ed15b3`.
+Bundle SHA256: `81dd5f98633587c61312262896f1d82b31fcb9bc96d6ddd87c58116fc59820ff`.
+Full offline suite passed before building. Bundle checksum matched on RP6.
+
+Uninstalled the previous runtime, removed its exact archive
+`/storage/rocknix-desktop/uninstall.3p4EHG`, and installed from the unpacked bundle.
+Home inode 6291460 and UID/GID 62000 remained unchanged. Native account,
+NetworkManager and keyboard hashes matched. Consumed staging
+`/storage/rocknix-desktop/bwrap-install.D63py7` was removed after its rootfs moved
+into place. No runtime recovery copy was retained.
+
+Tools launch passed after refreshing EmulationStation's cached list; artwork
+appeared (`/tmp/fresh-packaged-tools-refresh.png`). Release date remains Unknown
+for this unpublished local build. Packaged network proxy/editor PIDs
+572228/572235 passed non-root/cap-free namespace checks, singleton behavior,
+proxy-only failure cleanup, reopening and R3 close. Confirmed Return recovered
+Gaming in 2.26 seconds; Waybar PID 572992 SIGKILL recovered it in 1.13 seconds.
+Both restored exact ACLs, removed runtime/application processes, kept host Sway
+PID 2515 and reopened the non-root panel and keyboard.
+
+This is now a clean installed package, not the older manually patched runtime.
+Media, narrow-output, controller and other acceptance rows still need their
+remaining checks; package installation alone does not establish full parity.
+
 Packaging now extracts and repacks the Docker export in one root/fakeroot
 context. `tests/package-rootfs.py` exercises the real packager with a tiny export
 fixture: root-owned executables, a setuid executable, service-owned data, and
