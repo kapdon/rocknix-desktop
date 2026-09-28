@@ -12,7 +12,11 @@ and use **Return to Gaming** to return to EmulationStation.
 
 Experimental software. Other ARM64 devices are not supported by the installer;
 graphics, output scaling, touch and controller behavior need device-specific tests.
-The desktop runs as root and shares host storage/services: **it is not a security sandbox**.
+The published `dev` desktop runs as root and shares host storage/services:
+**it is not a security sandbox**. This `codex/bubblewrap-research` branch instead
+runs applications non-root, but is not yet at feature parity or ready for release.
+See the [migration status and hardware evidence](experiments/bubblewrap/README.md).
+The GitHub installation command below still installs published `dev`, not this branch.
 
 ## Install or update
 

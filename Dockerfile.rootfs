@@ -55,6 +55,12 @@ RUN test "${TARGETARCH}" = "arm64"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Bootstrap certificates through APT's signed-index/hash-verified HTTP path,
+# then use HTTPS for runtime downloads (some HTTP caches serve stale .deb data).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources
+
 RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
     && chmod 0755 /usr/sbin/policy-rc.d \
     && apt-get update \

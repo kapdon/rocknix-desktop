@@ -1,5 +1,11 @@
 # Desktop Mode architecture
 
+This page describes published `dev`. The current research branch replaces the
+rootful app runtime with non-root bubblewrap; its exact boundary, missing
+features, maintenance command and hardware results are tracked in the
+[migration ledger](../experiments/bubblewrap/README.md). Do not apply the old
+rootful privilege assumptions to that branch or treat it as release-ready.
+
 ROCKNIX supplies Sway, InputPlumber, audio, networking and device drivers.
 Desktop Mode runs native Wayland applications in a rootful Debian 13 ARM64
 chroot. It is not a virtual machine or a security boundary.
