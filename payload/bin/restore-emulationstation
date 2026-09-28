@@ -6,7 +6,13 @@ source /etc/profile
 
 # ExecStopPost runs after systemd has reaped the desktop cgroup, even when
 # the main process was killed before its EXIT trap finished (e.g. tee SIGPIPE).
-rm -f -- /run/rocknix-xfce/control /run/rocknix-xfce/wvkbd.pid
+if [ -f /run/rocknix-xfce/sway-style-owned ] && systemctl is-active --quiet sway.service; then
+  swaymsg reload >/dev/null 2>&1 || true
+fi
+rm -f -- \
+  /run/rocknix-xfce/control \
+  /run/rocknix-xfce/sway-style-owned \
+  /run/rocknix-xfce/wvkbd.pid
 if [ -f /run/rocknix-xfce/bindings-owned ] && systemctl is-active --quiet sway.service; then
   swaymsg 'unbindsym XF86Tools' >/dev/null 2>&1 || true
   swaymsg 'unbindsym F13' >/dev/null 2>&1 || true

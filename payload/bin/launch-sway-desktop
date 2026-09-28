@@ -12,6 +12,7 @@ LOG="${LOG_DIR}/session.log"
 RUNTIME_DIR=/run/rocknix-xfce
 SESSION_STATE=/run/rocknix-xfce-session-state
 CONTROL_FIFO="${RUNTIME_DIR}/control"
+SWAY_STYLE_MARKER="${RUNTIME_DIR}/sway-style-owned"
 DESKTOP_WORKSPACE='98:Desktop'
 WVKBD_PID=""
 BINDING_INSTALLED=0
@@ -63,6 +64,10 @@ cleanup() {
   local rc=$?
   trap - EXIT INT TERM HUP
 
+  if [ -f "${SWAY_STYLE_MARKER}" ] && systemctl is-active --quiet sway.service; then
+    swaymsg reload >/dev/null 2>&1 || true
+    rm -f "${SWAY_STYLE_MARKER}"
+  fi
   if [ "${BINDING_INSTALLED}" = 1 ] && systemctl is-active --quiet sway.service; then
     swaymsg 'unbindsym XF86Tools' >/dev/null 2>&1 || true
     swaymsg 'unbindsym F13' >/dev/null 2>&1 || true
@@ -163,6 +168,16 @@ swaymsg -- "bindsym XF86Tools exec ${BASE}/bin/rocknix-keyboard-toggle" >/dev/nu
 swaymsg -- "bindsym F13 exec ${BASE}/bin/rocknix-keyboard-toggle" >/dev/null
 swaymsg -- "workspace ${DESKTOP_WORKSPACE}" >/dev/null
 swaymsg 'layout tabbed' >/dev/null
+
+# Art Book Next uses a #444 selection band over #111 fields. Apply that same
+# hierarchy to Sway's tab strip, then reload the device config during cleanup.
+touch "${SWAY_STYLE_MARKER}"
+swaymsg 'client.focused #444444 #444444 #ffffff #444444 #444444' >/dev/null
+swaymsg 'client.focused_inactive #111111 #111111 #aaaaaa #111111 #111111' >/dev/null
+swaymsg 'client.unfocused #111111 #111111 #777777 #111111 #111111' >/dev/null
+swaymsg 'client.urgent #444444 #444444 #ffffff #444444 #444444' >/dev/null
+swaymsg 'client.placeholder #000000 #000000 #777777 #000000 #000000' >/dev/null
+swaymsg 'client.background #000000' >/dev/null
 
 TZ_VALUE=$(timedatectl show -p Timezone --value 2>/dev/null || true)
 TZ_VALUE=${TZ_VALUE:-UTC}
