@@ -6,14 +6,16 @@ source /etc/profile
 
 STATE_FILE=/run/rocknix-xfce-input-state
 SESSION_STATE=/run/rocknix-xfce-session-state
-DEFAULT_PROFILE=/usr/share/inputplumber/profiles/default.yaml
 ORIGINAL_PROFILE=""
 PRIOR_WORKSPACE=""
 TOUCHKEYBOARD_ACTIVE=0
 TOUCHKEYBOARD_SETTING=""
+INPUT_STATE_PRESENT=0
+SESSION_STATE_PRESENT=0
 declare -a ORIGINAL_TARGETS=()
 
 if [ -f "${STATE_FILE}" ]; then
+  INPUT_STATE_PRESENT=1
   while IFS='=' read -r key value; do
     case "${key}" in
       profile) ORIGINAL_PROFILE=${value} ;;
@@ -23,6 +25,7 @@ if [ -f "${STATE_FILE}" ]; then
 fi
 
 if [ -f "${SESSION_STATE}" ]; then
+  SESSION_STATE_PRESENT=1
   while IFS='=' read -r key value; do
     case "${key}" in
       workspace) PRIOR_WORKSPACE=${value} ;;
@@ -30,13 +33,6 @@ if [ -f "${SESSION_STATE}" ]; then
       touchkeyboard_setting) TOUCHKEYBOARD_SETTING=${value} ;;
     esac
   done <"${SESSION_STATE}"
-fi
-
-if [ -z "${ORIGINAL_PROFILE}" ] || [ ! -f "${ORIGINAL_PROFILE}" ]; then
-  ORIGINAL_PROFILE=${DEFAULT_PROFILE}
-fi
-if [ "${#ORIGINAL_TARGETS[@]}" -eq 0 ]; then
-  ORIGINAL_TARGETS=(ds5 keyboard)
 fi
 
 if [ -r /run/rocknix-xfce/wvkbd.pid ]; then
@@ -47,15 +43,21 @@ if [ -r /run/rocknix-xfce/wvkbd.pid ]; then
   esac
 fi
 
-if command -v inputplumber >/dev/null 2>&1 && inputplumber devices list >/dev/null 2>&1; then
+if [ "${INPUT_STATE_PRESENT}" = 1 ] && \
+    [ -n "${ORIGINAL_PROFILE}" ] && [ -f "${ORIGINAL_PROFILE}" ] && \
+    [ "${#ORIGINAL_TARGETS[@]}" -gt 0 ] && \
+    command -v inputplumber >/dev/null 2>&1 && \
+    inputplumber devices list >/dev/null 2>&1; then
   inputplumber device 0 profile load "${ORIGINAL_PROFILE}" >/dev/null 2>&1 || true
   inputplumber device 0 targets set "${ORIGINAL_TARGETS[@]}" >/dev/null 2>&1 || true
 fi
 
-if [ -n "${TOUCHKEYBOARD_SETTING}" ]; then
-  set_setting 'rocknix.touchscreen-keyboard.enabled' "${TOUCHKEYBOARD_SETTING}"
-else
-  set_setting 'rocknix.touchscreen-keyboard.enabled' default
+if [ "${SESSION_STATE_PRESENT}" = 1 ]; then
+  if [ -n "${TOUCHKEYBOARD_SETTING}" ]; then
+    set_setting 'rocknix.touchscreen-keyboard.enabled' "${TOUCHKEYBOARD_SETTING}"
+  else
+    set_setting 'rocknix.touchscreen-keyboard.enabled' default
+  fi
 fi
 
 STATE=$(systemctl is-system-running 2>/dev/null || true)
@@ -79,10 +81,12 @@ for _ in {1..100}; do
 done
 systemctl is-active --quiet essway.service || { printf 'EmulationStation did not recover\n' >&2; exit 1; }
 
-if [ "${TOUCHKEYBOARD_ACTIVE}" = 1 ]; then
-  systemctl start touchkeyboard.service
-else
-  systemctl stop touchkeyboard.service
+if [ "${SESSION_STATE_PRESENT}" = 1 ]; then
+  if [ "${TOUCHKEYBOARD_ACTIVE}" = 1 ]; then
+    systemctl start touchkeyboard.service
+  else
+    systemctl stop touchkeyboard.service
+  fi
 fi
 
 if [ -n "${PRIOR_WORKSPACE}" ]; then

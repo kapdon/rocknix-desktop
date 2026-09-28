@@ -45,6 +45,7 @@ discover_sway_environment() {
 [ "${MODEL}" = "Retroid Pocket 6" ] || fail "unsupported device: ${MODEL:-unknown}"
 [ -f "${ROOTFS}/etc/rocknix-xfce-release" ] || fail "runtime marker is missing"
 grep -q '^RUNTIME_ARCH=aarch64$' "${ROOTFS}/etc/rocknix-xfce-release" || fail "runtime architecture marker is invalid"
+grep -q '^ROCKNIX_SWAY_RUNTIME=1$' "${ROOTFS}/etc/rocknix-xfce-release" || fail "runtime is not the Sway build"
 [ -x "${ROOTFS}/usr/bin/waybar" ] || fail "Waybar is missing"
 [ -x "${ROOTFS}/usr/bin/fuzzel" ] || fail "Fuzzel is missing"
 [ -x "${ROOTFS}/usr/bin/foot" ] || fail "foot is missing"
@@ -66,8 +67,8 @@ swaymsg -r -t get_outputs | jq -e '
   any(.[]; .name == "DSI-1" and .active == true and
       .transform == "270" and .rect.width == 1920 and .rect.height == 1080)
 ' >/dev/null || fail "DSI-1 is not active in the expected landscape orientation"
-if grep -Rqs -E '(^|[[:space:]])bind(sym|code).*XF86Tools' /storage/.config/sway /etc/sway 2>/dev/null; then
-  fail "XF86Tools already has a persistent Sway binding"
+if grep -Rqs -E '(^|[[:space:]])bind(sym|code).*(XF86Tools|F13)' /storage/.config/sway /etc/sway 2>/dev/null; then
+  fail "the on-screen keyboard key already has a persistent Sway binding"
 fi
 command -V get_setting >/dev/null 2>&1 || fail "host get_setting helper is missing"
 command -V set_setting >/dev/null 2>&1 || fail "host set_setting helper is missing"

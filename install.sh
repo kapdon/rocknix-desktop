@@ -2,9 +2,9 @@
 # Download the versioned desktop bundle; never write the ROCKNIX root image.
 set -Eeuo pipefail
 
-VERSION=v0.1.0-alpha.1
+VERSION=v0.2.0-alpha.1
 REPOSITORY=kapdon/rocknix-xfce
-ASSET=rocknix-xfce-rp6-arm64.tar.xz
+ASSET=rocknix-sway-rp6-arm64.tar.xz
 BASE=/storage/.local/share/rocknix-xfce
 
 fail() { printf 'Install failed: %s\n' "$*" >&2; exit 1; }
@@ -57,7 +57,7 @@ main() {
   trap 'rc=$?; if [ "$rc" = 0 ]; then rm -rf -- "$STAGING"; else
     printf "Installation stopped. Diagnostics/staging retained at %s\n" "$STAGING" >&2; fi' EXIT
   local url="https://github.com/$REPOSITORY/releases/download/$VERSION"
-  printf 'Downloading ROCKNIX XFCE %s\n' "$VERSION"
+  printf 'Downloading ROCKNIX Sway Desktop %s\n' "$VERSION"
   curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
     "$url/$ASSET" -o "$STAGING/$ASSET"
   curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \

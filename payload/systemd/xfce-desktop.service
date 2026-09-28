@@ -1,7 +1,7 @@
 [Unit]
 Description=ROCKNIX Sway Desktop Mode
 Documentation=file:/storage/.local/share/rocknix-xfce/README.md
-Requires=sway.service
+BindsTo=sway.service
 After=network.target sway.service
 ConditionPathIsDirectory=/storage/.local/share/rocknix-xfce/rootfs
 
