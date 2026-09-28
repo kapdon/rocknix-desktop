@@ -66,6 +66,7 @@ cleanup() {
   if [ "${BINDING_INSTALLED}" = 1 ] && systemctl is-active --quiet sway.service; then
     swaymsg 'unbindsym XF86Tools' >/dev/null 2>&1 || true
     swaymsg 'unbindsym F13' >/dev/null 2>&1 || true
+    rm -f "${RUNTIME_DIR}/bindings-owned"
   fi
   if [ -n "${WVKBD_PID}" ] && kill -0 "${WVKBD_PID}" 2>/dev/null; then
     kill -TERM "${WVKBD_PID}" 2>/dev/null || true
@@ -156,9 +157,10 @@ for _ in {1..50}; do
 done
 kill -0 "${WVKBD_PID}" 2>/dev/null || { printf 'wvkbd failed to start\n' >&2; exit 1; }
 
+BINDING_INSTALLED=1
+touch "${RUNTIME_DIR}/bindings-owned"
 swaymsg -- "bindsym XF86Tools exec ${BASE}/bin/rocknix-keyboard-toggle" >/dev/null
 swaymsg -- "bindsym F13 exec ${BASE}/bin/rocknix-keyboard-toggle" >/dev/null
-BINDING_INSTALLED=1
 swaymsg -- "workspace ${DESKTOP_WORKSPACE}" >/dev/null
 swaymsg 'layout tabbed' >/dev/null
 
