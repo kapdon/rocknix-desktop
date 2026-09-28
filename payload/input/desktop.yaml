@@ -114,19 +114,19 @@ mapping:
     target_events:
       - keyboard: KeyEsc
 
-  - name: Tab
+  - name: Switch App
     source_event:
       gamepad:
         button: Select
     target_events:
-      - keyboard: KeyTab
+      - keyboard: KeyF14
 
-  - name: Space
+  - name: Confirm
     source_event:
       gamepad:
         button: South
     target_events:
-      - keyboard: KeySpace
+      - keyboard: KeyEnter
 
   - name: Refresh
     source_event:
@@ -142,12 +142,12 @@ mapping:
     target_events:
       - keyboard: KeyF
 
-  - name: Action
+  - name: Back
     source_event:
       gamepad:
         button: East
     target_events:
-      - keyboard: KeyE
+      - keyboard: KeyEsc
 
   - name: Left Click
     source_event:

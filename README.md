@@ -60,10 +60,15 @@ commit/build date, not the current GitHub revision.
 
 ## Desktop and controls
 
-Waybar provides Apps, Firefox, Keyboard, audio, network, battery, clock and Return
-to Gaming. Fuzzel launches apps, Foot is the terminal, and Thunar opens `/storage`.
-Firefox ESR and MPV run natively on Wayland. L3 toggles the host on-screen keyboard.
-D-pad selects in Apps; the bottom face button opens the selection.
+Waybar keeps Apps, a combined status/settings entry, battery, clock, Keyboard and
+Return to Gaming visible. A Windows entry appears only when more than one app is
+open. Fuzzel puts Firefox, Files and Foot first, then filters apps as you type.
+Its size, the panel and the host keyboard are derived from the active output's
+logical dimensions. Firefox ESR and MPV run natively on Wayland.
+
+In Apps, use the D-pad to move, the bottom face button to launch and the right
+face button to dismiss. Select cycles open apps, and L3 shows or hides the host
+on-screen keyboard. Space remains available for multiword searches.
 
 See [the full controller mapping](payload/input/desktop.yaml). Physical button
 positions apply regardless of printed labels. Guide/Quick Access retain their

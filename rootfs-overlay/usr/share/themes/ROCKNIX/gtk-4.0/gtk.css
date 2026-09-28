@@ -13,6 +13,7 @@
 
 * {
   font-family: "Roboto", sans-serif;
+  font-size: 18px;
   text-shadow: none;
   box-shadow: none;
 }
@@ -37,21 +38,21 @@ toolbar {
 
 headerbar,
 .titlebar {
-  min-height: 44px;
+  min-height: 54px;
 }
 
 headerbar button,
 .titlebar button,
 toolbar button {
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 48px;
+  min-height: 48px;
   padding: 0;
   background-color: transparent;
 }
 
 button {
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 5px 12px;
   color: @rocknix_text_secondary;
   background-color: @rocknix_field;
@@ -77,11 +78,12 @@ button:disabled {
 entry,
 spinbutton,
 dropdown > button {
-  min-height: 38px;
+  min-height: 46px;
   padding: 4px 10px;
   color: @rocknix_text;
   caret-color: @rocknix_text;
   background-color: @rocknix_panel;
+  background-image: none;
   border: 1px solid @rocknix_selector;
   border-radius: 0;
   box-shadow: none;
@@ -116,7 +118,7 @@ row:selected {
 }
 
 row {
-  min-height: 40px;
+  min-height: 46px;
 }
 
 .sidebar,
@@ -127,7 +129,7 @@ row {
 
 .sidebar row,
 .navigation-sidebar row {
-  min-height: 42px;
+  min-height: 48px;
   padding: 1px 10px;
 }
 
@@ -142,19 +144,19 @@ popover.background {
   color: @rocknix_text;
   background-color: @rocknix_panel;
   border: 0;
-  border-radius: 18px;
+  border-radius: 0;
 }
 
 popover contents {
   color: @rocknix_text;
   background-color: @rocknix_panel;
   border: 0;
-  border-radius: 18px;
+  border-radius: 0;
   box-shadow: none;
 }
 
 popover modelbutton {
-  min-height: 40px;
+  min-height: 46px;
   padding: 3px 14px;
   color: @rocknix_text_secondary;
   border-radius: 0;
@@ -169,10 +171,11 @@ popover modelbutton:focus {
 notebook > header {
   color: @rocknix_text_secondary;
   background-color: @rocknix_canvas;
+  border-color: @rocknix_panel;
 }
 
 notebook > header > tabs > tab {
-  min-height: 42px;
+  min-height: 48px;
   padding: 0 14px;
   border-radius: 0;
 }
@@ -182,9 +185,31 @@ notebook > header > tabs > tab:checked {
   background-color: @rocknix_selector;
 }
 
+notebook > header.top > tabs > tab:hover,
+notebook > header.top > tabs > tab:checked,
+notebook > header.bottom > tabs > tab:hover,
+notebook > header.bottom > tabs > tab:checked,
+notebook > header.left > tabs > tab:hover,
+notebook > header.left > tabs > tab:checked,
+notebook > header.right > tabs > tab:hover,
+notebook > header.right > tabs > tab:checked {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+  box-shadow: none;
+}
+
+notebook:focus:focus-visible > header > tabs > tab:checked {
+  outline-color: @rocknix_text_secondary;
+}
+
+notebook > stack:not(:only-child) {
+  color: @rocknix_text;
+  background-color: @rocknix_field;
+}
+
 scrollbar slider {
-  min-width: 12px;
-  min-height: 12px;
+  min-width: 16px;
+  min-height: 16px;
   background-color: @rocknix_selector;
   border: 3px solid @rocknix_field;
   border-radius: 0;
@@ -194,26 +219,35 @@ scrollbar:hover slider {
   background-color: @rocknix_text_secondary;
 }
 
-scale trough,
-progressbar trough {
+scale > trough,
+scale > trough > fill,
+progressbar > trough {
   min-height: 8px;
   background-color: @rocknix_panel;
-  border-radius: 0;
-}
-
-scale highlight,
-progressbar progress {
-  min-height: 8px;
-  background-color: @rocknix_selector;
-  border-radius: 0;
-}
-
-scale slider {
-  min-width: 20px;
-  min-height: 20px;
-  background-color: @rocknix_text;
   border: 0;
   border-radius: 0;
+}
+
+scale > trough > highlight,
+progressbar > trough > progress {
+  min-height: 8px;
+  background-color: @rocknix_selector;
+  border: 0;
+  border-radius: 0;
+}
+
+scale > trough > slider {
+  min-width: 28px;
+  min-height: 28px;
+  background-color: @rocknix_text;
+  background-image: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+scale:focus:focus-visible > trough {
+  outline-color: @rocknix_text_secondary;
 }
 
 switch {

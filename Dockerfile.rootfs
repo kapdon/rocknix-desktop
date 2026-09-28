@@ -102,6 +102,9 @@ RUN chmod 0755 \
       /usr/local/bin/rocknix-version \
       /usr/local/bin/rocknix-return \
       /usr/local/bin/rocknix-keyboard-toggle \
+      /usr/local/bin/rocknix-launcher \
+      /usr/local/bin/rocknix-status \
+      /usr/local/bin/rocknix-window-switcher \
       /usr/local/bin/rocknix-firefox \
       /usr/local/bin/rocknix-sway-session \
     && mkdir -p \

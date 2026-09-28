@@ -1,0 +1,119 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+mode=${1:-apps}
+logical_width=${ROCKNIX_LOGICAL_WIDTH:-1280}
+logical_height=${ROCKNIX_LOGICAL_HEIGHT:-720}
+bar_height=${ROCKNIX_BAR_HEIGHT:-48}
+keyboard_height=${ROCKNIX_KEYBOARD_HEIGHT:-252}
+output_name=${ROCKNIX_OUTPUT_NAME:-}
+font_size=${ROCKNIX_LAUNCHER_FONT_SIZE:-0}
+line_height=${ROCKNIX_LAUNCHER_LINE_HEIGHT:-0}
+horizontal_pad=${ROCKNIX_LAUNCHER_HORIZONTAL_PAD:-0}
+vertical_pad=${ROCKNIX_LAUNCHER_VERTICAL_PAD:-0}
+
+for value in \
+  logical_width logical_height bar_height keyboard_height \
+  font_size line_height horizontal_pad vertical_pad; do
+  [[ ${!value} =~ ^[0-9]+$ ]] || exit 1
+done
+
+if [ "${font_size}" -gt 0 ] && [ "${line_height}" -gt 0 ] && \
+  [ "${horizontal_pad}" -gt 0 ] && [ "${vertical_pad}" -gt 0 ]; then
+  :
+elif [ "${logical_height}" -le 540 ]; then
+  font_size=16
+  line_height=38
+  horizontal_pad=12
+  vertical_pad=10
+elif [ "${logical_height}" -le 800 ]; then
+  font_size=18
+  line_height=42
+  horizontal_pad=14
+  vertical_pad=12
+else
+  font_size=20
+  line_height=48
+  horizontal_pad=16
+  vertical_pad=14
+fi
+
+if [ "${logical_width}" -le 900 ]; then
+  menu_width=34
+elif [ "${logical_width}" -le 1280 ]; then
+  menu_width=40
+else
+  menu_width=48
+fi
+
+# Reserve room for the keyboard even while it is hidden. The launcher then
+# remains usable when L3 reveals wvkbd after the launcher is already open.
+available_height=$((logical_height - bar_height - keyboard_height - 48))
+line_count=$((available_height / line_height - 1))
+[ "${line_count}" -ge 4 ] || line_count=4
+[ "${line_count}" -le 8 ] || line_count=8
+
+cache_dir=${XDG_CACHE_HOME:-${HOME}/.cache}
+cache=${cache_dir}/rocknix-fuzzel
+legacy_cache=${cache_dir}/fuzzel
+mkdir -p "${cache_dir}"
+if [ ! -e "${cache}" ]; then
+  cache_new=${cache}.new.$$
+  umask 077
+  {
+    # These replace the removed panel shortcut with a small favorites row.
+    printf '%s\n' \
+      'rocknix-firefox.desktop|3' \
+      'thunar.desktop|2' \
+      'foot.desktop|1'
+    if [ -r "${legacy_cache}" ]; then
+      grep -Ev '^(rocknix-firefox|thunar|foot)\.desktop\|' "${legacy_cache}" || true
+    fi
+  } >"${cache_new}"
+  mv -f "${cache_new}" "${cache}"
+fi
+
+fuzzel_args=(
+  fuzzel
+  --config=/etc/xdg/fuzzel/fuzzel.ini
+  --cache="${cache}"
+  --font="Roboto:size=${font_size}"
+  --width="${menu_width}"
+  --horizontal-pad="${horizontal_pad}"
+  --vertical-pad="${vertical_pad}"
+  --inner-pad=6
+  --line-height="${line_height}"
+  --dpi-aware=auto
+)
+if [ -n "${output_name}" ]; then
+  fuzzel_args+=(--output="${output_name}")
+fi
+
+case "${mode}" in
+  apps)
+    exec "${fuzzel_args[@]}" --lines="${line_count}"
+    ;;
+  settings)
+    selection=$(
+      printf '%s\n' \
+        'Audio settings' \
+        'Network settings' \
+        'Toggle tabbed / split layout' |
+        "${fuzzel_args[@]}" \
+          --dmenu \
+          --lines=3 \
+          --prompt='SETTINGS  ' \
+          --placeholder='Choose a setting'
+    ) || exit 0
+    case "${selection}" in
+      'Audio settings') pavucontrol >/dev/null 2>&1 & ;;
+      'Network settings') nm-connection-editor >/dev/null 2>&1 & ;;
+      'Toggle tabbed / split layout') /usr/local/bin/rocknix-window-switcher layout ;;
+    esac
+    ;;
+  *)
+    printf 'Unknown launcher mode: %s\n' "${mode}" >&2
+    exit 2
+    ;;
+esac

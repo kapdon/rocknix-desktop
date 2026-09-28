@@ -75,6 +75,9 @@ for required in \
   usr/bin/fuzzel \
   usr/bin/glmark2-wayland \
   usr/bin/waybar \
+  usr/local/bin/rocknix-launcher \
+  usr/local/bin/rocknix-status \
+  usr/local/bin/rocknix-window-switcher \
   usr/local/bin/rocknix-sway-session \
   opt/ffmpeg-rpi-7.1.5/bin/ffmpeg; do
   [ -x "${TEMP_DIR}/rootfs/${required}" ] || {

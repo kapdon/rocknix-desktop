@@ -15,6 +15,8 @@ for mode, expected in [('return', 0), ('invalid', 1), ('term', 143), ('waybar', 
     with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryFile() as log:
         home = Path(directory) / 'home'
         home.mkdir()
+        runtime = Path(directory) / 'run'
+        runtime.mkdir()
         fifo = Path(directory) / 'control'
         os.mkfifo(fifo)
         # Override only machine-specific paths; execute production lifecycle code.
@@ -22,6 +24,12 @@ for mode, expected in [('return', 0), ('invalid', 1), ('term', 143), ('waybar', 
                                 f'export HOME={shlex.quote(str(home))}')
         script = script.replace('CONTROL_FIFO=/run/rocknix-xfce/control',
                                 f'CONTROL_FIFO={shlex.quote(str(fifo))}')
+        script = script.replace('RUNTIME_DIR=/run/rocknix-xfce',
+                                f'RUNTIME_DIR={shlex.quote(str(runtime))}')
+        script = script.replace('/etc/xdg/waybar/config.jsonc',
+                                shlex.quote(str(ROOT / 'rootfs-overlay/etc/xdg/waybar/config.jsonc')))
+        script = script.replace('/etc/xdg/waybar/style.css',
+                                shlex.quote(str(ROOT / 'rootfs-overlay/etc/xdg/waybar/style.css')))
         script = script.replace('source /usr/local/bin/rocknix-home-integration', ':')
         script = script.replace('refresh_home_integration /home/rocknix-default "$HOME"', ':')
         bar = 'sleep 0.2; return 1' if mode == 'waybar' else 'exec sleep 600'

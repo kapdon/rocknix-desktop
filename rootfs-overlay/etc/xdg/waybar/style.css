@@ -25,36 +25,40 @@ window#waybar {
 }
 
 .modules-left {
-  margin-left: 18px;
+  margin-left: 0;
 }
 
 .modules-right {
-  margin-right: 10px;
+  margin-right: 0;
 }
 
 #custom-apps,
-#custom-browser,
+#custom-windows,
+#custom-status,
 #custom-keyboard,
-#custom-return,
-#pulseaudio {
+#custom-return {
   min-height: 64px;
-  padding: 0 18px;
+  padding: 0 14px;
   color: @text-secondary;
   background: transparent;
 }
 
-#network,
 #battery,
 #clock {
   min-height: 64px;
-  padding: 0 12px;
+  padding: 0 10px;
   color: @text-secondary;
   background: transparent;
   font-size: 18px;
 }
 
+#custom-windows.single {
+  min-width: 0;
+  padding: 0;
+}
+
 #custom-keyboard {
-  margin-left: 14px;
+  margin-left: 6px;
 }
 
 #custom-return {
@@ -64,20 +68,20 @@ window#waybar {
 
 #custom-apps:hover,
 #custom-apps:active,
-#custom-browser:active,
-#custom-browser:hover,
+#custom-windows:active,
+#custom-windows:hover,
+#custom-status:active,
+#custom-status:hover,
 #custom-keyboard:active,
 #custom-keyboard:hover,
 #custom-return:active,
-#custom-return:hover,
-#pulseaudio:active,
-#pulseaudio:hover {
+#custom-return:hover {
   color: @text;
   background: @selected;
 }
 
-#network.disconnected,
-#pulseaudio.muted {
+#custom-status.offline,
+#custom-status.muted {
   color: @text-muted;
 }
 

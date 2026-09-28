@@ -12,10 +12,38 @@ LOG="${LOG_DIR}/session.log"
 RUNTIME_DIR=/run/rocknix-xfce
 SESSION_STATE=/run/rocknix-xfce-session-state
 CONTROL_FIFO="${RUNTIME_DIR}/control"
+HOST_CONTROL_FIFO="${RUNTIME_DIR}/host-control"
 SWAY_STYLE_MARKER="${RUNTIME_DIR}/sway-style-owned"
 DESKTOP_WORKSPACE='98:Desktop'
+DEVICE_MODEL=""
+if [ -r /proc/device-tree/model ]; then
+  DEVICE_MODEL=$(tr -d '\000' </proc/device-tree/model)
+fi
 WVKBD_PID=""
+HOST_CONTROL_PID=""
+WINDOW_WATCH_PID=""
 BINDING_INSTALLED=0
+OUTPUT_NAME=""
+LOGICAL_WIDTH=0
+LOGICAL_HEIGHT=0
+OUTPUT_SCALE=""
+OUTPUT_PIXEL_WIDTH=0
+OUTPUT_PIXEL_HEIGHT=0
+DISPLAY_DIAGONAL_TENTHS=0
+DISPLAY_PPI=0
+BAR_HEIGHT=0
+BAR_FONT_SIZE=0
+STATUS_FONT_SIZE=0
+BAR_PADDING=0
+KEYBOARD_HEIGHT=0
+KEYBOARD_FONT_SIZE=0
+LAUNCHER_FONT_SIZE=0
+LAUNCHER_LINE_HEIGHT=0
+LAUNCHER_HORIZONTAL_PAD=0
+LAUNCHER_VERTICAL_PAD=0
+SWAY_TITLE_FONT_POINTS=0
+SWAY_TITLE_HORIZONTAL_PADDING=0
+SWAY_TITLE_VERTICAL_PADDING=0
 
 discover_sway_environment() {
   local candidate
@@ -51,6 +79,162 @@ mount_rbind() {
   mount --make-rslave "$2"
 }
 
+discover_output_metrics() {
+  local metrics maximum_keyboard physical_metrics
+
+  metrics=$(swaymsg -r -t get_outputs | jq -er '
+    ([.[] | select(.active and .focused)] + [.[] | select(.active)])[0]
+    | [
+        .name,
+        (.rect.width | floor),
+        (.rect.height | floor),
+        (.scale | tostring),
+        (.current_mode.width | floor),
+        (.current_mode.height | floor)
+      ]
+    | @tsv
+  ')
+  IFS=$'\t' read -r \
+    OUTPUT_NAME LOGICAL_WIDTH LOGICAL_HEIGHT OUTPUT_SCALE \
+    OUTPUT_PIXEL_WIDTH OUTPUT_PIXEL_HEIGHT <<<"${metrics}"
+  [[ "${OUTPUT_NAME}" != *$'\n'* && -n "${OUTPUT_NAME}" ]] || return 1
+  [[ "${LOGICAL_WIDTH}" =~ ^[0-9]+$ && "${LOGICAL_HEIGHT}" =~ ^[0-9]+$ && \
+    "${OUTPUT_PIXEL_WIDTH}" =~ ^[0-9]+$ && "${OUTPUT_PIXEL_HEIGHT}" =~ ^[0-9]+$ ]] || return 1
+
+  # Sway/DRM expose no physical dimensions for the RP6 DSI panel. Use the
+  # supported hardware profile's real 5.5-inch diagonal, then divide physical
+  # pixel targets by the active compositor scale. Unknown future models retain
+  # the conservative logical-resolution fallback below.
+  case "${DEVICE_MODEL}" in
+    'Retroid Pocket 6') DISPLAY_DIAGONAL_TENTHS=55 ;;
+  esac
+
+  if [ "${DISPLAY_DIAGONAL_TENTHS}" -gt 0 ]; then
+    physical_metrics=$(awk \
+      -v pw="${OUTPUT_PIXEL_WIDTH}" \
+      -v ph="${OUTPUT_PIXEL_HEIGHT}" \
+      -v diagonal_tenths="${DISPLAY_DIAGONAL_TENTHS}" \
+      -v scale="${OUTPUT_SCALE}" \
+      -v logical_height="${LOGICAL_HEIGHT}" '
+        function clamp(value, minimum, maximum) {
+          return value < minimum ? minimum : (value > maximum ? maximum : value)
+        }
+        function rounded(value) { return int(value + 0.5) }
+        BEGIN {
+          if (scale <= 0 || diagonal_tenths <= 0) exit 1
+          ppi = sqrt((pw * pw) + (ph * ph)) / (diagonal_tenths / 10)
+          bar = clamp(ppi * 5.1 / 25.4 / scale, 44, 96)
+          if (bar > logical_height * 0.09) bar = logical_height * 0.09
+          printf "%d %d %d %d %d %d %d %d %d %d %d %d %d\n", \
+            rounded(ppi), \
+            rounded(bar), \
+            rounded(clamp(ppi * 1.9 / 25.4 / scale, 16, 32)), \
+            rounded(clamp(ppi * 1.65 / 25.4 / scale, 14, 28)), \
+            rounded(clamp(ppi * 1.5 / 25.4 / scale, 10, 26)), \
+            rounded(clamp(ppi * 2.0 / 25.4 / scale, 20, 34)), \
+            rounded(clamp(ppi * 1.9 / 25.4 / scale, 16, 32)), \
+            rounded(clamp(ppi * 5.6 / 25.4 / scale, 40, 92)), \
+            rounded(clamp(ppi * 1.5 / 25.4 / scale, 12, 28)), \
+            rounded(clamp(ppi * 1.2 / 25.4 / scale, 10, 24)), \
+            rounded(clamp(ppi * 1.5 / 25.4 / scale * 0.75, 12, 20)), \
+            rounded(clamp(ppi * 1.2 / 25.4 / scale, 10, 20)), \
+            rounded(clamp(ppi * 0.6 / 25.4 / scale, 6, 12))
+        }
+      ') || return 1
+    read -r \
+      DISPLAY_PPI BAR_HEIGHT BAR_FONT_SIZE STATUS_FONT_SIZE BAR_PADDING \
+      KEYBOARD_FONT_SIZE LAUNCHER_FONT_SIZE LAUNCHER_LINE_HEIGHT \
+      LAUNCHER_HORIZONTAL_PAD LAUNCHER_VERTICAL_PAD \
+      SWAY_TITLE_FONT_POINTS SWAY_TITLE_HORIZONTAL_PADDING \
+      SWAY_TITLE_VERTICAL_PADDING <<<"${physical_metrics}"
+  else
+    BAR_HEIGHT=$((LOGICAL_HEIGHT * 6 / 100))
+    [ "${BAR_HEIGHT}" -ge 48 ] || BAR_HEIGHT=48
+    [ "${BAR_HEIGHT}" -le 64 ] || BAR_HEIGHT=64
+
+    if [ "${LOGICAL_HEIGHT}" -le 540 ]; then
+      BAR_FONT_SIZE=16
+      STATUS_FONT_SIZE=14
+      BAR_PADDING=10
+      LAUNCHER_FONT_SIZE=16
+      LAUNCHER_LINE_HEIGHT=38
+      LAUNCHER_HORIZONTAL_PAD=12
+      LAUNCHER_VERTICAL_PAD=10
+      SWAY_TITLE_FONT_POINTS=12
+    elif [ "${LOGICAL_HEIGHT}" -le 800 ]; then
+      BAR_FONT_SIZE=18
+      STATUS_FONT_SIZE=16
+      BAR_PADDING=12
+      LAUNCHER_FONT_SIZE=18
+      LAUNCHER_LINE_HEIGHT=42
+      LAUNCHER_HORIZONTAL_PAD=14
+      LAUNCHER_VERTICAL_PAD=12
+      SWAY_TITLE_FONT_POINTS=14
+    else
+      BAR_FONT_SIZE=20
+      STATUS_FONT_SIZE=18
+      BAR_PADDING=14
+      LAUNCHER_FONT_SIZE=20
+      LAUNCHER_LINE_HEIGHT=48
+      LAUNCHER_HORIZONTAL_PAD=16
+      LAUNCHER_VERTICAL_PAD=14
+      SWAY_TITLE_FONT_POINTS=16
+    fi
+    SWAY_TITLE_HORIZONTAL_PADDING=10
+    SWAY_TITLE_VERTICAL_PADDING=6
+  fi
+
+  KEYBOARD_HEIGHT=$((LOGICAL_HEIGHT * 35 / 100))
+  [ "${KEYBOARD_HEIGHT}" -ge 180 ] || KEYBOARD_HEIGHT=180
+  [ "${KEYBOARD_HEIGHT}" -le 380 ] || KEYBOARD_HEIGHT=380
+  maximum_keyboard=$((LOGICAL_HEIGHT - BAR_HEIGHT - 160))
+  [ "${maximum_keyboard}" -ge 120 ] || maximum_keyboard=120
+  [ "${KEYBOARD_HEIGHT}" -le "${maximum_keyboard}" ] || KEYBOARD_HEIGHT=${maximum_keyboard}
+
+  if [ "${KEYBOARD_FONT_SIZE}" -eq 0 ]; then
+    KEYBOARD_FONT_SIZE=$((KEYBOARD_HEIGHT / 12))
+    [ "${KEYBOARD_FONT_SIZE}" -ge 20 ] || KEYBOARD_FONT_SIZE=20
+    [ "${KEYBOARD_FONT_SIZE}" -le 32 ] || KEYBOARD_FONT_SIZE=32
+  fi
+}
+
+write_window_count() {
+  local count
+
+  count=$(swaymsg -r -t get_tree | jq -r --arg workspace "${DESKTOP_WORKSPACE}" '
+    [
+      .. | objects
+      | select(.type? == "workspace" and .name? == $workspace)
+      | .. | objects
+      | select(.type? == "con")
+      | select((.app_id? // "") != "" or (.window? // null) != null)
+    ] | length
+  ' 2>/dev/null) || count=0
+  printf '%s\n' "${count}" >"${RUNTIME_DIR}/window-count.new"
+  mv -f "${RUNTIME_DIR}/window-count.new" "${RUNTIME_DIR}/window-count"
+}
+
+window_count_loop() {
+  while :; do
+    write_window_count
+    sleep 1
+  done
+}
+
+host_control_loop() {
+  local command
+
+  while :; do
+    command=""
+    if IFS= read -r command <"${HOST_CONTROL_FIFO}"; then
+      case "${command}" in
+        next) swaymsg 'focus next' >/dev/null ;;
+        layout) swaymsg 'layout toggle tabbed splith' >/dev/null ;;
+      esac
+    fi
+  done
+}
+
 mkdir -p "${LOG_DIR}" "${HOME_SOURCE}"
 if [ -f "${LOG}" ]; then
   mv -f "${LOG}" "${LOG}.previous"
@@ -64,6 +248,12 @@ cleanup() {
   local rc=$?
   trap - EXIT INT TERM HUP
 
+  if [ -n "${HOST_CONTROL_PID}" ]; then
+    kill -TERM "${HOST_CONTROL_PID}" 2>/dev/null || true
+  fi
+  if [ -n "${WINDOW_WATCH_PID}" ]; then
+    kill -TERM "${WINDOW_WATCH_PID}" 2>/dev/null || true
+  fi
   if [ -f "${SWAY_STYLE_MARKER}" ] && systemctl is-active --quiet sway.service; then
     swaymsg reload >/dev/null 2>&1 || true
     rm -f "${SWAY_STYLE_MARKER}"
@@ -71,13 +261,22 @@ cleanup() {
   if [ "${BINDING_INSTALLED}" = 1 ] && systemctl is-active --quiet sway.service; then
     swaymsg 'unbindsym XF86Tools' >/dev/null 2>&1 || true
     swaymsg 'unbindsym F13' >/dev/null 2>&1 || true
+    swaymsg 'unbindsym F14' >/dev/null 2>&1 || true
     rm -f "${RUNTIME_DIR}/bindings-owned"
   fi
   if [ -n "${WVKBD_PID}" ] && kill -0 "${WVKBD_PID}" 2>/dev/null; then
     kill -TERM "${WVKBD_PID}" 2>/dev/null || true
     # The service cgroup owns this process; do not block return on a client.
   fi
-  rm -f "${RUNTIME_DIR}/wvkbd.pid" "${CONTROL_FIFO}"
+  rm -f \
+    "${RUNTIME_DIR}/wvkbd.pid" \
+    "${RUNTIME_DIR}/keyboard-visible" \
+    "${RUNTIME_DIR}/window-count" \
+    "${RUNTIME_DIR}/window-count.new" \
+    "${RUNTIME_DIR}/waybar-config.jsonc" \
+    "${RUNTIME_DIR}/waybar-style.css" \
+    "${HOST_CONTROL_FIFO}" \
+    "${CONTROL_FIFO}"
   rmdir "${RUNTIME_DIR}" 2>/dev/null || true
 
   printf '%s Sway Desktop Mode session ended with status %s\n' "$(date -Is)" "${rc}"
@@ -89,6 +288,15 @@ trap 'exit 130' INT
 
 "${BASE}/bin/preflight"
 discover_sway_environment
+discover_output_metrics || { printf 'Cannot determine active output metrics\n' >&2; exit 1; }
+printf 'Desktop output: %s, %sx%s logical at scale %s, %sx%s physical pixels' \
+  "${OUTPUT_NAME}" "${LOGICAL_WIDTH}" "${LOGICAL_HEIGHT}" "${OUTPUT_SCALE}" \
+  "${OUTPUT_PIXEL_WIDTH}" "${OUTPUT_PIXEL_HEIGHT}"
+if [ "${DISPLAY_PPI}" -gt 0 ]; then
+  printf ', %s.%s-inch profile, ~%s ppi' \
+    "$((DISPLAY_DIAGONAL_TENTHS / 10))" "$((DISPLAY_DIAGONAL_TENTHS % 10))" "${DISPLAY_PPI}"
+fi
+printf '; panel %spx, keyboard %spx\n' "${BAR_HEIGHT}" "${KEYBOARD_HEIGHT}"
 
 mkdir -p \
   "${ROOTFS}/dev" \
@@ -146,13 +354,16 @@ pkill -x wvkbd-mobintl 2>/dev/null || true
 
 mkdir -p "${RUNTIME_DIR}"
 chmod 0700 "${RUNTIME_DIR}"
-rm -f -- "${CONTROL_FIFO}"
+rm -f -- "${CONTROL_FIFO}" "${HOST_CONTROL_FIFO}" "${RUNTIME_DIR}/keyboard-visible"
 mkfifo -m 0600 "${CONTROL_FIFO}"
+mkfifo -m 0600 "${HOST_CONTROL_FIFO}"
 
 /usr/bin/wvkbd-mobintl \
-  -H 380 -L 380 -fg 6b6b75 -fg-sp 6b6b75 -bg 1d1d1d \
+  -H "${KEYBOARD_HEIGHT}" -L "${KEYBOARD_HEIGHT}" \
+  -fg 6b6b75 -fg-sp 6b6b75 -bg 1d1d1d \
   --text ffffff --text-sp ffffff -press 000000 --press-sp 000000 \
-  -fn 32 -l full,nav,special --hidden --output DSI-1 >>"${LOG}" 2>&1 &
+  -fn "${KEYBOARD_FONT_SIZE}" -l full,nav,special \
+  --hidden --output "${OUTPUT_NAME}" >>"${LOG}" 2>&1 &
 WVKBD_PID=$!
 printf '%s\n' "${WVKBD_PID}" >"${RUNTIME_DIR}/wvkbd.pid"
 
@@ -166,18 +377,34 @@ BINDING_INSTALLED=1
 touch "${RUNTIME_DIR}/bindings-owned"
 swaymsg -- "bindsym XF86Tools exec ${BASE}/bin/rocknix-keyboard-toggle" >/dev/null
 swaymsg -- "bindsym F13 exec ${BASE}/bin/rocknix-keyboard-toggle" >/dev/null
+swaymsg 'bindsym F14 focus next' >/dev/null
+
+# Mark ownership before the first temporary workspace-style mutation. If the
+# service is interrupted below, ExecStopPost will still reload the host config.
+touch "${SWAY_STYLE_MARKER}"
 swaymsg -- "workspace ${DESKTOP_WORKSPACE}" >/dev/null
 swaymsg 'layout tabbed' >/dev/null
 
 # Art Book Next uses a #444 selection band over #111 fields. Apply that same
 # hierarchy to Sway's tab strip, then reload the device config during cleanup.
-touch "${SWAY_STYLE_MARKER}"
+swaymsg 'gaps inner current set 0' >/dev/null
+swaymsg 'gaps outer current set 0' >/dev/null
+if ! swaymsg 'hide_edge_borders --i3 smart' >/dev/null 2>&1; then
+  swaymsg 'smart_borders on' >/dev/null
+fi
+swaymsg -- "font pango:sans-serif ${SWAY_TITLE_FONT_POINTS}" >/dev/null
+swaymsg -- "titlebar_padding ${SWAY_TITLE_HORIZONTAL_PADDING} ${SWAY_TITLE_VERTICAL_PADDING}" >/dev/null
 swaymsg 'client.focused #444444 #444444 #ffffff #444444 #444444' >/dev/null
 swaymsg 'client.focused_inactive #111111 #111111 #aaaaaa #111111 #111111' >/dev/null
 swaymsg 'client.unfocused #111111 #111111 #777777 #111111 #111111' >/dev/null
 swaymsg 'client.urgent #444444 #444444 #ffffff #444444 #444444' >/dev/null
 swaymsg 'client.placeholder #000000 #000000 #777777 #000000 #000000' >/dev/null
 swaymsg 'client.background #000000' >/dev/null
+
+host_control_loop &
+HOST_CONTROL_PID=$!
+window_count_loop &
+WINDOW_WATCH_PID=$!
 
 TZ_VALUE=$(timedatectl show -p Timezone --value 2>/dev/null || true)
 TZ_VALUE=${TZ_VALUE:-UTC}
@@ -206,6 +433,20 @@ printf '%s Starting native Wayland desktop clients\n' "$(date -Is)"
   QT_QPA_PLATFORM=wayland \
   SDL_VIDEODRIVER=wayland \
   MOZ_ENABLE_WAYLAND=1 \
+  ROCKNIX_OUTPUT_NAME="${OUTPUT_NAME}" \
+  ROCKNIX_LOGICAL_WIDTH="${LOGICAL_WIDTH}" \
+  ROCKNIX_LOGICAL_HEIGHT="${LOGICAL_HEIGHT}" \
+  ROCKNIX_OUTPUT_SCALE="${OUTPUT_SCALE}" \
+  ROCKNIX_BAR_HEIGHT="${BAR_HEIGHT}" \
+  ROCKNIX_BAR_FONT_SIZE="${BAR_FONT_SIZE}" \
+  ROCKNIX_STATUS_FONT_SIZE="${STATUS_FONT_SIZE}" \
+  ROCKNIX_BAR_PADDING="${BAR_PADDING}" \
+  ROCKNIX_KEYBOARD_HEIGHT="${KEYBOARD_HEIGHT}" \
+  ROCKNIX_DISPLAY_PPI="${DISPLAY_PPI}" \
+  ROCKNIX_LAUNCHER_FONT_SIZE="${LAUNCHER_FONT_SIZE}" \
+  ROCKNIX_LAUNCHER_LINE_HEIGHT="${LAUNCHER_LINE_HEIGHT}" \
+  ROCKNIX_LAUNCHER_HORIZONTAL_PAD="${LAUNCHER_HORIZONTAL_PAD}" \
+  ROCKNIX_LAUNCHER_VERTICAL_PAD="${LAUNCHER_VERTICAL_PAD}" \
   MESA_LOADER_DRIVER_OVERRIDE=msm \
   GALLIUM_DRIVER=freedreno \
   /usr/local/bin/rocknix-sway-session

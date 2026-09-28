@@ -63,7 +63,21 @@ grep -q 'rm -f -- "${CONTROL_FIFO}"' payload/bin/launch-sway-desktop
 grep -q '/usr/share/applications/firefox-esr.desktop' Dockerfile.rootfs
 grep -q '/usr/share/applications/foot-server.desktop' Dockerfile.rootfs
 grep -q '/usr/share/applications/footclient.desktop' Dockerfile.rootfs
-grep -q 'execute=Return KP_Enter space' rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini
+grep -q '^execute=Return KP_Enter$' rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini
+grep -q '^cancel=Escape$' rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini
+grep -q '^radius=0$' rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini
+if grep -q '^execute=.*space' rootfs-overlay/etc/xdg/fuzzel/fuzzel.ini; then
+  printf 'FAIL: Fuzzel consumes Space instead of allowing multiword search\n' >&2; exit 1
+fi
+grep -q 'keyboard: KeyF14' payload/input/desktop.yaml
+grep -q 'keyboard: KeyEnter' payload/input/desktop.yaml
+grep -q 'keyboard: KeyEsc' payload/input/desktop.yaml
+grep -q "bindsym F14 focus next" payload/bin/launch-sway-desktop
+grep -q "hide_edge_borders --i3 smart" payload/bin/launch-sway-desktop
+grep -q 'DISPLAY_DIAGONAL_TENTHS=55' payload/bin/launch-sway-desktop
+if grep -q 'custom/browser' rootfs-overlay/etc/xdg/waybar/config.jsonc; then
+  printf 'FAIL: dedicated browser shortcut remains in Waybar\n' >&2; exit 1
+fi
 grep -q '2fe08f3bd52c6e795df8353d29deb89596b5099d' Dockerfile.rootfs
 grep -q 'i64 = 32' experiments/ffmpeg/build.sh
 grep -q 'BindsTo=sway.service' payload/systemd/xfce-desktop.service

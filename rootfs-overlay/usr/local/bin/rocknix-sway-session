@@ -15,6 +15,9 @@ export XDG_CONFIG_DIRS=/etc/xdg
 export XDG_DATA_DIRS=/usr/local/share:/usr/share
 
 CONTROL_FIFO=/run/rocknix-xfce/control
+RUNTIME_DIR=/run/rocknix-xfce
+WAYBAR_CONFIG=${RUNTIME_DIR}/waybar-config.jsonc
+WAYBAR_STYLE=${RUNTIME_DIR}/waybar-style.css
 WAYBAR_PID=""
 CONTROL_PID=""
 
@@ -35,6 +38,39 @@ mkdir -p \
   "${XDG_CACHE_HOME}" \
   "${XDG_DATA_HOME}"
 
+logical_width=${ROCKNIX_LOGICAL_WIDTH:-1280}
+bar_height=${ROCKNIX_BAR_HEIGHT:-48}
+bar_font_size=${ROCKNIX_BAR_FONT_SIZE:-18}
+status_font_size=${ROCKNIX_STATUS_FONT_SIZE:-16}
+bar_padding=${ROCKNIX_BAR_PADDING:-12}
+for value in logical_width bar_height bar_font_size status_font_size bar_padding; do
+  [[ ${!value} =~ ^[0-9]+$ ]] || exit 1
+done
+
+if [ "${logical_width}" -le 1000 ]; then
+  sed \
+    -e 's/"format": "Keyboard"/"format": "Keys"/' \
+    -e 's/"format": "Return to Gaming"/"format": "Gaming"/' \
+    /etc/xdg/waybar/config.jsonc >"${WAYBAR_CONFIG}"
+else
+  cp /etc/xdg/waybar/config.jsonc "${WAYBAR_CONFIG}"
+fi
+cp /etc/xdg/waybar/style.css "${WAYBAR_STYLE}"
+{
+  printf '\n/* Runtime metrics from the active Sway output. */\n'
+  printf '* { font-size: %spx; }\n' "${bar_font_size}"
+  printf '%s\n' \
+    '#custom-apps,' \
+    '#custom-windows,' \
+    '#custom-status,' \
+    '#custom-keyboard,' \
+    '#custom-return {'
+  printf '  min-height: %spx;\n  padding: 0 %spx;\n}\n' "${bar_height}" "${bar_padding}"
+  printf '%s\n' '#battery,' '#clock {'
+  printf '  min-height: %spx;\n  padding: 0 %spx;\n  font-size: %spx;\n}\n' \
+    "${bar_height}" "$((bar_padding - 2))" "${status_font_size}"
+} >>"${WAYBAR_STYLE}"
+
 source /usr/local/bin/rocknix-home-integration
 refresh_home_integration /home/rocknix-default "$HOME"
 for mapping in 'Desktop:ROCKNIX Desktop' 'roms:ROCKNIX ROMs' 'games-internal:ROCKNIX Games'; do
@@ -46,7 +82,7 @@ done
 
 [ -p "${CONTROL_FIFO}" ] || { printf 'Desktop control FIFO is missing\n' >&2; exit 1; }
 
-waybar -c /etc/xdg/waybar/config.jsonc -s /etc/xdg/waybar/style.css &
+waybar -c "${WAYBAR_CONFIG}" -s "${WAYBAR_STYLE}" &
 WAYBAR_PID=$!
 
 (

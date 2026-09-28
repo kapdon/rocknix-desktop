@@ -54,9 +54,13 @@ grep -q '^ROCKNIX_SWAY_RUNTIME=1$' "${ROOTFS}/etc/rocknix-xfce-release" || fail 
 [ -x "${ROOTFS}/usr/bin/foot" ] || fail "foot is missing"
 [ -x "${ROOTFS}/usr/bin/thunar" ] || fail "Thunar is missing"
 [ -x "${ROOTFS}/usr/bin/firefox-esr" ] || fail "Firefox ESR is missing"
+[ -x "${ROOTFS}/usr/local/bin/rocknix-launcher" ] || fail "launcher wrapper is missing"
+[ -x "${ROOTFS}/usr/local/bin/rocknix-status" ] || fail "status helper is missing"
+[ -x "${ROOTFS}/usr/local/bin/rocknix-window-switcher" ] || fail "window switcher is missing"
 [ -x "${ROOTFS}/usr/local/bin/rocknix-sway-session" ] || fail "desktop session is missing"
 [ -e /dev/dri/card0 ] || fail "DRM display device is missing"
 [ -x /usr/bin/swaymsg ] || fail "host swaymsg is missing"
+[ -x /usr/bin/jq ] || fail "host jq is missing"
 [ -x /usr/bin/inputplumber ] || fail "host InputPlumber is missing"
 [ -x /usr/bin/wvkbd-mobintl ] || fail "host wvkbd-mobintl is missing"
 [ -f "${BASE}/input/desktop.yaml" ] || fail "desktop input profile is missing"
@@ -67,11 +71,11 @@ systemctl is-active --quiet sway.service || fail "sway.service is not active"
 systemctl is-active --quiet essway.service || fail "start Desktop Mode from EmulationStation"
 discover_sway_environment
 swaymsg -r -t get_outputs | jq -e '
-  any(.[]; .name == "DSI-1" and .active == true and
-      .transform == "270" and .rect.width == 1920 and .rect.height == 1080)
-' >/dev/null || fail "DSI-1 is not active in the expected landscape orientation"
-if grep -Rqs -E '(^|[[:space:]])bind(sym|code).*(XF86Tools|F13)' /storage/.config/sway /etc/sway 2>/dev/null; then
-  fail "the on-screen keyboard key already has a persistent Sway binding"
+  any(.[]; .active == true and .rect.width > .rect.height and
+      .rect.width >= 640 and .rect.height >= 360 and .scale > 0)
+' >/dev/null || fail "no usable active landscape output was found"
+if grep -Rqs -E '(^|[[:space:]])bind(sym|code).*(XF86Tools|F13|F14)' /storage/.config/sway /etc/sway 2>/dev/null; then
+  fail "a Desktop Mode controller key already has a persistent Sway binding"
 fi
 command -V get_setting >/dev/null 2>&1 || fail "host get_setting helper is missing"
 command -V set_setting >/dev/null 2>&1 || fail "host set_setting helper is missing"

@@ -1,35 +1,29 @@
 {
   "layer": "top",
   "position": "bottom",
-  "height": 64,
   "spacing": 0,
   "margin-top": 0,
   "margin-bottom": 0,
   "margin-left": 0,
   "margin-right": 0,
-  "modules-left": ["custom/apps", "custom/browser"],
-  "modules-right": ["network", "pulseaudio", "battery", "clock", "custom/keyboard", "custom/return"],
+  "modules-left": ["custom/apps", "custom/windows"],
+  "modules-right": ["custom/status", "battery", "clock", "custom/keyboard", "custom/return"],
   "custom/apps": {
     "format": "Apps",
-    "tooltip-format": "Open apps • D-pad to move • A to launch • B to close",
-    "on-click": "fuzzel"
+    "tooltip-format": "Open apps • D-pad moves • A launches • B dismisses",
+    "on-click": "/usr/local/bin/rocknix-launcher"
   },
-  "custom/browser": {
-    "format": "Firefox",
-    "tooltip-format": "Open Firefox ESR",
-    "on-click": "/usr/local/bin/rocknix-firefox"
+  "custom/windows": {
+    "exec": "/usr/local/bin/rocknix-window-switcher status",
+    "return-type": "json",
+    "interval": 1,
+    "on-click": "/usr/local/bin/rocknix-window-switcher next"
   },
-  "network": {
+  "custom/status": {
+    "exec": "/usr/local/bin/rocknix-status",
+    "return-type": "json",
     "interval": 5,
-    "format-wifi": "Wi-Fi {signalStrength}%",
-    "format-ethernet": "Network",
-    "format-disconnected": "Offline",
-    "tooltip-format": "{ifname}: {ipaddr}"
-  },
-  "pulseaudio": {
-    "format": "Volume {volume}%",
-    "format-muted": "Muted",
-    "on-click": "pavucontrol"
+    "on-click": "/usr/local/bin/rocknix-launcher settings"
   },
   "battery": {
     "interval": 15,

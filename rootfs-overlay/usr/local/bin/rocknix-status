@@ -1,0 +1,48 @@
+#!/bin/sh
+
+set -u
+
+logical_width=${ROCKNIX_LOGICAL_WIDTH:-1280}
+case "${logical_width}" in
+  ''|*[!0-9]*) logical_width=1280 ;;
+esac
+
+network=Offline
+state_class=offline
+if command -v nmcli >/dev/null 2>&1; then
+  device_state=$(timeout 2 nmcli --terse --fields TYPE,STATE device status 2>/dev/null || true)
+  if printf '%s\n' "${device_state}" | grep -q '^wifi:connected$'; then
+    signal=$(timeout 2 nmcli --terse --fields IN-USE,SIGNAL device wifi list --rescan no 2>/dev/null |
+      awk -F: '$1 == "*" { print $2; exit }')
+    case "${signal}" in
+      ''|*[!0-9]*) network='Wi-Fi' ;;
+      *) network="Wi-Fi ${signal}%" ;;
+    esac
+    state_class=connected
+  elif printf '%s\n' "${device_state}" | grep -q '^ethernet:connected$'; then
+    network=Network
+    state_class=connected
+  fi
+fi
+
+audio=Audio
+if command -v pactl >/dev/null 2>&1; then
+  muted=$(pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null | awk '{print $2; exit}')
+  volume=$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null |
+    awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+%$/) { print $i; exit } }')
+  if [ "${muted}" = yes ]; then
+    audio=Muted
+    [ "${state_class}" = offline ] || state_class=muted
+  elif [ -n "${volume}" ]; then
+    audio="Vol ${volume}"
+  fi
+fi
+
+if [ "${logical_width}" -le 1000 ]; then
+  text=Status
+else
+  text="${network} · ${audio}"
+fi
+
+printf '{"text":"%s","tooltip":"%s · %s\\nOpen network, audio, or layout settings","class":"%s"}\n' \
+  "${text}" "${network}" "${audio}" "${state_class}"
