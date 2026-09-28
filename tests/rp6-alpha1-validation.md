@@ -43,4 +43,11 @@ the configured Tools path, but EmulationStation predated the install. Restarted
 only `essway.service` to rescan; both frontend services remained active and the
 entry file persisted. README now gives that explicit post-install step.
 
-Frontend visibility/launch, physical controls and logout confirmation are pending.
+After the frontend restart, the user confirmed the Tools entry appeared, Desktop
+Mode launched correctly, touchscreen and controller input worked, and L3 toggled
+the keyboard. The user then logged out/returned to EmulationStation and confirmed
+the frontend and controller input worked again.
+
+Scope: install → frontend rescan → Tools launch → physical controls → logout/return
+passed. This does not establish cold-boot/OTA/suspend compatibility or a freshly
+flashed OS result. The unmodified alpha release remains an experimental release.
