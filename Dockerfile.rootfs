@@ -1,0 +1,102 @@
+# syntax=docker/dockerfile:1
+
+FROM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+
+ARG TARGETARCH
+
+RUN test "${TARGETARCH}" = "arm64"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
+    && chmod 0755 /usr/sbin/policy-rc.d \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+       adwaita-icon-theme \
+       alsa-utils \
+       bash \
+       ca-certificates \
+       dbus \
+       dbus-x11 \
+       desktop-file-utils \
+       fonts-dejavu-core \
+       fonts-noto-color-emoji \
+       fonts-noto-core \
+       ffmpeg \
+       gvfs \
+       gvfs-backends \
+       iproute2 \
+       less \
+       libgl1-mesa-dri \
+       libvulkan1 \
+       mate-polkit \
+       mesa-utils \
+       mesa-vulkan-drivers \
+       mousepad \
+       mpv \
+       nano \
+       network-manager-gnome \
+       onboard \
+       pavucontrol \
+       procps \
+       pulseaudio-utils \
+       ristretto \
+       shared-mime-info \
+       thunar \
+       tumbler \
+       vulkan-tools \
+       x11-utils \
+       x11-xserver-utils \
+       xdg-user-dirs \
+       xdg-utils \
+       xfce4-appfinder \
+       xfce4-genmon-plugin \
+       xfce4-notifyd \
+       xfce4-panel \
+       xfce4-pulseaudio-plugin \
+       xfce4-session \
+       xfce4-settings \
+       xfce4-taskmanager \
+       xfce4-terminal \
+       xfce4-whiskermenu-plugin \
+       xfdesktop4 \
+       xfwm4 \
+       xinput \
+       xwayland \
+    && rm -f /usr/sbin/policy-rc.d \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-xfce-packages.tsv
+
+# Keep the direct-display dependencies in a separate, cacheable layer.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       xserver-xorg-core xserver-xorg-input-libinput \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-xfce-packages.tsv
+
+COPY rootfs-overlay/ /
+
+RUN chmod 0755 \
+      /usr/local/bin/rocknix-return \
+      /usr/local/bin/rocknix-keyboard-toggle \
+      /usr/local/bin/rocknix-battery \
+      /usr/local/bin/rocknix-xfce-first-run \
+      /usr/local/bin/rocknix-xfce-session \
+    && mkdir -p \
+      /home/rocknix-default/Desktop \
+      /home/rocknix-default/.config \
+      /run \
+      /storage/Desktop \
+      /storage/Steam \
+      /storage/backup \
+      /storage/games-external \
+      /storage/games-internal \
+      /storage/roms \
+      /storage/scripts \
+    && cp /usr/share/applications/rocknix-return.desktop /home/rocknix-default/Desktop/ \
+    && cp /usr/share/applications/rocknix-onboard.desktop /home/rocknix-default/Desktop/ \
+    && chmod 0755 /home/rocknix-default/Desktop/*.desktop \
+    && chmod 1777 /tmp \
+    && rm -f /etc/machine-id
