@@ -1,0 +1,249 @@
+/* Visual reference: Art Book Next 9a50ef366e750aabfab29e6915a2867607212971.
+ * Carry its black fields and flat selectors into GTK4 applications so they
+ * stay part of the same interface as the shell and GTK3 applications. */
+@import url("resource:///org/gtk/libgtk/theme/Default/gtk-dark.css");
+
+@define-color rocknix_canvas #000000;
+@define-color rocknix_panel #111111;
+@define-color rocknix_field #222222;
+@define-color rocknix_selector #444444;
+@define-color rocknix_text #ffffff;
+@define-color rocknix_text_secondary rgba(255, 255, 255, 0.67);
+@define-color rocknix_text_disabled rgba(255, 255, 255, 0.20);
+
+* {
+  font-family: "Roboto", sans-serif;
+  text-shadow: none;
+  box-shadow: none;
+}
+
+window,
+.background {
+  color: @rocknix_text;
+  background-color: @rocknix_field;
+}
+
+headerbar,
+.titlebar,
+menubar,
+toolbar {
+  color: @rocknix_text;
+  background-color: @rocknix_canvas;
+  background-image: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+headerbar,
+.titlebar {
+  min-height: 44px;
+}
+
+headerbar button,
+.titlebar button,
+toolbar button {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  background-color: transparent;
+}
+
+button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 5px 12px;
+  color: @rocknix_text_secondary;
+  background-color: @rocknix_field;
+  background-image: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+button:hover,
+button:checked,
+button:active,
+button:focus {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
+
+button:disabled {
+  color: @rocknix_text_disabled;
+  background-color: @rocknix_panel;
+}
+
+entry,
+spinbutton,
+dropdown > button {
+  min-height: 38px;
+  padding: 4px 10px;
+  color: @rocknix_text;
+  caret-color: @rocknix_text;
+  background-color: @rocknix_panel;
+  border: 1px solid @rocknix_selector;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+entry:focus,
+spinbutton:focus,
+dropdown > button:focus {
+  border-color: @rocknix_text_secondary;
+  box-shadow: inset 0 0 0 1px @rocknix_text_secondary;
+}
+
+selection,
+text selection,
+entry selection {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
+
+.view,
+textview text,
+list,
+listview {
+  color: @rocknix_text;
+  background-color: @rocknix_field;
+}
+
+.view:selected,
+row:selected {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
+
+row {
+  min-height: 40px;
+}
+
+.sidebar,
+.navigation-sidebar {
+  color: @rocknix_text_secondary;
+  background-color: @rocknix_panel;
+}
+
+.sidebar row,
+.navigation-sidebar row {
+  min-height: 42px;
+  padding: 1px 10px;
+}
+
+.sidebar row:selected,
+.navigation-sidebar row:selected {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
+
+popover,
+popover.background {
+  color: @rocknix_text;
+  background-color: @rocknix_panel;
+  border: 0;
+  border-radius: 18px;
+}
+
+popover contents {
+  color: @rocknix_text;
+  background-color: @rocknix_panel;
+  border: 0;
+  border-radius: 18px;
+  box-shadow: none;
+}
+
+popover modelbutton {
+  min-height: 40px;
+  padding: 3px 14px;
+  color: @rocknix_text_secondary;
+  border-radius: 0;
+}
+
+popover modelbutton:hover,
+popover modelbutton:focus {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
+
+notebook > header {
+  color: @rocknix_text_secondary;
+  background-color: @rocknix_canvas;
+}
+
+notebook > header > tabs > tab {
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 0;
+}
+
+notebook > header > tabs > tab:checked {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
+
+scrollbar slider {
+  min-width: 12px;
+  min-height: 12px;
+  background-color: @rocknix_selector;
+  border: 3px solid @rocknix_field;
+  border-radius: 0;
+}
+
+scrollbar:hover slider {
+  background-color: @rocknix_text_secondary;
+}
+
+scale trough,
+progressbar trough {
+  min-height: 8px;
+  background-color: @rocknix_panel;
+  border-radius: 0;
+}
+
+scale highlight,
+progressbar progress {
+  min-height: 8px;
+  background-color: @rocknix_selector;
+  border-radius: 0;
+}
+
+scale slider {
+  min-width: 20px;
+  min-height: 20px;
+  background-color: @rocknix_text;
+  border: 0;
+  border-radius: 0;
+}
+
+switch {
+  min-width: 48px;
+  min-height: 28px;
+  background-color: @rocknix_panel;
+  border: 1px solid @rocknix_selector;
+  border-radius: 14px;
+}
+
+switch:checked {
+  background-color: @rocknix_selector;
+}
+
+switch slider {
+  min-width: 24px;
+  min-height: 24px;
+  background-color: @rocknix_text;
+  border-radius: 12px;
+}
+
+tooltip,
+tooltip.background {
+  color: @rocknix_text;
+  background-color: @rocknix_panel;
+  border: 1px solid @rocknix_selector;
+  border-radius: 0;
+}
+
+tooltip label {
+  color: @rocknix_text;
+  padding: 7px 9px;
+}
