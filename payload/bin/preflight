@@ -65,6 +65,7 @@ grep -q '^ROCKNIX_SWAY_RUNTIME=1$' "${ROOTFS}/etc/rocknix-xfce-release" || fail 
 [ -x /usr/bin/wvkbd-mobintl ] || fail "host wvkbd-mobintl is missing"
 [ -f "${BASE}/input/desktop.yaml" ] || fail "desktop input profile is missing"
 [ -x "${BASE}/bin/rocknix-keyboard-toggle" ] || fail "keyboard toggle is missing"
+[ -x "${BASE}/bin/rocknix-close-window" ] || fail "window close helper is missing"
 [ -x /usr/bin/unshare ] || fail "host unshare is missing"
 [ -x /usr/sbin/chroot ] || fail "host chroot is missing"
 systemctl is-active --quiet sway.service || fail "sway.service is not active"
@@ -74,7 +75,7 @@ swaymsg -r -t get_outputs | jq -e '
   any(.[]; .active == true and .rect.width > .rect.height and
       .rect.width >= 640 and .rect.height >= 360 and .scale > 0)
 ' >/dev/null || fail "no usable active landscape output was found"
-if grep -Rqs -E '(^|[[:space:]])bind(sym|code).*(XF86Tools|F13|F14)' /storage/.config/sway /etc/sway 2>/dev/null; then
+if grep -Rqs -E '(^|[[:space:]])bind(sym|code).*(XF86Tools|F13|F14|F15)' /storage/.config/sway /etc/sway 2>/dev/null; then
   fail "a Desktop Mode controller key already has a persistent Sway binding"
 fi
 command -V get_setting >/dev/null 2>&1 || fail "host get_setting helper is missing"

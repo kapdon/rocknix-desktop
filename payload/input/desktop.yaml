@@ -22,6 +22,13 @@ mapping:
     target_events:
       - dbus: ui_guide
 
+  - name: Close Focused Window
+    source_event:
+      gamepad:
+        button: RightStick
+    target_events:
+      - keyboard: KeyF15
+
   - name: Quick Access
     source_event:
       gamepad:

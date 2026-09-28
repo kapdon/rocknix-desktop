@@ -10,7 +10,7 @@
   "modules-right": ["custom/status", "battery", "clock", "custom/keyboard", "custom/return"],
   "custom/apps": {
     "format": "Apps",
-    "tooltip-format": "Open apps • D-pad moves • A launches • B dismisses",
+    "tooltip-format": "Open apps • D-pad moves\nBottom button: launch • Right button: dismiss\nR3: close focused window",
     "on-click": "/usr/local/bin/rocknix-launcher"
   },
   "custom/windows": {

@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -eu
+
+# Never send bare `kill`: with a focused parent or empty workspace it can close
+# more than one window. Resolve only a focused leaf in our temporary workspace.
+tree=$(swaymsg -r -t get_tree) || exit 0
+window_id=$(printf '%s' "${tree}" | jq -er '
+  [.. | objects
+   | select(.type? == "workspace" and .name? == "98:Desktop")
+   | .. | objects
+   | select(.type? == "con" and .focused? == true)
+   | select((.shell? == "xdg_shell") or (.shell? == "xwayland"))
+   | select(((.nodes // []) | length) == 0 and
+            ((.floating_nodes // []) | length) == 0)
+   | .id]
+  | select(length == 1) | .[0]
+  | select(type == "number" and . > 0 and floor == .)
+') || exit 0
+case "${window_id}" in
+  ''|*[!0-9]*|0) exit 0 ;;
+esac
+
+# Numeric container IDs are not reused if this window closes during the query.
+# Sway requests a client close; it does not force-kill the application process.
+exec swaymsg "[con_id=${window_id}] kill"

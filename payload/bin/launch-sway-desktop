@@ -262,6 +262,7 @@ cleanup() {
     swaymsg 'unbindsym XF86Tools' >/dev/null 2>&1 || true
     swaymsg 'unbindsym F13' >/dev/null 2>&1 || true
     swaymsg 'unbindsym F14' >/dev/null 2>&1 || true
+    swaymsg 'unbindsym F15' >/dev/null 2>&1 || true
     rm -f "${RUNTIME_DIR}/bindings-owned"
   fi
   if [ -n "${WVKBD_PID}" ] && kill -0 "${WVKBD_PID}" 2>/dev/null; then
@@ -378,6 +379,9 @@ touch "${RUNTIME_DIR}/bindings-owned"
 swaymsg -- "bindsym XF86Tools exec ${BASE}/bin/rocknix-keyboard-toggle" >/dev/null
 swaymsg -- "bindsym F13 exec ${BASE}/bin/rocknix-keyboard-toggle" >/dev/null
 swaymsg 'bindsym F14 focus next' >/dev/null
+# Resolve a leaf window explicitly: Sway's focused-container criterion can also
+# match a parent. No-repeat prevents a held R3 from closing successive apps.
+swaymsg -- "bindsym --no-repeat F15 exec env SWAYSOCK=${SWAYSOCK} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} ${BASE}/bin/rocknix-close-window" >/dev/null
 
 # Mark ownership before the first temporary workspace-style mutation. If the
 # service is interrupted below, ExecStopPost will still reload the host config.

@@ -69,6 +69,11 @@ logical dimensions. Firefox ESR and MPV run natively on Wayland.
 In Apps, use the D-pad to move, the bottom face button to launch and the right
 face button to dismiss. Select cycles open apps, and L3 shows or hides the host
 on-screen keyboard. Space remains available for multiword searches.
+Click the right stick (R3) to close the focused app window directly, including
+audio/network settings. This requests a normal close, not a force-kill, and a
+held press does not repeat. Save work first: there is no desktop confirmation,
+and an app may close without its own warning. Closing the last app leaves the
+desktop panel running. East/Start remain Escape, not window-close shortcuts.
 Return to Gaming asks for confirmation before closing desktop apps. Cancel is
 selected initially; choose Return to Gaming explicitly after saving your work.
 

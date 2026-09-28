@@ -23,7 +23,7 @@ case "${1:-status}" in
       else
         text="Windows ${count} · Select"
       fi
-      printf '{"text":"%s","tooltip":"Switch to the next open app • Select","class":"multiple"}\n' "${text}"
+      printf '{"text":"%s","tooltip":"Select: switch app • R3: close focused window","class":"multiple"}\n' "${text}"
     else
       printf '{"text":"","tooltip":"","class":"single"}\n'
     fi

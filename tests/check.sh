@@ -75,6 +75,12 @@ grep -q 'keyboard: KeyF14' payload/input/desktop.yaml
 grep -q 'keyboard: KeyEnter' payload/input/desktop.yaml
 grep -q 'keyboard: KeyEsc' payload/input/desktop.yaml
 grep -q "bindsym F14 focus next" payload/bin/launch-sway-desktop
+grep -q 'button: RightStick' payload/input/desktop.yaml
+grep -q 'keyboard: KeyF15' payload/input/desktop.yaml
+grep -Fq 'bindsym --no-repeat F15 exec env' payload/bin/launch-sway-desktop
+grep -q 'unbindsym F15' payload/bin/launch-sway-desktop
+grep -q 'unbindsym F15' payload/bin/restore-emulationstation
+grep -Fq 'XF86Tools|F13|F14|F15' payload/bin/preflight
 grep -q "hide_edge_borders --i3 smart" payload/bin/launch-sway-desktop
 grep -q 'DISPLAY_DIAGONAL_TENTHS=55' payload/bin/launch-sway-desktop
 if grep -q 'custom/browser' rootfs-overlay/etc/xdg/waybar/config.jsonc; then
@@ -104,3 +110,4 @@ bash tests/installer-flow.sh
 python3 tests/session-lifecycle.py
 python3 tests/return-confirmation.py
 python3 tests/launcher-cache.py
+python3 tests/window-close.py
