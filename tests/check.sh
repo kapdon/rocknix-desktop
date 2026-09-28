@@ -12,6 +12,7 @@ import ast
 from pathlib import Path
 paths = list(Path('rootfs-overlay/usr/local/bin').iterdir())
 paths.append(Path('tests/firefox-marionette.py'))
+paths.extend(Path('payload/bin').iterdir())
 for path in paths:
     if path.read_text().startswith('#!/usr/bin/python3'):
         ast.parse(path.read_text(), filename=str(path))
@@ -114,3 +115,5 @@ python3 tests/window-close.py
 python3 tests/window-policy.py
 
 python3 tests/controller-fields.py
+python3 tests/tools-metadata.py
+python3 tests/keyboard-layout.py

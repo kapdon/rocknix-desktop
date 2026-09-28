@@ -6,6 +6,7 @@ VERSION=development
 REPOSITORY=kapdon/rocknix-desktop
 ASSET=rocknix-sway-rp6-arm64.tar.xz
 BASE=/storage/.local/share/rocknix-xfce
+WORKSPACE=/storage/rocknix-desktop
 
 fail() { printf 'Install failed: %s\n' "$*" >&2; exit 1; }
 
@@ -86,6 +87,14 @@ verify_bundle() {
   [ "${actual%% *}" = "$expected" ] || fail 'bundle checksum mismatch'
 }
 
+record_release() {
+  # Older bundles have no metadata helper. Do not modify their integration.
+  [ -x "$BASE/bin/rocknix-tools-metadata" ] || return 0
+  [ ! -L "$BASE/release-info.json" ] || fail 'release metadata must not be a symlink'
+  cp "$STAGING/latest.json" "$BASE/release-info.json"
+  "$BASE/bin/rocknix-tools-metadata"
+}
+
 main() {
   local check=0 yes=0
   while [ "$#" -gt 0 ]; do
@@ -112,7 +121,10 @@ main() {
   # Lock before downloading, and recheck after acquiring it.
   acquire_install_lock
   check_device
-  STAGING=$(mktemp -d /storage/.rocknix-xfce-install.XXXXXX)
+  [ ! -L "$WORKSPACE" ] || fail 'workspace must not be a symlink'
+  mkdir -p "$WORKSPACE"
+  [ "$(realpath "$WORKSPACE")" = "$WORKSPACE" ] || fail 'invalid workspace path'
+  STAGING=$(mktemp -d "$WORKSPACE/install.XXXXXX")
   trap 'rc=$?; if [ "$rc" = 0 ]; then rm -rf -- "$STAGING"; else
     printf "Installation stopped. Diagnostics/staging retained at %s\n" "$STAGING" >&2; fi' EXIT
   local url="https://github.com/$REPOSITORY/releases/download/$VERSION"
@@ -127,6 +139,7 @@ main() {
   [ "$(jq -er '.asset' "$STAGING/latest.json")" = "$ASSET" ] || fail 'invalid build filename'
   printf 'Installed: %s\nAvailable: %s (%s)\n' "${INSTALLED_REVISION:-not installed}" "$VERSION" "$revision"
   if [ "$INSTALLED_REVISION" = "$revision" ]; then
+    record_release
     printf 'Already up to date; no changes made.\n'
     return
   fi
@@ -150,6 +163,7 @@ main() {
   else
     bash "$STAGING/bundle/install-device.sh"
   fi
+  record_release
   printf '\nRefresh the EmulationStation game list, then open Tools > Desktop Mode.\n'
 }
 

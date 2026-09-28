@@ -1,0 +1,95 @@
+#!/usr/bin/python3
+"""Maintain only Desktop Mode's entry in the shared EmulationStation gamelist."""
+import argparse
+from datetime import datetime, timezone
+import json
+import os
+import re
+from pathlib import Path
+import tempfile
+import xml.etree.ElementTree as ET
+
+
+def release_date(build_info, release_info):
+    """Never substitute today's date or another revision's release date."""
+    try:
+        build = dict(line.split('=', 1) for line in Path(build_info).read_text().splitlines() if '=' in line)
+        release = json.loads(Path(release_info).read_text())
+        if not build.get('commit') or release.get('commit') != build['commit']:
+            return None
+        date = datetime.strptime(release['released_at'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+        return date.strftime('%Y%m%dT%H%M%S')
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def update(modules, artwork, remove=False, releasedate=None):
+    modules = Path(modules)
+    gamelist = modules / 'gamelist.xml'
+    image = modules / 'images/rocknix-desktop.svg'
+    if modules.is_symlink() or gamelist.is_symlink() or image.is_symlink() or image.parent.is_symlink():
+        raise ValueError('Refusing symlinked Tools metadata')
+    source = gamelist.read_text() if gamelist.exists() else '<gameList>\n</gameList>\n'
+    # The stock ROCKNIX gamelist has bare ampersands in descriptions. Validate
+    # a normalized copy, but preserve every unrelated byte in the on-disk file.
+    def parse(text):
+        return ET.fromstring(re.sub(r'&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)', '&amp;', text))
+    root = parse(source)
+    if root.tag != 'gameList':
+        raise ValueError('Unrecognized Tools gamelist')
+    if len(root) == 0 and '</gameList>' not in source:
+        source = re.sub(r'<gameList\s*/>', '<gameList></gameList>', source, count=1)
+    if source.count('</gameList>') != 1:
+        raise ValueError('Unrecognized Tools gamelist closing tag')
+    entries = [g for g in root.findall('game') if g.findtext('path') in ('./Desktop Mode.sh', 'Desktop Mode.sh')]
+    # EmulationStation rewrites known fields and may discard custom attributes.
+    if any(g.findtext('image') != './images/rocknix-desktop.svg' for g in entries):
+        raise ValueError('Preserving existing custom Desktop Mode metadata')
+    blocks = list(re.finditer(r'<game(?:\s[^>]*)?>.*?</game\s*>', source, re.S))
+    owned = [block for block in blocks if parse(block.group()).findtext('path') in ('./Desktop Mode.sh', 'Desktop Mode.sh')]
+    if len(owned) != len(entries):
+        raise ValueError('Unrecognized Tools entry formatting')
+    for block in reversed(owned):
+        source = source[:block.start()] + source[block.end():]
+    if remove:
+        # Only remove the image when it still matches our own shipped asset.
+        if image.is_file() and image.read_bytes() == Path(artwork).read_bytes():
+            image.unlink()
+        if not entries:
+            return
+    else:
+        data = Path(artwork).read_bytes()
+        if image.exists() and not entries and image.read_bytes() != data:
+            raise ValueError('Preserving custom Tools image')
+        image.parent.mkdir(parents=True, exist_ok=True)
+        image.write_bytes(data)
+        game = ET.Element('game')
+        for key, value in {
+            'path': './Desktop Mode.sh', 'name': 'Desktop Mode',
+            'desc': 'A handheld desktop with Firefox, files, audio and network settings. Use Return to Gaming to return to EmulationStation.',
+            'genre': 'Tool', 'players': '1', 'image': './images/rocknix-desktop.svg',
+        }.items():
+            ET.SubElement(game, key).text = value
+        if releasedate:
+            ET.SubElement(game, 'releasedate').text = releasedate
+        source = source.replace('</gameList>', ET.tostring(game, encoding='unicode') + '</gameList>', 1)
+    fd, temp = tempfile.mkstemp(prefix='.desktop-gamelist.', dir=modules)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(source.encode('utf-8'))
+        os.chmod(temp, 0o644)
+        os.replace(temp, gamelist)
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+
+
+if __name__ == '__main__':
+    cli = argparse.ArgumentParser()
+    cli.add_argument('--remove', action='store_true')
+    cli.add_argument('--modules', default='/storage/.config/modules')
+    cli.add_argument('--artwork', default='/storage/.local/share/rocknix-xfce/integration/desktop-mode.svg')
+    cli.add_argument('--build-info', default='/storage/.local/share/rocknix-xfce/build-info')
+    cli.add_argument('--release-info', default='/storage/.local/share/rocknix-xfce/release-info.json')
+    args = cli.parse_args()
+    update(args.modules, args.artwork, args.remove, release_date(args.build_info, args.release_info))

@@ -11,8 +11,6 @@ cp "$bundle" "dist/$asset"
 checksum=$(sha256sum "dist/$asset")
 checksum=${checksum%% *}
 printf '%s  %s\n' "$checksum" "$asset" >"dist/$asset.sha256"
-jq -n --arg commit "$revision" --arg asset "$asset" --arg sha256 "$checksum" \
-  '{commit:$commit,asset:$asset,sha256:$sha256}' >dist/latest.json
 
 # Create the rolling release only when absent; other API failures remain fatal.
 if ! gh release list --repo "$repo" --limit 100 --json tagName \
@@ -23,6 +21,12 @@ if ! gh release list --repo "$repo" --limit 100 --json tagName \
 fi
 # Commit-qualified assets are never overwritten. Update the pointer only after upload.
 gh release upload development "dist/$asset" "dist/$asset.sha256" --repo "$repo"
+released_at=$(gh api "repos/$repo/releases/tags/development" \
+  --jq ".assets[] | select(.name == \"$asset\") | .updated_at")
+test -n "$released_at"
+jq -n --arg commit "$revision" --arg asset "$asset" --arg sha256 "$checksum" \
+  --arg released_at "$released_at" \
+  '{commit:$commit,asset:$asset,sha256:$sha256,released_at:$released_at}' >dist/latest.json
 gh release upload development dist/latest.json --clobber --repo "$repo"
 gh release edit development --repo "$repo" --notes \
   "Latest successful build: $revision. Use the dev installer. Unstable testing channel; existing installations are not upgraded automatically."

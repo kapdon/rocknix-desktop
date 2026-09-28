@@ -68,7 +68,7 @@ main() {
   . /etc/os-release
   [ "${OS_NAME:-}" = ROCKNIX ] && [ "$(uname -m)" = aarch64 ] || fail 'requires ARM64 ROCKNIX'
   [ "$(tr -d '\000' </proc/device-tree/model)" = 'Retroid Pocket 6' ] || fail 'unsupported device'
-  for name in flock realpath sha256sum tar xz systemctl systemd-analyze mktemp du df cmp; do
+  for name in flock realpath sha256sum tar xz systemctl systemd-analyze mktemp du df cmp python3; do
     command -v "$name" >/dev/null || fail "missing command: $name"
   done
   exec 9>/storage/.rocknix-xfce-install.lock
@@ -93,7 +93,10 @@ main() {
   required=$((4194304 + $(du -sk "$BASE/home" | awk '{print $1}')))
   available=$(df -Pk /storage | awk 'END {print $4}')
   [ "$available" -ge "$required" ] || fail 'need 4 GiB plus space for a home backup'
-  WORK=$(mktemp -d /storage/.local/share/rocknix-xfce-upgrade.XXXXXX)
+  [ ! -L /storage/rocknix-desktop ] || fail 'workspace must not be a symlink'
+  mkdir -p /storage/rocknix-desktop
+  [ "$(realpath /storage/rocknix-desktop)" = /storage/rocknix-desktop ] || fail 'invalid workspace path'
+  WORK=$(mktemp -d /storage/rocknix-desktop/upgrade.XXXXXX)
   MUTATING=0 MARKED=0
   TOUCHED=()
   trap finish_upgrade EXIT
@@ -152,6 +155,9 @@ main() {
   cp "$BASE/integration/999-rocknix-xfce" "$HOOK"
   cp "$BASE/integration/Desktop Mode.sh" "$ENTRY"
   chmod 0755 "$BASE/bin/"* "$BASE/integration/"* "$HOOK" "$ENTRY"
+  if [ -x "$BASE/bin/rocknix-tools-metadata" ]; then
+    "$BASE/bin/rocknix-tools-metadata"
+  fi
   chmod 0644 "$UNIT" "$BASE/input/"*
   systemctl daemon-reload
   systemd-analyze verify "$UNIT"

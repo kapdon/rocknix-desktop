@@ -11,7 +11,7 @@ archive_runtime() {
   local backup=$1 name
   mkdir "$backup/installation"
   # Only managed components move. Personal data never leaves its original path.
-  for name in rootfs bin input integration README.md uninstall.sh upgrade.sh build-info install-info; do
+  for name in rootfs bin input integration README.md uninstall.sh upgrade.sh build-info install-info release-info.json; do
     if [ -e "$BASE/$name" ] || [ -L "$BASE/$name" ]; then
       mv -- "$BASE/$name" "$backup/installation/$name"
     fi
@@ -76,8 +76,14 @@ main() {
   systemctl is-active --quiet sway.service || fail 'Sway did not recover'
   systemctl is-active --quiet essway.service || fail 'frontend did not recover'
   local backup
-  backup=$(mktemp -d /storage/.local/share/rocknix-xfce-backup.XXXXXX)
+  [ ! -L /storage/rocknix-desktop ] || fail 'workspace must not be a symlink'
+  mkdir -p /storage/rocknix-desktop
+  [ "$(realpath /storage/rocknix-desktop)" = /storage/rocknix-desktop ] || fail 'invalid workspace path'
+  backup=$(mktemp -d /storage/rocknix-desktop/uninstall.XXXXXX)
   printf 'Recovery directory: %s\n' "$backup"
+  if [ -x "$BASE/bin/rocknix-tools-metadata" ]; then
+    "$BASE/bin/rocknix-tools-metadata" --remove
+  fi
   # Move the boot hook first so it cannot recreate the Tools entry on reboot.
   mv "$HOOK" "$backup/999-rocknix-xfce"
   mv "$ENTRY" "$backup/Desktop Mode.sh"

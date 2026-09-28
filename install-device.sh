@@ -29,7 +29,7 @@ for target in /storage/.config/system.d/xfce-desktop.service \
   /storage/.config/autostart/999-rocknix-xfce '/storage/.config/modules/Desktop Mode.sh'; do
   [ ! -e "$target" ] || fail "existing integration would be overwritten: $target"
 done
-for command in inputplumber swaymsg unshare chroot jq systemd-analyze; do
+for command in inputplumber swaymsg unshare chroot jq systemd-analyze python3; do
   command -v "$command" >/dev/null || fail "missing host command: $command"
 done
 systemctl is-active --quiet sway.service || fail "start installation from EmulationStation"

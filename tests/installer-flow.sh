@@ -4,6 +4,7 @@ set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 source ./install.sh
 scratch=$(mktemp -d)
+WORKSPACE="$scratch/workspace"
 trap 'rm -rf -- "$scratch"' EXIT
 export FLOW_LOG="$scratch/actions"
 candidate=1111111111111111111111111111111111111111

@@ -342,11 +342,14 @@ rm -f -- "${CONTROL_FIFO}" "${HOST_CONTROL_FIFO}" "${RUNTIME_DIR}/keyboard-visib
 mkfifo -m 0600 "${CONTROL_FIFO}"
 mkfifo -m 0600 "${HOST_CONTROL_FIFO}"
 
+# Four-row typing first; retain symbols, navigation and the full terminal layout.
+# Set both orientations explicitly so landscape cannot select another default.
 /usr/bin/wvkbd-mobintl \
   -H "${KEYBOARD_HEIGHT}" -L "${KEYBOARD_HEIGHT}" \
   -fg 6b6b75 -fg-sp 6b6b75 -bg 1d1d1d \
   --text ffffff --text-sp ffffff -press 000000 --press-sp 000000 \
-  -fn "${KEYBOARD_FONT_SIZE}" -l full,nav,special \
+  -fn "${KEYBOARD_FONT_SIZE}" -l simple,special,nav,full \
+  --landscape-layers simple,special,nav,full \
   --hidden --output "${OUTPUT_NAME}" >>"${LOG}" 2>&1 &
 WVKBD_PID=$!
 printf '%s\n' "${WVKBD_PID}" >"${RUNTIME_DIR}/wvkbd.pid"

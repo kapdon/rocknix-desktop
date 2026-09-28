@@ -19,7 +19,7 @@ Back up saves/settings. On the RP6, as root, with EmulationStation running,
 Internet access and 4 GiB free on `/storage`:
 
 ```sh
-curl -fL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh -o /storage/install-desktop.sh && bash /storage/install-desktop.sh
+mkdir -p /storage/rocknix-desktop && curl -fL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh -o /storage/rocknix-desktop/install.sh && bash /storage/rocknix-desktop/install.sh
 ```
 
 This single command downloads the installer and runs it only if the download
@@ -69,6 +69,9 @@ logical dimensions. Firefox ESR and MPV run natively on Wayland.
 In Apps, use the D-pad to move, the bottom face button to launch and the right
 face button to dismiss. Select cycles open apps, and L3 shows or hides the host
 on-screen keyboard. Space remains available for multiword searches.
+The keyboard starts with four-row typing in both orientations, retaining the
+same adaptive height for taller keys. Its layer-switch key cycles through
+symbols/numbers, navigation and the full terminal layout, then back to typing.
 Select and the Windows entry cycle both tabbed and floating app windows.
 Firefox Picture-in-Picture floats in the bottom-right of the usable workspace.
 Audio/network settings float when their preferred size fits; they become tabbed
@@ -98,7 +101,15 @@ InputPlumber UI events; the prior profile and targets are restored on return.
 
 ## Persistence and upgrades
 
-Everything installed is on writable `/storage`. Inside the installation directory:
+Everything installed is on writable `/storage`.
+
+Installer downloads, staging and upgrade/uninstall recovery directories belong under
+`/storage/rocknix-desktop/`. The existing runtime and personal home stay at
+`/storage/.local/share/rocknix-xfce` for compatibility; ROCKNIX's service, boot hook
+and Tools metadata remain in their required `.config` locations. The existing
+installer lock path is retained so older installers cannot run concurrently.
+
+Inside the installation directory:
 
 | Location | Ownership and persistence |
 | --- | --- |
@@ -116,8 +127,8 @@ and suspend/resume are not guaranteed.
 Exit Desktop Mode. Use a trusted bundle and its known SHA-256:
 
 ```sh
-bash upgrade.sh --bundle /storage/rocknix-sway-rp6-arm64.tar.xz --sha256 YOUR_64_CHARACTER_SHA256 --check
-bash upgrade.sh --bundle /storage/rocknix-sway-rp6-arm64.tar.xz --sha256 YOUR_64_CHARACTER_SHA256 --yes
+bash upgrade.sh --bundle /storage/rocknix-desktop/rocknix-sway-rp6-arm64.tar.xz --sha256 YOUR_64_CHARACTER_SHA256 --check
+bash upgrade.sh --bundle /storage/rocknix-desktop/rocknix-sway-rp6-arm64.tar.xz --sha256 YOUR_64_CHARACTER_SHA256 --yes
 ```
 
 The upgrader checks ownership, provenance, checksum, space and idle state. It

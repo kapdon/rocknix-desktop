@@ -10,3 +10,4 @@ cp "${SOURCE}" "${TEMP}"
 chmod 0755 "${TEMP}"
 mv -f "${TEMP}" "${TARGET}"
 
+/storage/.local/share/rocknix-xfce/bin/rocknix-tools-metadata
