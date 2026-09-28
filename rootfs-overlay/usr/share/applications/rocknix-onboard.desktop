@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=On-Screen Keyboard
+Comment=Open the touchscreen keyboard
+Exec=onboard
+Icon=input-keyboard
+Terminal=false
+Categories=Utility;Accessibility;
+

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ROCKNIX XFCE Integration
+Comment=Configure the ROCKNIX desktop session
+Exec=/usr/local/bin/rocknix-xfce-first-run
+OnlyShowIn=XFCE;
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+
