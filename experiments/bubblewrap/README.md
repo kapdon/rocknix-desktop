@@ -49,7 +49,7 @@ account database, keyboard binary or package installation is changed.
 | Audio/status/battery/clock | Non-root synthetic speaker-output monitor loopback passed; pavucontrol, Wi-Fi/battery/clock rendered | Audible output/user acceptance, microphone, device switching |
 | Network editing | Settings and Apps use isolated editor/proxy; real inactive-profile rename/save/delete, proxy-only failure, singleton, R3 and normal/crash cleanup passed | Final package; physical-controller acceptance |
 | Floating utilities and PiP | Audio utility floats; real Firefox PiP floats, shrinks above keyboard, and R3 closes only PiP | Recheck packaged runtime and narrow output |
-| Shared data read/write | Desktop create/edit/rename passed; host file remains UID 0 | File-manager workflows on each actual shared mount; scripts workflow |
+| Shared data read/write | All six actual shared mounts passed non-root create/edit/rename/copy/delete and host UID mapping | GUI file-manager acceptance; scripts workflow decision |
 | Home persistence | Existing home migrated in place; retained Firefox profile opens; root/SSH maintenance reinstall passed | Upgrade/reinstall and final package permissions |
 | Return confirmation and normal restoration | Latest non-root keyboard runtime: Escape/default Cancel retain desktop; confirmed Return restores ES, exact ACL, and removes all desktop processes/runtime | Recheck clean packaged installation |
 | Crash restoration | Whole cgroup, keyboard-only and Waybar-only SIGKILL restore ES; no app processes; ACL and orphan runtime removed | Compositor loss, interrupted setup/reboot |
@@ -365,6 +365,19 @@ speaker quality, microphone capture or route switching. Temporary launcher and
 harness files were removed, and generated audio was discarded. The text log is
 saved locally at `/tmp/rocknix-audio-check.log`. Desktop remained active and
 native account/NetworkManager/keyboard hashes still matched.
+
+### Shared data mount acceptance
+
+Live `dev` was rechecked at `39fa395a34578d2373ce20b618bfc150f3eaa892`.
+`check-shared-data.sh` launched through Apps and passed create, edit, rename,
+copy, readback and delete on Desktop, Steam, backup, games-external,
+games-internal and roms. All test files appeared as UID 62000 in the runtime.
+`check-shared-host.py` verified all six exact fixture paths, contents, regular
+file type and host UID 0 before deleting those files and their unique folders.
+No existing shared data was touched. The temporary Apps entry/harness was removed.
+These are real filesystem operations in the normal app environment, not yet a
+complete Thunar UI acceptance run. Scripts remains intentionally unwritable in
+the current code, with its privileged-editing parity decision still outstanding.
 
 Packaging now extracts and repacks the Docker export in one root/fakeroot
 context. `tests/package-rootfs.py` exercises the real packager with a tiny export
