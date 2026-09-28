@@ -9,6 +9,11 @@ IMAGE=rocknix-xfce-rootfs:trixie-arm64
 OUTPUT="${DIST_DIR}/rocknix-xfce-rp6-arm64.tar.xz"
 TEMP_DIR=""
 CONTAINER_ID=""
+REVISION=$(git -C "$PROJECT_DIR" rev-parse HEAD)
+[ -z "$(git -C "$PROJECT_DIR" status --porcelain)" ] || {
+  printf 'Commit source changes before building a release.\n' >&2
+  exit 1
+}
 
 cleanup() {
   if [ -n "${CONTAINER_ID}" ]; then
@@ -57,11 +62,14 @@ chmod 1777 "${TEMP_DIR}/rootfs/tmp"
 cp -a "${PROJECT_DIR}/payload" "${TEMP_DIR}/payload"
 cp -a "${PROJECT_DIR}/install-device.sh" "${TEMP_DIR}/install-device.sh"
 cp -a "${PROJECT_DIR}/README.md" "${TEMP_DIR}/README.md"
+cp -a "${PROJECT_DIR}/uninstall.sh" "${TEMP_DIR}/uninstall.sh"
+cp -a "${PROJECT_DIR}/LICENSE" "${TEMP_DIR}/LICENSE"
 chmod 0755 "${TEMP_DIR}/install-device.sh"
 
-printf 'built=%s\nimage=%s\narchitecture=arm64\n' \
+printf 'built=%s\nimage=%s\narchitecture=arm64\ncommit=%s\n' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   'debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a' \
+  "$REVISION" \
   >"${TEMP_DIR}/build-info"
 
 tar --numeric-owner -cJf "${OUTPUT}" -C "${TEMP_DIR}" .

@@ -20,13 +20,13 @@ and run these commands **on the device**, with EmulationStation running.
 Requires Internet access and at least 4 GiB free on writable `/storage`.
 
 ```sh
-curl -fL https://raw.githubusercontent.com/kapdon/rocknix-xfce/v0.1.0-alpha.1/install.sh -o /storage/install-xfce.sh
+curl -fL https://raw.githubusercontent.com/kapdon/rocknix-xfce/dev/install.sh -o /storage/install-xfce.sh
 bash /storage/install-xfce.sh --check
 bash /storage/install-xfce.sh
 ```
 
 You can inspect the downloaded script before running it. The installer downloads
-the matching versioned release bundle, checks SHA-256, rejects unsupported devices
+the latest successful development bundle, checks SHA-256, rejects unsupported devices
 and existing installations, and installs only under `/storage`. Checksums detect
 corruption; they are not independent signatures. Trust the repository/release owner.
 
@@ -39,10 +39,17 @@ systemctl restart essway.service
 Then choose **Tools → Desktop Mode**. Use **Return to EmulationStation** or log out of XFCE to return. Installing
 does not launch the desktop or change the normal boot target.
 
-This is an alpha release. Uninstall and the published download/install flow were
-tested on an RP6 after removing its previous desktop installation, not on a freshly
-flashed OS. See [validation results](tests/rp6-alpha1-validation.md) for the current
-test status. The installer intentionally refuses upgrades/reinstalls in place.
+This is an unstable development channel, not a public alpha release. Every `dev`
+push builds and publishes a bundle; until that finishes, the installer selects the
+previous successful build. The rolling `development` release's `latest.json`
+selects a commit-qualified archive and checksum together. The installed
+`/storage/.local/share/rocknix-xfce/build-info` records its exact source commit.
+There are no in-place upgrades: uninstall before testing a newer build.
+
+The earlier alpha installation flow was tested on an RP6 after removing its
+previous desktop installation, not on a freshly flashed OS. See
+[validation results](tests/rp6-alpha1-validation.md). A successful automated build
+is not itself proof that every new change works on hardware.
 
 ## Controls
 
@@ -108,7 +115,7 @@ Do not delete or overwrite your existing runtime/home to retry; inspect the erro
 ## Uninstall
 
 Save your work first: this closes Desktop Mode. From a checkout containing
-`uninstall.sh`, copy it to the device and run:
+`uninstall.sh`, copy it to the device and run (or use the bundled script):
 
 ```sh
 bash uninstall.sh --check
@@ -122,8 +129,14 @@ unique `/storage/.local/share/rocknix-xfce-backup.*` recovery directory, includi
 your desktop home. It does not free that disk space or erase your games/saves.
 Refresh the frontend's game list to clear any cached Tools entry.
 
-The original `v0.1.0-alpha.1` tag does not contain this new script; its release
-assets are unchanged. Until a newer release includes it, use this branch's script.
+Development installations include it at
+`/storage/.local/share/rocknix-xfce/uninstall.sh`. For older installs, download it:
+
+```sh
+curl -fL https://raw.githubusercontent.com/kapdon/rocknix-xfce/dev/uninstall.sh -o /storage/uninstall-xfce.sh
+bash /storage/uninstall-xfce.sh --check
+bash /storage/uninstall-xfce.sh --yes
+```
 
 ## Build and contribute
 

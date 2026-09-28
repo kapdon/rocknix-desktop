@@ -66,6 +66,12 @@ device to the support table without testing on that physical hardware.
 
 ## Releases
 
+During bootstrap, pushes to `dev` automatically publish the rolling `development`
+channel. Its tag is a channel anchor, not the latest source revision; `latest.json`
+and the bundle's `build-info` identify the source commit. Commit-qualified bundle
+assets are immutable; only the latest pointer and release notes change. This is
+an explicit exception to the versioned-release policy below.
+
 Build from a clean, tested commit. Publish versioned prereleases until fresh-device
 installation and lifecycle tests pass. Upload the runtime archive and checksum to
 the matching tag. Keep `install.sh`'s version and README URL synchronized. Do not

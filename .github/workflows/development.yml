@@ -1,0 +1,24 @@
+name: Development bundle
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: development-bundle
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check source
+        run: bash tests/check.sh
+      - name: Build ARM64 runtime
+        run: bash build-rootfs.sh
+      - name: Publish rolling bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/publish-development.sh

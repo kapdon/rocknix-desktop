@@ -38,7 +38,8 @@ fi
 if bash install.sh --invalid >/dev/null 2>&1; then
   printf 'FAIL: unknown argument accepted\n' >&2; exit 1
 fi
-grep -q "$VERSION/install.sh" README.md
+grep -q 'dev/install.sh' README.md
+test "$VERSION" = development
 grep -q 'button: LeftStick' payload/input/desktop.yaml
 grep -q '/commands/custom/XF86Tools' rootfs-overlay/usr/local/bin/rocknix-xfce-first-run
 printf 'PASS: syntax, checksum rejection, CLI and release consistency checks\n'

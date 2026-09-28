@@ -48,6 +48,8 @@ cp -a "${SELF_DIR}/payload/bin/." "${BASE}/bin/"
 cp -a "${SELF_DIR}/payload/input/." "${BASE}/input/"
 cp -a "${SELF_DIR}/payload/integration/." "${BASE}/integration/"
 cp -a "${SELF_DIR}/README.md" "${BASE}/README.md"
+cp -a "${SELF_DIR}/uninstall.sh" "${BASE}/uninstall.sh"
+cp -a "${SELF_DIR}/build-info" "${BASE}/build-info"
 
 chmod 0755 "${BASE}/bin/"* "${BASE}/integration/"*
 chmod 0644 "${BASE}/input/"*
