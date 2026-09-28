@@ -1,0 +1,73 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+BASE=/storage/.local/share/rocknix-xfce
+ROOTFS="${BASE}/rootfs"
+MODEL=$(tr -d '\000' </proc/device-tree/model 2>/dev/null || true)
+
+fail() {
+  printf 'Desktop Mode preflight failed: %s\n' "$*" >&2
+  exit 1
+}
+
+discover_sway_environment() {
+  local candidate
+
+  export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run/0-runtime-dir}"
+
+  if [ -z "${SWAYSOCK:-}" ] || [ ! -S "${SWAYSOCK}" ]; then
+    unset SWAYSOCK
+    for candidate in "${XDG_RUNTIME_DIR}"/sway-ipc.*.sock; do
+      if [ -S "${candidate}" ]; then
+        export SWAYSOCK="${candidate}"
+        break
+      fi
+    done
+  fi
+
+  if [ -z "${WAYLAND_DISPLAY:-}" ] || [ ! -S "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ]; then
+    unset WAYLAND_DISPLAY
+    for candidate in "${XDG_RUNTIME_DIR}"/wayland-*; do
+      if [ -S "${candidate}" ]; then
+        export WAYLAND_DISPLAY="${candidate##*/}"
+        break
+      fi
+    done
+  fi
+
+  [ -n "${SWAYSOCK:-}" ] || fail "cannot find the active Sway IPC socket"
+  [ -n "${WAYLAND_DISPLAY:-}" ] || fail "cannot find the active Wayland display"
+}
+
+[ "$(id -u)" = 0 ] || fail "must run as root"
+[ "$(uname -m)" = aarch64 ] || fail "expected aarch64, found $(uname -m)"
+[ "${MODEL}" = "Retroid Pocket 6" ] || fail "unsupported device: ${MODEL:-unknown}"
+[ -f "${ROOTFS}/etc/rocknix-xfce-release" ] || fail "runtime marker is missing"
+grep -q '^RUNTIME_ARCH=aarch64$' "${ROOTFS}/etc/rocknix-xfce-release" || fail "runtime architecture marker is invalid"
+[ -x "${ROOTFS}/usr/bin/xfce4-session" ] || fail "xfce4-session is missing"
+[ -x "${ROOTFS}/usr/bin/xfwm4" ] || fail "xfwm4 is missing"
+[ -x "${ROOTFS}/usr/bin/xfce4-panel" ] || fail "xfce4-panel is missing"
+[ -x "${ROOTFS}/usr/bin/Xwayland" ] || fail "runtime Xwayland is missing"
+[ -x "${ROOTFS}/usr/bin/Xorg" ] || fail "runtime Xorg is missing"
+[ -f "${ROOTFS}/etc/X11/rocknix-xfce.conf" ] || fail "Xorg configuration is missing"
+[ -e /dev/dri/card0 ] || fail "DRM display device is missing"
+if [ -f "${BASE}/graphics-mode" ]; then
+  case "$(<"${BASE}/graphics-mode")" in
+    xorg|shm) ;;
+    *) fail "graphics-mode must contain xorg or shm" ;;
+  esac
+fi
+[ -x /usr/bin/swaymsg ] || fail "host swaymsg is missing"
+[ -x /usr/bin/inputplumber ] || fail "host InputPlumber is missing"
+[ -f "${BASE}/input/desktop.yaml" ] || fail "desktop input profile is missing"
+[ -x /usr/bin/unshare ] || fail "host unshare is missing"
+[ -x /usr/sbin/chroot ] || fail "host chroot is missing"
+systemctl is-active --quiet sway.service || fail "sway.service is not active"
+discover_sway_environment
+swaymsg -t get_outputs >/dev/null 2>&1 || fail "cannot query the active Sway display"
+[ ! -S /tmp/.X11-unix/X1 ] || fail "X display :1 is already in use"
+[ ! -e /tmp/.X1-lock ] || fail "X display :1 has a stale or active lock"
+/usr/sbin/chroot "${ROOTFS}" /bin/sh -c 'test "$(uname -m)" = aarch64' || fail "runtime binaries cannot execute"
+
+printf 'Desktop Mode preflight passed.\n'
