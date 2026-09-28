@@ -58,6 +58,7 @@ if grep -q '^systemctl start sway.service$' payload/bin/restore-emulationstation
   printf 'FAIL: synchronous Sway recovery can deadlock in ExecStopPost\n' >&2; exit 1
 fi
 grep -q '^TimeoutStopSec=45$' payload/systemd/xfce-desktop.service
+grep -q '^SuccessExitStatus=143$' payload/systemd/xfce-desktop.service
 grep -q 'rm -f -- "${CONTROL_FIFO}"' payload/bin/launch-sway-desktop
 grep -q '/usr/share/applications/firefox-esr.desktop' Dockerfile.rootfs
 grep -q '/usr/share/applications/foot-server.desktop' Dockerfile.rootfs
