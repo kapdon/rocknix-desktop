@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=ROCKNIX
+Comment=Controller-friendly ROCKNIX desktop theme
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=ROCKNIX
+IconTheme=Adwaita
+CursorTheme=Adwaita
+MetacityTheme=Adwaita
