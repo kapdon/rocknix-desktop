@@ -52,7 +52,7 @@ account database, keyboard binary or package installation is changed.
 | Shared data read/write | All six actual shared mounts passed non-root create/edit/rename/copy/delete and host UID mapping | GUI file-manager acceptance; scripts workflow decision |
 | Home persistence | Existing home migrated in place; retained Firefox profile opens; root/SSH maintenance reinstall passed | Upgrade/reinstall and final package permissions |
 | Return confirmation and normal restoration | Latest non-root keyboard runtime: Escape/default Cancel retain desktop; confirmed Return restores ES, exact ACL, and removes all desktop processes/runtime | Recheck clean packaged installation |
-| Crash restoration | Whole cgroup, keyboard-only and Waybar-only SIGKILL restore ES; no app processes; ACL and orphan runtime removed | Compositor loss, interrupted setup/reboot |
+| Crash restoration | Whole cgroup, keyboard, Waybar and compositor SIGKILL recovery passed; early-setup journal cleanup and real reboot passed | Final physical acceptance; abrupt power loss is not tested |
 | Build/install/uninstall/provenance | Offline tests pass; clean 8b7e9a0 bundle built, installed after uninstall, and launched; home inode preserved; native-file hashes unchanged | Final revised package acceptance; GitHub release flow remains untested for this branch |
 
 ## RP6 observations, 2026-09-28
@@ -406,6 +406,27 @@ PID 2515 and reopened the non-root panel and keyboard.
 This is now a clean installed package, not the older manually patched runtime.
 Media, narrow-output, controller and other acceptance rows still need their
 remaining checks; package installation alone does not establish full parity.
+
+### Reboot and compositor-loss recovery on clean package
+
+Rebooted the idle Desktop with `systemctl reboot`. Boot ID changed from
+`5fc6c9d5-4d5f-4da1-ad16-42ed78b2766a` to
+`a62a86fa-7b0a-45d4-899d-501fd0d9d90d`. Gaming/Sway returned active and Desktop
+was inactive, as intended. No bubblewrap/network runtime directories or UID
+62000 display/decoder ACL grants remained. Home inode 6291460, ownership and
+native account/NetworkManager/keyboard hashes matched their pre-reboot values.
+Tools artwork/entry survived and launched Desktop; confirmed Return then
+recovered Gaming in 2.97 seconds and reopened Desktop. Screenshots:
+`/tmp/fresh-reboot-gaming.png`, `/tmp/fresh-reboot-tools.png`.
+
+Extended `check-failure-recovery.py` with a compositor case. It verified the
+native `Restart=always` policy and SIGKILLed only Sway main PID 2643. Gaming
+recovered automatically in 26.06 seconds with Sway PID 7857; no desktop-user
+processes or runtime remained, and display/decoder ACLs matched their original
+values. Desktop then reopened with its non-root panel and keyboard. This was a
+real compositor crash, not merely restarting Desktop. Its recovery is slower
+than panel-only failure. Neither this test nor orderly reboot proves abrupt
+power-loss durability.
 
 Packaging now extracts and repacks the Docker export in one root/fakeroot
 context. `tests/package-rootfs.py` exercises the real packager with a tiny export

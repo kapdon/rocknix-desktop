@@ -13,7 +13,7 @@ import subprocess
 import time
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('component', choices=['wvkbd-rocknix', 'waybar', 'return-ui'])
+parser.add_argument('component', choices=['wvkbd-rocknix', 'waybar', 'return-ui', 'sway'])
 args = parser.parse_args()
 
 def output(*command):
@@ -48,12 +48,16 @@ for process in Path('/proc').iterdir():
     except (FileNotFoundError, ProcessLookupError):
         pass
 pid = None
-if args.component != 'return-ui':
+if args.component not in ('return-ui', 'sway'):
     targets = [pid for pid, name in desktop_processes() if name == args.component]
     assert len(targets) == 1, targets
     pid = targets[0]
     assert 'xfce-desktop.service' in Path(f'/proc/{pid}/cgroup').read_text()
 sway = output('systemctl', 'show', 'sway.service', '-p', 'MainPID', '--value')
+if args.component == 'sway':
+    assert output('systemctl', 'show', 'sway.service', '-p', 'Restart', '--value') == 'always'
+    pid = int(sway)
+    assert pid > 1
 record = json.loads(Path('/run/rocknix-bwrap-state/socket.json').read_text())
 started = time.monotonic()
 if args.component == 'return-ui':
@@ -71,7 +75,11 @@ while time.monotonic() < deadline:
 else:
     raise RuntimeError('Desktop component failure did not fully restore Gaming within 50s')
 assert active('sway.service')
-assert output('systemctl', 'show', 'sway.service', '-p', 'MainPID', '--value') == sway
+current_sway = output('systemctl', 'show', 'sway.service', '-p', 'MainPID', '--value')
+if args.component == 'sway':
+    assert current_sway != sway and int(current_sway) > 1
+else:
+    assert current_sway == sway
 assert not Path('/run/rocknix-bwrap-state').exists()
 assert not Path(record['work']).exists()
 assert not Path('/run/rocknix-network').exists()
@@ -87,7 +95,8 @@ for grant in record.get('devices', []):
     assert actual == grant['acl'], (actual, grant['acl'])
 print(json.dumps({'component': args.component, 'killed_pid': pid,
                   'gaming_recovered_seconds': round(time.monotonic() - started, 2),
-                  'sway_pid_unchanged': sway, 'apps_remaining': desktop_processes(),
+                  'previous_sway_pid': sway, 'current_sway_pid': current_sway,
+                  'apps_remaining': desktop_processes(),
                   'acl_restored': True, 'runtime_removed': True,
                   'network_pids_reaped': network_pids}), flush=True)
 if subprocess.run(['systemctl', 'is-failed', '--quiet', 'xfce-desktop.service']).returncode == 0:
