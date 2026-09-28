@@ -5,7 +5,10 @@ compositor with native Wayland applications in a Debian 13 ARM64 runtime.
 
 ## Support
 
-Only **Retroid Pocket 6**, tested on ROCKNIX nightly 20260927 (SM8550).
+| Device | ROCKNIX version | Tested |
+| --- | --- | --- |
+| Retroid Pocket 6 | Nightly 20260927 (SM8550) | ✅ |
+
 Sway migration checks passed on the RP6. Rockchip compatibility is not implied
 by ARM64 support; graphics, orientation, input and media need physical testing.
 `dev` is the Sway development channel. The previous XFCE development tip is
@@ -17,18 +20,23 @@ Back up saves/settings. On the RP6, as root, with EmulationStation running,
 Internet access and 4 GiB free on `/storage`:
 
 ```sh
-curl -fL https://raw.githubusercontent.com/kapdon/rocknix-desktop/v0.2.0-alpha.1/install.sh -o /storage/install-desktop.sh
+curl -fL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh -o /storage/install-desktop.sh
 bash /storage/install-desktop.sh --release v0.2.0-alpha.1 --check
 bash /storage/install-desktop.sh --release v0.2.0-alpha.1
 ```
 
 Inspect scripts before execution. [Sway alpha v0.2.0-alpha.1](https://github.com/kapdon/rocknix-desktop/releases/tag/v0.2.0-alpha.1)
-pins both installer source and bundle selection. Existing installations are
-refused: back up, exit Desktop Mode, and use the installed home-preserving
-`uninstall.sh --check` then `--yes` before reinstalling, or use the local-bundle
-upgrade procedure below. Do not delete your home to bypass this check.
+pins the package selection; the installer comes from the maintained `dev` branch.
+The original installer at `v0.2.0-alpha.1/install.sh` predates interactive updates.
 
-For development builds, download `dev/install.sh` instead and omit `--release`.
+The updated installer shows installed and available revisions and asks once to
+install or update. Matching revisions report already up to date. Updates preserve
+home/settings and retain a recovery copy; exit Desktop Mode first. `--yes` confirms
+non-interactively; `--check` only checks the device without downloading or updating.
+Uninstall remains separate: run the installed `uninstall.sh --check`, then `--yes`.
+Never delete your home to bypass a safety check.
+
+For development builds, use the same installer and omit `--release`.
 The rolling `development` release uses
 `latest.json` to select a commit-qualified archive and checksum together.
 Checksums establish integrity, not independent trust. Until a build completes,
@@ -109,7 +117,7 @@ Recognized Return, keyboard and About shortcuts refresh with sibling
 `*.before-refresh.*` backups. Personal collisions and links remain untouched.
 Saved XFCE panel settings do not configure Waybar. Controller defaults are replaced
 with the payload. Applications may migrate settings; back up before downgrading.
-Automatic power-loss recovery and remote-download upgrades are not implemented.
+Automatic power-loss recovery is not implemented.
 Never erase `.upgrade-in-progress` blindly; see [upgrade design](docs/upgrades.md).
 
 ## Architecture and graphics
