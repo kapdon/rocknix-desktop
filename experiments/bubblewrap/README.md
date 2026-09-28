@@ -43,9 +43,9 @@ account database, keyboard binary or package installation is changed.
 | Apps favorites/search and keyboard-visible sizing | RP6 Apps launches; screenshot shows unclipped search with keyboard | Narrow logical outputs, long labels on final code |
 | Confirm/back, West/North fields, Select cycle, R3 close | Injected RP6 InputPlumber key events cycle/close/dismiss correctly | Physical-controller user acceptance; West/North recheck |
 | Keyboard Simple/symbols, panel and L3 toggle | wvkbd verified host UID 62000; both toggles exercised | Typing/layers after final migration, crash handling |
-| Firefox | Retained profile, HTTPS rendering, seccomp content/RDD processes, local H.264 playback and PiP verified on RP6 | Hardware video decode, broader streaming/media flow |
+| Firefox | Retained profile, HTTPS rendering, seccomp content/RDD, real V4L2 H.264 frame output and PiP verified on RP6 | Broader streaming/media flow; final package |
 | Vesktop without disabling sandbox | Actual Apps launch reaches Discord login; renderer seccomp=2 and distinct user/PID namespaces | Voice, screen sharing are not established by login screen |
-| GPU | Real-session glmark2 uses freedreno FD740; non-root FFmpeg decodes 30 H.264 frames with Iris; Wayland vkcube completes 1200 frames on Turnip Adreno 740 | Firefox decoder selection and full media flow |
+| GPU | Real-session glmark2 uses freedreno FD740; non-root FFmpeg and Firefox use Iris; Wayland vkcube completes 1200 frames on Turnip Adreno 740 | Full media flow; final package |
 | Audio/status/battery/clock | Pulse connection, pavucontrol window, Wi-Fi/battery/clock rendered | Playback/microphone/device switching |
 | Network editing | Settings and Apps use isolated editor/proxy; real inactive-profile rename/save/delete, proxy-only failure, singleton, R3 and normal/crash cleanup passed | Final package; physical-controller acceptance |
 | Floating utilities and PiP | Audio utility floats; real Firefox PiP floats, shrinks above keyboard, and R3 closes only PiP | Recheck packaged runtime and narrow output |
@@ -321,6 +321,32 @@ PID 2515. Desktop reopened and native hashes matched. Full offline suite passed.
 An older abandoned runtime `rocknix-bwrap-aav1g7eh` was separately identified;
 its rootfs/home were empty and no live process mount namespace referenced it.
 It was removed, not kept as a recovery copy. Reboot recovery remains unverified.
+
+### Firefox hardware decoder verified on the bubblewrap runtime
+
+Deployed final 4ae77a1 mountpoint guards; confirmed Return restored Gaming in
+2.19 seconds with exact ACL/runtime cleanup and unchanged Sway PID 2515, then
+reopened the non-root panel/keyboard. Firefox was launched through a temporary
+Apps entry using the normal wrapper/profile and existing local H.264 fixture.
+Only diagnostic environment variables were added, using Mozilla's
+[Gecko logging mechanism](https://firefox-source-docs.mozilla.org/xpcom/logging.html):
+`MOZ_LOG=PlatformDecoderModule:5,FFmpegVideo:5` and a user-cache log destination.
+No decoding preferences or sandbox settings were changed.
+
+`check-firefox-decoder.py` passed during playback: RDD host PID 551037, UID 62000,
+zero effective capabilities, no-new-privileges and seccomp mode 2. Its mapped
+codec was `/opt/ffmpeg-rpi-7.1.5/lib/libavcodec.so.61`, and its open decoder fd
+pointed to `/dev/video0` (`qcom-iris-decoder`). Logs explicitly selected
+`h264_v4l2m2m`, reported successful V4L2 initialization and 1160 hardware frame
+outputs through PTS 38533333 microseconds. VA-API discovery failed but V4L2
+succeeded; this is not software fallback. The test checks actual frame output,
+not just advertised codec support. The fixture also visibly advanced.
+
+Logs saved locally in `/tmp/rocknix-firefox-decoder-evidence/`; screenshots
+`/tmp/fresh-decoder-start.png` and `/tmp/fresh-decoder-playing.png` show playback.
+R3 closed Firefox and the temporary Apps entry was removed. Existing profiles
+and media were retained. This proves local H.264 decode, not streaming-service,
+DRM-content, audio-output or final clean-package acceptance.
 
 Packaging now extracts and repacks the Docker export in one root/fakeroot
 context. `tests/package-rootfs.py` exercises the real packager with a tiny export
