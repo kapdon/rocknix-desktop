@@ -26,6 +26,27 @@ COPY experiments/ffmpeg/build.sh /usr/local/bin/build-firefox-ffmpeg
 RUN chmod 0755 /usr/local/bin/build-firefox-ffmpeg \
     && /usr/local/bin/build-firefox-ffmpeg
 
+FROM --platform=$BUILDPLATFORM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS keyboard-builder
+ARG TARGETARCH
+RUN test "${TARGETARCH}" = "arm64" \
+    && dpkg --add-architecture arm64 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends build-essential gcc-aarch64-linux-gnu \
+       libc6-dev-arm64-cross libwayland-dev:arm64 libxkbcommon-dev:arm64 \
+       libpango1.0-dev:arm64 libwayland-bin pkg-config python3 patch ca-certificates
+ADD --checksum=sha256:e3f82302367cdacf7a0c59d6d1bb4f5140083da1b3083da7c835dab0c250034c \
+    https://github.com/jjsullivan5196/wvkbd/archive/refs/tags/v0.17.tar.gz /tmp/wvkbd.tar.gz
+COPY experiments/wvkbd/ /tmp/wvkbd-custom/
+RUN mkdir /tmp/wvkbd \
+    && tar -xzf /tmp/wvkbd.tar.gz --strip-components=1 -C /tmp/wvkbd \
+    && cd /tmp/wvkbd \
+    && patch -p1 < /tmp/wvkbd-custom/002-output.patch \
+    && patch -p1 < /tmp/wvkbd-custom/003-no-popup.patch \
+    && python3 /tmp/wvkbd-custom/customize.py /tmp/wvkbd \
+    && PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig \
+       make -j4 CC=aarch64-linux-gnu-gcc wvkbd-mobintl \
+    && aarch64-linux-gnu-strip wvkbd-mobintl
+
 FROM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 
 ARG TARGETARCH
@@ -92,6 +113,10 @@ RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
     && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-xfce-packages.tsv
 
 COPY rootfs-overlay/ /
+COPY --from=keyboard-builder /tmp/wvkbd/wvkbd-mobintl /usr/local/bin/wvkbd-rocknix
+COPY --from=keyboard-builder /tmp/wvkbd/LICENSE /usr/local/share/wvkbd/LICENSE
+COPY --from=keyboard-builder /tmp/wvkbd.tar.gz /usr/local/share/wvkbd/source.tar.gz
+COPY experiments/wvkbd/ /usr/local/share/wvkbd/custom/
 COPY --from=ffmpeg-rpi-builder /opt/ffmpeg-rpi-7.1.5/ /opt/ffmpeg-rpi-7.1.5/
 # Distribute the exact source (including the RPi patch) and build/adjustment
 # script beside our privately rebuilt LGPL libraries, not only an upstream URL.

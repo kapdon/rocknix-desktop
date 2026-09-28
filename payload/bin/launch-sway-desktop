@@ -342,15 +342,17 @@ rm -f -- "${CONTROL_FIFO}" "${HOST_CONTROL_FIFO}" "${RUNTIME_DIR}/keyboard-visib
 mkfifo -m 0600 "${CONTROL_FIFO}"
 mkfifo -m 0600 "${HOST_CONTROL_FIFO}"
 
-# Four-row typing first; retain symbols, navigation and the full terminal layout.
-# ROCKNIX replaces upstream "simple" with five rows; "landscape" has four.
-# Set both orientations explicitly so landscape cannot select another default.
-/usr/bin/wvkbd-mobintl \
+# Desktop-owned upstream Simple plus a four-row symbols page. The host keyboard
+# stays untouched; its service/settings are restored by the existing cleanup.
+/usr/sbin/chroot "${ROOTFS}" /usr/bin/env -i \
+  HOME=/home/rocknix LANG=C.UTF-8 \
+  XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+  /usr/local/bin/wvkbd-rocknix \
   -H "${KEYBOARD_HEIGHT}" -L "${KEYBOARD_HEIGHT}" \
-  -fg 6b6b75 -fg-sp 6b6b75 -bg 1d1d1d \
-  --text ffffff --text-sp ffffff -press 000000 --press-sp 000000 \
-  -fn "${KEYBOARD_FONT_SIZE}" -l landscape,special,nav,full \
-  --landscape-layers landscape,special,nav,full \
+  -fg 222222 -fg-sp 111111 -bg 000000 -R 0 \
+  --text ffffff --text-sp ffffff -press 444444 --press-sp 444444 \
+  -fn "Roboto ${KEYBOARD_FONT_SIZE}" -l simple,special \
+  --landscape-layers simple,special \
   --hidden --output "${OUTPUT_NAME}" >>"${LOG}" 2>&1 &
 WVKBD_PID=$!
 printf '%s\n' "${WVKBD_PID}" >"${RUNTIME_DIR}/wvkbd.pid"

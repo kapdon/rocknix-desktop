@@ -3,3 +3,5 @@
 !rootfs-overlay
 !rootfs-overlay/**
 !experiments/ffmpeg/build.sh
+!experiments/wvkbd
+!experiments/wvkbd/**

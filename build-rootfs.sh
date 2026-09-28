@@ -75,6 +75,7 @@ for required in \
   usr/bin/fuzzel \
   usr/bin/glmark2-wayland \
   usr/bin/waybar \
+  usr/local/bin/wvkbd-rocknix \
   usr/local/bin/rocknix-launcher \
   usr/local/bin/rocknix-status \
   usr/local/bin/rocknix-window-switcher \
