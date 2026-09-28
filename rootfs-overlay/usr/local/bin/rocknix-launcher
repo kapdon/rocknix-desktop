@@ -77,7 +77,6 @@ fi
 fuzzel_args=(
   fuzzel
   --config=/etc/xdg/fuzzel/fuzzel.ini
-  --cache="${cache}"
   --font="Roboto:size=${font_size}"
   --width="${menu_width}"
   --horizontal-pad="${horizontal_pad}"
@@ -95,14 +94,14 @@ fi
 
 case "${mode}" in
   apps)
-    exec "${fuzzel_args[@]}" --lines="${line_count}"
+    exec "${fuzzel_args[@]}" --cache="${cache}" --lines="${line_count}"
     ;;
   confirm-return)
     # Unsorted dmenu input keeps the safe action selected on every opening.
     printf '%s\n' \
       'Cancel — stay in Desktop Mode' \
       'Return to Gaming — close desktop apps' |
-      "${fuzzel_args[@]}" --dmenu --no-sort --lines=2 \
+      "${fuzzel_args[@]}" --cache=/dev/null --dmenu --no-sort --lines=2 \
         --prompt='RETURN?  ' --placeholder='Save your work before leaving'
     ;;
   settings)
@@ -112,6 +111,7 @@ case "${mode}" in
         'Network settings' \
         'Toggle tabbed / split layout' |
         "${fuzzel_args[@]}" \
+          --cache=/dev/null \
           --dmenu \
           --lines=3 \
           --prompt='SETTINGS  ' \
