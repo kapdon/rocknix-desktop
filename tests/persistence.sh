@@ -60,3 +60,16 @@ refresh_home_integration "$scratch/defaults" "$personal"
 test "$(cat "$personal/document")" = 'personal file'
 test -L "$personal/Desktop/rocknix-return.desktop"
 printf 'PASS: managed refresh, backup, idempotency and personal collisions\n'
+
+# An XFCE home keeps its settings while its recognized keyboard launcher moves
+# to the Wayland toggle. Custom shortcuts must still win.
+printf '[Desktop Entry]\nExec=onboard\n' >"$personal/Desktop/rocknix-onboard.desktop"
+refresh_home_integration "$scratch/defaults" "$personal"
+cmp "$scratch/defaults/Desktop/rocknix-keyboard.desktop" "$personal/Desktop/rocknix-onboard.desktop"
+backups=("$personal/Desktop/rocknix-onboard.desktop.before-refresh."*)
+test "${#backups[@]}" = 1
+grep -Fxq 'Exec=onboard' "${backups[0]}"
+printf 'my keyboard shortcut\n' >"$personal/Desktop/rocknix-onboard.desktop"
+refresh_home_integration "$scratch/defaults" "$personal"
+test "$(cat "$personal/Desktop/rocknix-onboard.desktop")" = 'my keyboard shortcut'
+printf 'PASS: XFCE keyboard migration backs up defaults and preserves custom shortcuts\n'
