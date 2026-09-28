@@ -48,6 +48,17 @@ print('[{"success":true}]')
         return [json.loads(line)[-1] for line in log.read_text().splitlines()] if log.exists() else []
 
     pip = window(7)
+    # Startup must not send a layout command to a surviving floating window
+    # when the containing workspace is already tabbed (real RP6 regression).
+    startup = Path('payload/bin/launch-sway-desktop').read_text()
+    layout_block = startup.split('if ! swaymsg -r -t get_tree', 1)[1].split('\nfi', 1)[0]
+    layout_block = 'set -e; DESKTOP_WORKSPACE=98:Desktop; if ! swaymsg -r -t get_tree' + layout_block + '\nfi'
+    already_tabbed = workspace(floating=[dict(window(6), type='floating_con', focused=True)])
+    already_tabbed['layout'] = 'tabbed'
+    assert run(already_tabbed, layout_block) == []
+    empty = workspace()
+    empty['layout'] = 'splith'
+    assert run(empty, layout_block) == ['layout tabbed']
     utility = window(8, 'org.pulseaudio.pavucontrol', 'Volume Control')
     main = window(9, title='Picture-in-Picture — Mozilla Firefox', focused=True)
     commands = run(workspace([pip, utility, main]), 'source "$1"; policy_tick; policy_tick')

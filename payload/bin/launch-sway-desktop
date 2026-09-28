@@ -368,7 +368,13 @@ swaymsg -- "bindsym --no-repeat F15 exec env SWAYSOCK=${SWAYSOCK} XDG_RUNTIME_DI
 # service is interrupted below, ExecStopPost will still reload the host config.
 touch "${SWAY_STYLE_MARKER}"
 swaymsg -- "workspace ${DESKTOP_WORKSPACE}" >/dev/null
-swaymsg 'layout tabbed' >/dev/null
+# A surviving floating utility can receive focus on workspace entry. Layout
+# commands target that focused view, and Sway rejects them for floating views.
+# Do not reapply a layout the workspace already has.
+if ! swaymsg -r -t get_tree | jq -e --arg name "${DESKTOP_WORKSPACE}" \
+  'any(.. | objects; .type? == "workspace" and .name? == $name and .layout? == "tabbed")' >/dev/null; then
+  swaymsg 'layout tabbed' >/dev/null
+fi
 
 # Art Book Next uses a #444 selection band over #111 fields. Apply that same
 # hierarchy to Sway's tab strip, then reload the device config during cleanup.
