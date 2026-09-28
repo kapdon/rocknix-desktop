@@ -24,7 +24,8 @@ def command(root, policy, requested):
     for cap in CAPS:
         args += ['--cap-add', 'CAP_' + cap]
     args += ['--bind', str(root), '/', '--proc', '/proc', '--dev', '/dev',
-             '--tmpfs', '/run', '--tmpfs', '/tmp', '--tmpfs', '/home',
+             '--tmpfs', '/run', '--tmpfs', '/tmp', '--chmod', '1777', '/tmp',
+             '--tmpfs', '/home',
              '--tmpfs', '/root', '--tmpfs', '/storage', '--tmpfs', '/sys',
              '--ro-bind', '/etc/resolv.conf', '/etc/resolv.conf',
              '--ro-bind', str(policy), '/usr/sbin/policy-rc.d',

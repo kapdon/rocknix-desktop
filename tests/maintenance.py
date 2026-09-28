@@ -18,5 +18,7 @@ assert '/run/dbus/system_bus_socket' not in args and '/storage/roms' not in args
 for directory in ('/run', '/tmp', '/home', '/root', '/storage', '/sys'):
     assert any(args[i:i+2] == ['--tmpfs', directory] for i in range(len(args)))
 assert '--dev' in args and '--dev-bind' not in args
+tmp_index = args.index('/tmp')
+assert args[tmp_index + 1:tmp_index + 4] == ['--chmod', '1777', '/tmp']
 assert '/usr/sbin/policy-rc.d' in args
 print('PASS: maintenance private filesystem and capability contracts')

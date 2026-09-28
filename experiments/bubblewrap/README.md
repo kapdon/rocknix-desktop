@@ -194,6 +194,14 @@ RP6 test: refused while Desktop was active; after returning to Gaming,
 This proves a small real Debian package operation, not every package maintainer
 script. Generic package installation still requires normal administrator judgment.
 
+The clean 8b7e9a0 image exposed a missing test: `apt-get update` failed because
+the maintenance tmpfs `/tmp` was 0755 and APT's verification user could not
+create its temporary signature file. The helper now explicitly sets that private
+directory to 1777. After deploying this fix, HTTPS index refresh and installation
+of xdg-dbus-proxy succeeded with signature/checksum verification enabled.
+The installed device is consequently 8b7e9a0 plus this maintenance fix and the
+Debian-only proxy dependency, not an untouched clean artifact anymore.
+
 ### Network authorization investigation
 
 On the RP6, `/etc/NetworkManager/NetworkManager.conf` already sets
@@ -216,10 +224,28 @@ A disposable systemd DynamicUser service started successfully, but libc
 despite `passwd: files systemd` in nsswitch.conf. Both transient probe services
 were stopped. Thus DynamicUser alone is not a verified solution on this firmware.
 Do not expose the whole host bus or run the editor as root to bypass this failure.
-Remaining options need evaluation: a narrow non-root network-editor runtime
-using a host-resolvable identity, or a typed network broker. Neither is implemented
-or approved as a parity claim. The current desktop and host account files remain
-unchanged by these probes; temporary probe directories are removed automatically.
+The mixed-identity variant (proxy 65534, client 62000) also failed authentication.
+That is consistent with the upstream proxy's documented forwarding of client
+authentication data and proxy credentials:
+[xdg-dbus-proxy source](https://raw.githubusercontent.com/flatpak/xdg-dbus-proxy/main/flatpak-proxy.c).
+
+`check-network-editor.py` now proves a bounded **prototype**, not launcher
+integration: separate editor/proxy as existing UID 65534, read-only Debian root,
+private home/runtime/session bus, and only the filtered NetworkManager bus.
+The supervisor passes a single pre-connected Wayland fd, so it adds no socket
+ACL grant for nobody and mounts neither the host Wayland socket nor Sway IPC.
+The editor has no ROM/shared-data mounts or device nodes beyond private /dev.
+This is not an isolation boundary against other host processes using the same
+nobody identity; the main desktop remains UID 62000.
+
+RP6 prototype editor PID 507695 showed the existing Wi-Fi profile, floated at
+1200x800, and exited normally on injected F15/R3. UID/GID 65534, CapEff=0,
+CapBnd=0, NoNewPrivs=1 were inspected from the live process. Screenshot:
+`/tmp/fresh-bwrap-network-editor.png`. Host account, NetworkManager configuration,
+and native keyboard hashes remained unchanged. No connection was changed.
+Proxy and private mounts were cleaned afterwards. Pending: production lifecycle
+integration, dependency packaging, fixed Settings request, inactive-profile
+save/delete tests, and failure/exit cleanup. This is still a parity gap.
 
 Packaging now extracts and repacks the Docker export in one root/fakeroot
 context. `tests/package-rootfs.py` exercises the real packager with a tiny export
