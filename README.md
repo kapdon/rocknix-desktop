@@ -19,13 +19,12 @@ Back up saves/settings. On the RP6, as root, with EmulationStation running,
 Internet access and 4 GiB free on `/storage`:
 
 ```sh
-curl -fL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh -o /storage/install-desktop.sh
-bash /storage/install-desktop.sh --release v0.2.0-alpha.1 --check
-bash /storage/install-desktop.sh --release v0.2.0-alpha.1
+curl -fL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh -o /storage/install-desktop.sh && bash /storage/install-desktop.sh
 ```
 
-Inspect scripts before execution. [Sway alpha v0.2.0-alpha.1](https://github.com/kapdon/rocknix-desktop/releases/tag/v0.2.0-alpha.1)
-pins the package selection; the installer comes from the maintained `dev` branch.
+This single command downloads the installer and runs it only if the download
+succeeds. It selects the latest successfully published development build and
+still asks for confirmation. To inspect first, run only the part before `&&`.
 
 The installer shows installed and available revisions and asks once to
 install or update. Matching revisions report already up to date. Updates preserve
@@ -34,7 +33,8 @@ non-interactively; `--check` only checks the device without downloading or updat
 Uninstall remains separate: run the installed `uninstall.sh --check`, then `--yes`.
 Never delete your home to bypass a safety check.
 
-For development builds, use the same installer and omit `--release`.
+For the older pinned [Sway alpha v0.2.0-alpha.1](https://github.com/kapdon/rocknix-desktop/releases/tag/v0.2.0-alpha.1),
+append `--release v0.2.0-alpha.1` to the command above.
 The rolling `development` release uses
 `latest.json` to select a commit-qualified archive and checksum together.
 Checksums establish integrity, not independent trust. Until a build completes,
