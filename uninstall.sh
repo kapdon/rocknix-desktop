@@ -11,7 +11,7 @@ archive_runtime() {
   local backup=$1 name
   mkdir "$backup/installation"
   # Only managed components move. Personal data never leaves its original path.
-  for name in rootfs bin input integration README.md uninstall.sh build-info install-info; do
+  for name in rootfs bin input integration README.md uninstall.sh upgrade.sh build-info install-info; do
     if [ -e "$BASE/$name" ] || [ -L "$BASE/$name" ]; then
       mv -- "$BASE/$name" "$backup/installation/$name"
     fi
@@ -31,6 +31,7 @@ validate() {
   [ -d "$BASE" ] || fail 'no installation found'
   [ "$(realpath "$BASE")" = "$BASE" ] || fail 'refusing a symlinked installation path'
   [ -f "$BASE/rootfs/etc/rocknix-xfce-release" ] || fail 'runtime marker is missing'
+  [ ! -e "$BASE/.upgrade-in-progress" ] || fail 'unfinished upgrade requires recovery'
   [ ! -e "$BASE/.home-retained" ] && [ ! -L "$BASE/.home-retained" ] ||
     fail 'retained-home marker exists with runtime; investigate partial installation'
   local path

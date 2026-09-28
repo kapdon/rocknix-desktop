@@ -1,9 +1,11 @@
-# Upgrade design (not implemented)
+# Upgrade design and remaining work
 
-The installer refuses existing runtimes; local changes allow reinstall using a
-home retained by the new uninstaller, pending RP6 validation. This document defines the
-safety requirements for a future explicit upgrade operation, not commands users
-can run today. Keep the existing `/storage/.local/share/rocknix-xfce` layout for
+The fresh installer refuses existing runtimes. Home-preserving reinstall passed
+local RP6 validation. `upgrade.sh` now implements explicit local-bundle upgrades,
+same-commit no-op, home backup and rollback on ordinary activation failure.
+The requirements below include remaining work: durable automatic power-loss
+recovery, managed-file edit detection and remote-download upgrade support are
+not implemented. Keep the existing `/storage/.local/share/rocknix-xfce` layout for
 compatibility; do not move personal data into the replaceable runtime.
 
 ## Ownership and detection
@@ -71,4 +73,4 @@ with documents and customized settings, then verify they survive upgrade and
 rollback, including files created after the upgrade. Test Tools launch, display,
 touch, controller, L3, audio and return to EmulationStation. Finally verify the
 GitHub download/install path with the published candidate. Until this passes,
-README must continue to say upgrades are unsupported.
+README must distinguish locally tested operations from unvalidated guarantees.

@@ -47,7 +47,7 @@ selects a commit-qualified archive and checksum together. The installed
 Open **About Desktop Mode** from the desktop or application menu to see that
 commit and build date, or run `rocknix-version` in the desktop terminal. This
 identifies the installed runtime, not whatever currently happens to be on GitHub.
-There are no in-place upgrades yet. See [Updates and user data](#updates-and-user-data)
+For local-bundle upgrades, see [Updates and user data](#updates-and-user-data)
 before replacing an installation. Home-preserving reinstall has passed local RP6
 validation but is not yet published; see [test results](tests/rp6-home-preservation-validation.md).
 
@@ -122,7 +122,7 @@ validated; reflashing or formatting storage may erase it.
 leaves `/storage/.local/share/rocknix-xfce/home/`, logs and `graphics-mode` in place.
 Reinstall reuses that same home, not a new copy. The runtime and managed
 integration files are archived separately. No personal-data purge is provided.
-An existing runtime still blocks installation: there is no in-place upgrade.
+An existing runtime still blocks the fresh installer; use the separate upgrader.
 Only recognized retained data is accepted; unknown content, symlinked retained
 directories and existing integration files stop installation safely.
 
@@ -150,10 +150,32 @@ their home-based files/settings remain. Applications can migrate their settings,
 so downgrading may cause compatibility issues even with an intact home. Keep an
 independent backup before changing versions.
 
-Planned upgrades will stage and verify a replacement runtime, preserve `home/`
-and `graphics-mode`, back up managed files, and retain a rollback option. They
-must not silently reset settings or delete user files. This is a design, **not
-an available installer flag**; see [upgrade design](docs/upgrades.md).
+### Local-bundle upgrade (experimental)
+
+Exit Desktop Mode first. Copy a trusted locally built bundle and `upgrade.sh`
+to the RP6. Supply the SHA-256 from that build, not a random downloaded script:
+
+```sh
+bash upgrade.sh --bundle /storage/rocknix-xfce-rp6-arm64.tar.xz --sha256 YOUR_64_CHARACTER_SHA256 --check
+bash upgrade.sh --bundle /storage/rocknix-xfce-rp6-arm64.tar.xz --sha256 YOUR_64_CHARACTER_SHA256 --yes
+```
+
+The upgrader holds the install/uninstall lock, verifies and stages the bundle,
+shows old/new commits, and treats the same commit as a no-op. `--check` leaves
+the installed desktop unchanged but retains staging files. `--yes` backs up home,
+replaces managed components and restores old components on ordinary activation
+failure. Home, logs and graphics preference remain in place. Custom edits and
+extra runtime packages are retained in the old runtime, not merged into the new
+one. Installing a different commit is explicit; commit hashes do not indicate
+whether it is newer or older.
+
+Recovery data is retained at `/storage/.local/share/rocknix-xfce-upgrade.*`:
+`old/` contains previous managed components, `home-before.tar` is a separate
+backup, and `state` records the outcome. Rollback never restores an old home over
+current user files. No automatic deletion of recovery data occurs. An interrupted
+upgrade can leave `BASE/.upgrade-in-progress`; stop and inspect its recovery path,
+do not delete the marker and retry blindly. Automatic power-loss recovery and
+GitHub-download upgrades are not implemented. See [upgrade design](docs/upgrades.md).
 
 ## Architecture and limitations
 

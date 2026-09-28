@@ -64,6 +64,7 @@ cp -a "${PROJECT_DIR}/install-device.sh" "${TEMP_DIR}/install-device.sh"
 cp -a "${PROJECT_DIR}/install.sh" "${TEMP_DIR}/install.sh"
 cp -a "${PROJECT_DIR}/README.md" "${TEMP_DIR}/README.md"
 cp -a "${PROJECT_DIR}/uninstall.sh" "${TEMP_DIR}/uninstall.sh"
+cp -a "${PROJECT_DIR}/upgrade.sh" "${TEMP_DIR}/upgrade.sh"
 cp -a "${PROJECT_DIR}/LICENSE" "${TEMP_DIR}/LICENSE"
 chmod 0755 "${TEMP_DIR}/install-device.sh"
 
