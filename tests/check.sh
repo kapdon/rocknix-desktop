@@ -83,4 +83,5 @@ printf 'PASS: syntax, checksum rejection, lifecycle, shell and release checks\n'
 grep -q 'dev/install.sh' README.md
 bash tests/persistence.sh
 bash tests/upgrade.sh
+bash tests/release-selection.sh
 python3 tests/session-lifecycle.py

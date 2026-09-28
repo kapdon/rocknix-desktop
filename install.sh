@@ -55,15 +55,23 @@ verify_bundle() {
 }
 
 main() {
-  case "${1:-}" in
-    --help|-h)
-      printf 'Usage: bash install.sh [--check]\nFresh install or reinstall with retained home; no in-place upgrades.\n'
-      return ;;
-    ''|--check) ;;
-    *) fail "unknown option: $1" ;;
-  esac
+  local check=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --help|-h)
+        printf 'Usage: bash install.sh [--release TAG] [--check]\nDefault channel: development. Fresh install or retained-home reinstall; no in-place upgrades.\n'
+        return ;;
+      --check) check=1; shift ;;
+      --release)
+        [ "$#" -ge 2 ] || fail 'missing release tag'
+        [[ "$2" = development || "$2" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]] || fail 'invalid release tag'
+        VERSION=$2
+        shift 2 ;;
+      *) fail "unknown option: $1" ;;
+    esac
+  done
   check_device
-  if [ "${1:-}" = --check ]; then
+  if [ "$check" = 1 ]; then
     printf 'Device checks passed. No changes made.\n'
     return
   fi

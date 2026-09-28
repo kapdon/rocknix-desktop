@@ -9,7 +9,7 @@ Only **Retroid Pocket 6**, tested on ROCKNIX nightly 20260927 (SM8550).
 Sway migration checks passed on the RP6. Rockchip compatibility is not implied
 by ARM64 support; graphics, orientation, input and media need physical testing.
 `dev` is the Sway development channel. The previous XFCE development tip is
-preserved on `codex/xfce-archive`; the immutable XFCE alpha release remains available.
+preserved on `codex/xfce-archive`. The current alpha uses Sway, not XFCE.
 
 ## Install and build
 
@@ -17,16 +17,24 @@ Back up saves/settings. On the RP6, as root, with EmulationStation running,
 Internet access and 4 GiB free on `/storage`:
 
 ```sh
-curl -fL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh -o /storage/install-desktop.sh
-bash /storage/install-desktop.sh --check
-bash /storage/install-desktop.sh
+curl -fL https://raw.githubusercontent.com/kapdon/rocknix-desktop/v0.2.0-alpha.1/install.sh -o /storage/install-desktop.sh
+bash /storage/install-desktop.sh --release v0.2.0-alpha.1 --check
+bash /storage/install-desktop.sh --release v0.2.0-alpha.1
 ```
 
-Inspect scripts before execution. The rolling `development` release uses
+Inspect scripts before execution. [Sway alpha v0.2.0-alpha.1](https://github.com/kapdon/rocknix-desktop/releases/tag/v0.2.0-alpha.1)
+pins both installer source and bundle selection. Existing installations are
+refused: back up, exit Desktop Mode, and use the installed home-preserving
+`uninstall.sh --check` then `--yes` before reinstalling, or use the local-bundle
+upgrade procedure below. Do not delete your home to bypass this check.
+
+For development builds, download `dev/install.sh` instead and omit `--release`.
+The rolling `development` release uses
 `latest.json` to select a commit-qualified archive and checksum together.
 Checksums establish integrity, not independent trust. Until a build completes,
 the pointer selects the previous successful build. The Sway installer rejects
-an old XFCE pointer rather than downloading the wrong runtime.
+an old XFCE pointer rather than downloading the wrong runtime. Versioned alpha
+assets and their manifest are not replaced after publication.
 
 Build locally with Docker and ARM64 execution support:
 
