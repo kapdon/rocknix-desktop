@@ -48,6 +48,16 @@ tested on a freshly flashed device. It intentionally refuses upgrades/reinstalls
 | L3 (left-stick press) | Show/hide on-screen keyboard |
 | D-pad | Arrow keys |
 | Start / Select | Escape / Tab |
+| Left stick | W / A / S / D |
+| Bottom face button | Space |
+| Top face button | R |
+| Left face button | F |
+| Right face button | E |
+
+Face-button names describe physical positions, regardless of printed labels.
+These mappings apply only in Desktop Mode; the previous controller profile is
+restored when you return to EmulationStation. Guide and Quick Access retain their
+InputPlumber UI events; no extra XFCE actions are assigned to them.
 
 Touchscreen input is supported. XFCE may ask you to trust a desktop launcher on
 first use; the L3 keyboard shortcut does not use that launcher.
