@@ -1,6 +1,7 @@
 #!/bin/bash
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
+python3 tests/docs.py
 
 while IFS= read -r file; do
   if head -n 1 "$file" | grep -Eq '^#!.*/(bash|sh)$'; then

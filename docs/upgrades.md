@@ -1,11 +1,12 @@
-# Upgrade design and remaining work
+# Upgrades and recovery
 
 The fresh installer refuses existing runtimes. Home-preserving reinstall passed
 local RP6 validation. `upgrade.sh` now implements explicit local-bundle upgrades,
 same-commit no-op, home backup and rollback on ordinary activation failure.
 The requirements below include remaining work: durable automatic power-loss
-recovery, managed-file edit detection and remote-download upgrade support are
-not implemented. Keep the existing `/storage/.local/share/rocknix-xfce` layout for
+recovery and managed-file edit detection are not implemented. The GitHub installer
+downloads and verifies published bundles before dispatching to this upgrader.
+Keep the existing `/storage/.local/share/rocknix-xfce` layout for
 compatibility; do not move personal data into the replaceable runtime.
 
 ## Ownership and detection
@@ -58,10 +59,10 @@ separate explicit operation, preserve newer files, and explain compatibility ris
 Apply cosmetic defaults only for missing settings. Version required migrations
 and make them repeatable and narrowly scoped. The agreed exceptions are project
 launchers, controller defaults and the L3 keyboard shortcut remain project-managed
-fixes. XFCE panel settings stay saved but are unused by Sway. Preserve changed
+fixes. Preserve changed
 recognized home files in sibling backups before refreshing them. Never replace
-unrecognized personal files or symlinks. Preserve unrelated settings and panel
-layout. Do not claim that every setting is untouched.
+unrecognized personal files or symlinks. Preserve unrelated settings.
+Do not claim that every setting is untouched.
 
 ## Acceptance before publication
 

@@ -16,8 +16,9 @@ Do not replace this with bare Sway `kill` or `con_id=__focused__` criteria:
 Sway 1.11 treats focused parents and missing focus differently from a single
 leaf view. See [Sway criteria implementation](https://raw.githubusercontent.com/swaywm/sway/1.11/sway/criteria.c).
 
-Local regression tests are not proof of physical R3 behavior. The device still
-needs a new build/install and guided acceptance after this change.
+The user subsequently confirmed physical R3 close on the RP6 after the host
+key-symbol fix. Local regression tests alone are not proof of physical behavior;
+repeat acceptance when changing the input or window policy.
 
 ## Implemented adaptive window policy
 
@@ -61,8 +62,9 @@ empty/foreign workspaces, repeat ticks, keyboard changes and cross-layer cycling
    it is not a universal localized PiP detector. Unknown titles stay unchanged.
 2. Evaluate quick audio/network actions in the existing settings menu, leaving
    advanced settings as explicit app entries.
-3. Validate the separately implemented West/North field navigation on hardware;
-   see [controller field navigation](controller-field-navigation.md). Visible
+3. Recheck West/North field navigation for future input changes; the user confirmed
+   both mappings on the RP6 after integration. See
+   [controller field navigation](controller-field-navigation.md). Visible
    controller help remains a follow-up.
 
 Sway has separate floating/tiling focus operations, and its native Wayland
@@ -94,5 +96,5 @@ its current large sizing is accepted for now, not a claim of universal fit.
 - Return to Gaming: restore host configuration and input bindings.
 
 Distinguish actual finger/controller tests from injected pointer events and
-configuration-only checks. Guided approval of the installed build still gates
-the merge into dev; controller field navigation remains a separate task.
+configuration-only checks. Guided approval of a new installed build still gates
+its merge into dev.

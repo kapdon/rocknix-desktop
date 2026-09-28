@@ -1,6 +1,7 @@
 # Controller field navigation
 
-Candidate based on `e7801dae6d41b822db4a72ba61708a12aabf6a87`, 2026-09-28.
+Implemented Desktop Mode mapping, 2026-09-28. The original investigation was
+based on `e7801dae6d41b822db4a72ba61708a12aabf6a87`.
 Only the desktop input profile changes at runtime. No new host binding, helper,
 service, launcher styling or restoration path is introduced.
 
@@ -41,7 +42,7 @@ Tab may insert indentation in editors/terminals. Use D-pad and bottom/right
 buttons in Apps; Tab's launcher behavior is not a field-navigation guarantee.
 Left-stick W/A/S/D text input is unchanged and outside this change's scope.
 
-## Local verification and coordinator handoff
+## Verification
 
 Run `python3 tests/controller-fields.py` and `bash tests/check.sh`. The focused
 contract test checks both field actions, modifier ordering, unique source
@@ -50,8 +51,8 @@ It does not emulate InputPlumber, Wayland focus, or key release on hardware.
 The existing suite checks lifecycle, return confirmation, launcher, normal close,
 window policy and app cycling. No device access is needed for these tests.
 
-Before integration, build/install the combined candidate through the existing
-coordinator workflow and perform these physical checks:
+For changes to this mapping, build/install the candidate and repeat these
+physical checks:
 
 1. In network settings, move forward/back across editable fields and buttons.
    Verify West then North returns to the prior focus without inserting `f`/`r`.
@@ -74,6 +75,7 @@ at `ea60d873`. Full-profile schema validation reports two pre-existing bumper
 mappings are intentionally preserved for the coordinator's physical check.
 `git diff --check` passed. No bundle was built or installed by this task.
 
-No physical results are claimed here. The coordinator owns RP6 testing and any
-subsequent integration. Launcher comparison remains discarded; Fuzzel sizing,
-floating policy and theme are unchanged.
+After integration, the user confirmed that West and North work as intended on
+the RP6. This confirms the basic mappings, not every stress/held-key case listed
+above. Launcher comparison remains discarded; Fuzzel sizing, floating policy
+and theme were outside that input change's scope.
