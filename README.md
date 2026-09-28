@@ -85,6 +85,13 @@ desktop panel running. East/Start remain Escape, not window-close shortcuts.
 Return to Gaming asks for confirmation before closing desktop apps. Cancel is
 selected initially; choose Return to Gaming explicitly after saving your work.
 
+Use the left face button (West) for the next field (Tab), and the top face
+button (North) for the previous field (Shift+Tab). Tap and release each button;
+holding North also holds Shift. The focused app controls its own tab order,
+so these buttons can move between fields, buttons or links. They replace the
+old plain `f`/`r` inputs. Bumpers still scroll and triggers still click.
+In Apps, keep using the D-pad and bottom/right buttons to choose or dismiss.
+
 See [the full controller mapping](payload/input/desktop.yaml). Physical button
 positions apply regardless of printed labels. Guide/Quick Access retain their
 InputPlumber UI events; the prior profile and targets are restored on return.
