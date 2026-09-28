@@ -43,12 +43,12 @@ account database, keyboard binary or package installation is changed.
 | Apps favorites/search and keyboard-visible sizing | Clean ff93f2c RP6 Apps launches; keyboard-visible search and long confirmation labels fit at 960×540 logical; multiword search launches | Other physical devices are not established by RP6 scaling |
 | Confirm/back, West/North fields, Select cycle, R3 close | Injected RP6 InputPlumber key events cycle/close/dismiss correctly | Physical-controller user acceptance; West/North recheck |
 | Keyboard Simple/symbols, panel and L3 toggle | Clean ff93f2c on-screen letters, 123/ABC and Shift typed qa1A; F13 shows/hides; UID 62000 and keyboard-crash restoration previously verified | Physical touch/controller user acceptance; compose variants not rechecked |
-| Firefox | Retained profile, HTTPS rendering, seccomp content/RDD, real V4L2 H.264 frame output and PiP verified on RP6 | Broader streaming/media flow; final package |
+| Firefox | Clean ff93f2c Apps launch, HTTPS, local H.264 progression, seccomp content/RDD and adaptive PiP passed; earlier detailed logs prove V4L2 frames | Broader streaming/media flow |
 | Vesktop without disabling sandbox | Actual Apps launch reaches Discord login; renderer seccomp=2 and distinct user/PID namespaces | Voice, screen sharing are not established by login screen |
 | GPU | Real-session glmark2 uses freedreno FD740; non-root FFmpeg and Firefox use Iris; Wayland vkcube completes 1200 frames on Turnip Adreno 740 | Full media flow; final package |
 | Audio/status/battery/clock | Non-root synthetic speaker-output monitor loopback passed; pavucontrol, Wi-Fi/battery/clock rendered | Audible output/user acceptance, microphone, device switching |
 | Network editing | Settings and Apps use isolated editor/proxy; inactive-profile rename/save/delete passed; clean ff93f2c proxy failure, singleton and R3 cleanup passed | Physical-controller acceptance |
-| Floating utilities and PiP | Audio utility floats; real Firefox PiP floats, shrinks above keyboard, and R3 closes only PiP | Recheck packaged runtime and narrow output |
+| Floating utilities and PiP | Clean ff93f2c PiP floats, shrinks above keyboard, and R3 closes only PiP; network utility tabs at 960×540 with keyboard | Narrow-output PiP and physical-controller acceptance |
 | Shared data read/write | All six mounts passed non-root create/edit/rename/copy/delete and host UID mapping; clean-package Thunar create/rename/permanent-delete passed on backup | Thunar Trash reports filesystem-boundary error; baseline comparison and repair needed; scripts workflow decision |
 | Home persistence | Existing home migrated in place; retained Firefox profile opens; clean ff93f2c uninstall/reinstall retained inode 6291460 and UID/GID 62000 | Future upgrades remain subject to regression testing |
 | Return confirmation and normal restoration | Clean ff93f2c confirmed Return restores ES, exact ACL and removes runtime/apps; narrow keyboard-visible confirmation survives pointer movement and Escape retains Desktop | Physical-controller user acceptance |
@@ -445,6 +445,27 @@ Screenshots: `/tmp/fresh-narrow-keyboard.png`, `/tmp/fresh-narrow-apps.png`,
 InputPlumber keys and pointer actions, not physical-controller acceptance or
 proof for another device's physical screen. Restored scale 1 and verified
 1920×1080 logical output with Desktop active afterward.
+
+### Clean-package Firefox and adaptive PiP
+
+Launched Firefox from Apps on ff93f2c using its existing profile and unmodified
+wrapper. The existing local H.264 fixture progressed from 0 to 12.567 seconds
+in screenshots. Actual PiP was 768×432 at (1132,548), then 464×261 at
+(1436,341) above the visible keyboard. Injected F15 closed only PiP; the main
+browser remained alive. Hid the keyboard and loaded `https://example.org`,
+which rendered with the normal secure-connection indicator.
+
+Parent PID 26822 ran as UID 62000, CapEff=0 and NoNewPrivs=1. RDD PID 26956 and
+content PIDs 26949/27073/27077/27094 retained seccomp=2 and distinct user
+namespaces. RDD had renderD128 and video0 open. No sandbox-disable flags were
+present. This clean-package check confirms playback and live decoder access;
+the earlier detailed frame-log test remains the evidence for actual V4L2 frame
+output. No private preferences, profile replacement or diagnostic launch flags
+were used here. The existing fixture was not modified.
+
+Screenshots: `/tmp/fresh-media-loaded.png`, `/tmp/fresh-pip-final.png`,
+`/tmp/fresh-pip-keyboard-final.png`, `/tmp/fresh-https-final.png`.
+Physical controls and internet streaming providers remain separate acceptance.
 
 ### Clean-package Thunar shared-folder operations
 
