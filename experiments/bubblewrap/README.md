@@ -465,6 +465,18 @@ alone does not establish a new regression. Investigate mount discovery/Trash
 placement and compare the baseline without treating permanent deletion as a
 substitute for recoverable deletion.
 
+Follow-up diagnosis: RP6 Thunar PID 17269 sees home and backup as device 66307,
+but distinct mounts 635 and 663. Its installed libgio is 2.84.4. The matching
+[GLib source](https://github.com/GNOME/glib/blob/2.84.4/gio/glocalfile.c)
+selects the home Trash by comparing `st_dev`, then reports EXDEV when rename
+crosses the two mounts. `check-trash-bind.sh` reproduces that exact error locally
+with root identity, separate home/shared bind mounts and **no idmapping**.
+This rules out non-root permissions/idmapping as a necessary cause. Dev's
+`launch-sway-desktop` also binds home and each storage directory separately;
+the reproduction tests that topology, not an actual reinstalled dev bundle.
+Do not widen host storage exposure or substitute permanent deletion to hide
+this inherited layout limitation. Recoverable Trash remains unverified.
+
 ### Clean-package keyboard input and layers
 
 At restored 1920×1080 logical resolution, F13 displayed the non-root keyboard.
