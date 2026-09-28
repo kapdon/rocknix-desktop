@@ -31,6 +31,10 @@ if (verify_bundle "$test_dir") >/dev/null 2>&1; then
   printf 'FAIL: malformed checksum accepted\n' >&2; exit 1
 fi
 bash install.sh --help >/dev/null
+bash uninstall.sh --help >/dev/null
+if bash uninstall.sh --invalid >/dev/null 2>&1; then
+  printf 'FAIL: unknown uninstall argument accepted\n' >&2; exit 1
+fi
 if bash install.sh --invalid >/dev/null 2>&1; then
   printf 'FAIL: unknown argument accepted\n' >&2; exit 1
 fi
