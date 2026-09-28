@@ -9,7 +9,7 @@ window_id=$(printf '%s' "${tree}" | jq -er '
   [.. | objects
    | select(.type? == "workspace" and .name? == "98:Desktop")
    | .. | objects
-   | select(.type? == "con" and .focused? == true)
+   | select((.type? == "con" or .type? == "floating_con") and .focused? == true)
    | select((.shell? == "xdg_shell") or (.shell? == "xwayland"))
    | select(((.nodes // []) | length) == 0 and
             ((.floating_nodes // []) | length) == 0)

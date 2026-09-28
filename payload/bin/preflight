@@ -66,6 +66,8 @@ grep -q '^ROCKNIX_SWAY_RUNTIME=1$' "${ROOTFS}/etc/rocknix-xfce-release" || fail 
 [ -f "${BASE}/input/desktop.yaml" ] || fail "desktop input profile is missing"
 [ -x "${BASE}/bin/rocknix-keyboard-toggle" ] || fail "keyboard toggle is missing"
 [ -x "${BASE}/bin/rocknix-close-window" ] || fail "window close helper is missing"
+[ -x "${BASE}/bin/rocknix-window-cycle" ] || fail "window cycle helper is missing"
+[ -x "${BASE}/bin/rocknix-window-policy" ] || fail "window policy helper is missing"
 [ -x /usr/bin/unshare ] || fail "host unshare is missing"
 [ -x /usr/sbin/chroot ] || fail "host chroot is missing"
 systemctl is-active --quiet sway.service || fail "sway.service is not active"

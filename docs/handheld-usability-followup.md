@@ -1,8 +1,7 @@
 # Handheld desktop usability follow-up
 
-Read-only investigation, 2026-09-28. These are proposals, not hardware-validated
-features. Preserve the tabbed default, current Art Book styling, Debian app
-runtime, and Desktop Mode lifecycle/restoration boundary.
+Investigation and implementation notes, 2026-09-28. Preserve the tabbed default,
+current Art Book styling, Debian runtime, and Desktop lifecycle/restoration.
 
 ## Close-window decision
 
@@ -20,20 +19,50 @@ leaf view. See [Sway criteria implementation](https://raw.githubusercontent.com/
 Local regression tests are not proof of physical R3 behavior. The device still
 needs a new build/install and guided acceptance after this change.
 
-## Next bounded implementation
+## Implemented adaptive window policy
 
-1. Replace layout-local `focus next` with a Desktop-workspace window cycle
-   covering tiled and floating leaf windows. Do this before adding exceptions.
-2. Identify Firefox PiP on the installed ESR using the actual Sway tree. Record
-   `app_id`, `name`, `shell` and IDs for both PiP and ordinary browser windows.
-   Keep normal Firefox tabbed. Do not float all Firefox windows or assume an
-   English title is a stable unique identity.
-3. Preserve native transient-dialog floating behavior. Consider bounded floating
-   audio/network settings only when their content fits the usable logical area;
-   otherwise retain full-area tabs. A floating app near Waybar is not a popover.
-4. Evaluate quick audio/network actions in the existing settings menu, leaving
+`rocknix-window-policy` replaces the existing one-second window-count poll. It
+uses numeric leaf IDs only inside `98:Desktop`, including Sway's `floating_con`
+type. PiP uses 42% of available width, limited to 45% of available height, with
+its initial aspect ratio preserved. Its bottom/right inset is a quarter of the
+measured bar height. Workspace geometry excludes panel/keyboard reserved areas.
+
+Only the observed main utility titles (`Volume Control` and `Network
+Connections`) qualify; same-app editors/confirmation dialogs stay unmanaged.
+Audio/network settings use their initial client size or a 720x480 baseline
+scaled by bar height, whichever is larger. They float centered only if that
+size fits with insets; otherwise they use the tabbed workspace. Re-evaluation
+occurs on workspace bounds changes, not every focus change, so the defaults do
+not continuously fight manual dragging. Fullscreen windows are left alone.
+
+The cycle helper visits tiled and floating leaves by stable container ID and
+wraps. It does nothing with no unique focused app (e.g. a layer-shell launcher).
+The R3 helper now handles `floating_con` too. All helpers remain session-owned;
+no persistent Sway config is written and cleanup still stops the existing poll.
+
+RP6 Sway 1.11 / Firefox 140.16.0esr observations before packaging:
+
+- Actual PiP: `app_id=firefox-esr`, `name=Picture-in-Picture`.
+- Normal Firefox title includes the page title and Mozilla Firefox suffix.
+- Audio: `org.pulseaudio.pavucontrol`; network: `nm-connection-editor`.
+- Injected IPC cycle reached Files, Firefox, audio and PiP, then wrapped.
+- At 1920x1000 usable area PiP was 768x432 at 1132,548.
+- With keyboard, usable height was 622; PiP became 464x261 at 1436,341,
+  and both settings apps became tabbed. Hidden keyboard restored floating.
+
+These are rendered-device/IPC checks, not physical controller acceptance.
+Fixtures cover narrow bounds, malicious IDs, nonmatching titles, fullscreen,
+empty/foreign workspaces, repeat ticks, keyboard changes and cross-layer cycling.
+
+## Remaining follow-up
+
+1. Revalidate PiP identity after Firefox updates or localization changes. The
+   compatibility match requires an exact English title plus Firefox app ID;
+   it is not a universal localized PiP detector. Unknown titles stay unchanged.
+2. Evaluate quick audio/network actions in the existing settings menu, leaving
    advanced settings as explicit app entries.
-5. Evaluate Tab/Shift-Tab controller navigation and visible controller help.
+3. Evaluate Tab/Shift-Tab controller navigation and visible controller help
+   in the separately requested task.
    West/North currently type `f`/`r`, which can unexpectedly edit focused fields.
 
 Sway has separate floating/tiling focus operations, and its native Wayland
@@ -45,6 +74,13 @@ title is localized.
 Sources: [Sway commands](https://raw.githubusercontent.com/swaywm/sway/1.11/sway/sway.5.scd),
 [native window handling](https://raw.githubusercontent.com/swaywm/sway/1.11/sway/desktop/xdg_shell.c),
 [Mozilla PiP player](https://raw.githubusercontent.com/mozilla-firefox/firefox/main/toolkit/components/pictureinpicture/content/player.xhtml).
+
+The general utility-floating pattern was compared with
+[Sway-DE's own configuration](https://github.com/madic-creates/Sway-DE/blob/master/config/sway/sway.d/06_floating.conf),
+but its broad title rules and hardcoded coordinates were not copied.
+[Mozilla tracks the native PiP identification limitation](https://bugzilla.mozilla.org/show_bug.cgi?id=1958013).
+The launcher comparison is discarded at the user's request. Fuzzel remains;
+its current large sizing is accepted for now, not a claim of universal fit.
 
 ## Physical acceptance matrix
 
@@ -58,5 +94,5 @@ Sources: [Sway commands](https://raw.githubusercontent.com/swaywm/sway/1.11/sway
 - Return to Gaming: restore host configuration and input bindings.
 
 Distinguish actual finger/controller tests from injected pointer events and
-configuration-only checks. No floating-policy or cross-layer switching change
-is approved or implemented by this investigation alone.
+configuration-only checks. Guided approval of the installed build still gates
+the merge into dev; controller field navigation remains a separate task.

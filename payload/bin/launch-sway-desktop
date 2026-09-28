@@ -198,27 +198,8 @@ discover_output_metrics() {
   fi
 }
 
-write_window_count() {
-  local count
-
-  count=$(swaymsg -r -t get_tree | jq -r --arg workspace "${DESKTOP_WORKSPACE}" '
-    [
-      .. | objects
-      | select(.type? == "workspace" and .name? == $workspace)
-      | .. | objects
-      | select(.type? == "con")
-      | select((.app_id? // "") != "" or (.window? // null) != null)
-    ] | length
-  ' 2>/dev/null) || count=0
-  printf '%s\n' "${count}" >"${RUNTIME_DIR}/window-count.new"
-  mv -f "${RUNTIME_DIR}/window-count.new" "${RUNTIME_DIR}/window-count"
-}
-
 window_count_loop() {
-  while :; do
-    write_window_count
-    sleep 1
-  done
+  exec env ROCKNIX_BAR_HEIGHT="${BAR_HEIGHT}" "${BASE}/bin/rocknix-window-policy"
 }
 
 host_control_loop() {
@@ -228,7 +209,7 @@ host_control_loop() {
     command=""
     if IFS= read -r command <"${HOST_CONTROL_FIFO}"; then
       case "${command}" in
-        next) swaymsg 'focus next' >/dev/null ;;
+        next) "${BASE}/bin/rocknix-window-cycle" >/dev/null ;;
         layout) swaymsg 'layout toggle tabbed splith' >/dev/null ;;
       esac
     fi
@@ -378,7 +359,7 @@ BINDING_INSTALLED=1
 touch "${RUNTIME_DIR}/bindings-owned"
 swaymsg -- "bindsym XF86Tools exec ${BASE}/bin/rocknix-keyboard-toggle" >/dev/null
 swaymsg -- "bindsym F13 exec ${BASE}/bin/rocknix-keyboard-toggle" >/dev/null
-swaymsg 'bindsym F14 focus next' >/dev/null
+swaymsg -- "bindsym --no-repeat F14 exec env SWAYSOCK=${SWAYSOCK} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} ${BASE}/bin/rocknix-window-cycle" >/dev/null
 # Resolve a leaf window explicitly: Sway's focused-container criterion can also
 # match a parent. No-repeat prevents a held R3 from closing successive apps.
 swaymsg -- "bindsym --no-repeat F15 exec env SWAYSOCK=${SWAYSOCK} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} ${BASE}/bin/rocknix-close-window" >/dev/null

@@ -69,6 +69,14 @@ logical dimensions. Firefox ESR and MPV run natively on Wayland.
 In Apps, use the D-pad to move, the bottom face button to launch and the right
 face button to dismiss. Select cycles open apps, and L3 shows or hides the host
 on-screen keyboard. Space remains available for multiword searches.
+Select and the Windows entry cycle both tabbed and floating app windows.
+Firefox Picture-in-Picture floats in the bottom-right of the usable workspace.
+Audio/network settings float when their preferred size fits; they become tabbed
+when space is constrained, including while the keyboard is visible. These
+defaults adapt within one second without changing the host's persistent config.
+Native transient dialogs retain Sway's default behavior. Normal Firefox, Files
+and terminals remain tabbed. PiP matching currently supports the bundled English
+Firefox ESR title; see [window policy notes](docs/handheld-usability-followup.md).
 Click the right stick (R3) to close the focused app window directly, including
 audio/network settings. This requests a normal close, not a force-kill, and a
 held press does not repeat. Save work first: there is no desktop confirmation,

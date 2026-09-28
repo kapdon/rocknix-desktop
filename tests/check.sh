@@ -74,7 +74,7 @@ fi
 grep -q 'keyboard: KeyF14' payload/input/desktop.yaml
 grep -q 'keyboard: KeyEnter' payload/input/desktop.yaml
 grep -q 'keyboard: KeyEsc' payload/input/desktop.yaml
-grep -q "bindsym F14 focus next" payload/bin/launch-sway-desktop
+grep -q 'bindsym --no-repeat F14 exec env' payload/bin/launch-sway-desktop
 grep -q 'button: RightStick' payload/input/desktop.yaml
 grep -q 'keyboard: KeyF15' payload/input/desktop.yaml
 grep -Fq 'bindsym --no-repeat F15 exec env' payload/bin/launch-sway-desktop
@@ -111,3 +111,4 @@ python3 tests/session-lifecycle.py
 python3 tests/return-confirmation.py
 python3 tests/launcher-cache.py
 python3 tests/window-close.py
+python3 tests/window-policy.py

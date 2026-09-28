@@ -28,7 +28,7 @@ printf '%s' "$*" >"$REQUEST"
     stub.chmod(0o755)
     cases = [
         (tree([leaf()]), '[con_id=7] kill'),
-        (tree(floating=[leaf(8)]), '[con_id=8] kill'),
+        (tree(floating=[dict(leaf(8), type='floating_con')]), '[con_id=8] kill'),
         (tree([dict(leaf(9), shell='xwayland')]), '[con_id=9] kill'),
         (tree(), ''),
         (tree([dict(leaf(), focused=False)]), ''),
