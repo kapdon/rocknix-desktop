@@ -53,6 +53,11 @@ fi
 grep -q 'rocknix-keyboard-toggle' rootfs-overlay/etc/xdg/waybar/config.jsonc
 grep -q 'kill -34' payload/bin/rocknix-keyboard-toggle
 grep -q 'kill -34' rootfs-overlay/usr/local/bin/rocknix-keyboard-toggle
+grep -q 'systemctl start --no-block "${unit}"' payload/bin/restore-emulationstation
+if grep -q '^systemctl start sway.service$' payload/bin/restore-emulationstation; then
+  printf 'FAIL: synchronous Sway recovery can deadlock in ExecStopPost\n' >&2; exit 1
+fi
+grep -q '^TimeoutStopSec=45$' payload/systemd/xfce-desktop.service
 grep -q '/usr/share/applications/firefox-esr.desktop' Dockerfile.rootfs
 grep -q '/usr/share/applications/foot-server.desktop' Dockerfile.rootfs
 grep -q '/usr/share/applications/footclient.desktop' Dockerfile.rootfs
