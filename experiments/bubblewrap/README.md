@@ -208,6 +208,24 @@ must add its actual dependency to the build before final packaging.
 
 ### Debian package maintenance (branch-only)
 
+#### Namespace-root administrator prototype
+
+`check-admin-idmap.py` passed on the RP6 after source `2113855`. It creates a
+private mount namespace and a disposable idmapped fixture, leaving the installed
+Debian rootfs read-only. A 65536-ID user/group mapping makes namespace root appear
+as host UID/GID 200000, confirmed from the parent through `/proc`. Namespace root
+created root-owned files and changed a package-style file to Debian UID/GID
+101:102; the underlying fixture retained those original Debian ownership values.
+Bubblewrap reported NoNewPrivs=1. Host storage, hardware and service sockets were
+not exposed to this probe. The fixture and private mounts were removed afterward.
+
+This establishes the ownership primitive for a Debian-only administrator session,
+not an implemented desktop installer or a successful APT transaction. The test
+range is checked against host accounts but is not a production allocation policy.
+Production work still needs range/ownership validation, a controlled entry point,
+real package-script tests, lifecycle locking, and upgrade persistence. The root
+SSH helper below remains the currently implemented package-install path.
+
 Return to Gaming first. From root SSH, use:
 
 ```sh
