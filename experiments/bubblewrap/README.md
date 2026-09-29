@@ -56,6 +56,17 @@ PID 7857, left no UID 62000 app processes or runtime directories, restored the
 recorded display/decoder ACLs, and reopened the non-root panel and keyboard.
 No browser or recording processes were active before these tests.
 
+Narrow PiP check on installed 261c9dc: temporarily used output scale 2
+(960×540 logical), launched Firefox through the visible Apps favorite, and opened
+the existing local H.264 fixture. With the keyboard visible, actual PiP window
+48 occupied x=722, y=168, width=227, height=128; its bottom at 296 was above the
+panel beginning at y=307 and keyboard at y=351. Screenshot
+`/tmp/fresh-narrow-pip-keyboard.png` was retrieved and visually inspected. Injected
+F15 (the R3 action) closed only PiP; Firefox window 47 and Thunar 46 remained.
+Hid the keyboard, restored scale 1 and restarted Desktop successfully. These are
+RP6 scaled-output checks, not proof for another physical screen or physical R3
+input in this particular scenario.
+
 User acceptance update: the user reports that physical controller navigation,
 R3 close, keyboard toggle and speaker audio all work on the installed Bubblewrap
 build. This is physical-user evidence, distinct from injected checks. It does
@@ -83,7 +94,7 @@ deployment is needed for that change; the scripts policy decision is resolved.
 | GPU | Real-session glmark2 uses freedreno FD740; non-root FFmpeg and Firefox use Iris; Wayland vkcube completes 1200 frames on Turnip Adreno 740 | Full media flow; final package |
 | Audio/status/battery/clock | Non-root output-monitor loopback passed; user confirms speaker audio works; pavucontrol, Wi-Fi/battery/clock rendered | Microphone and device switching not established |
 | Network editing | Settings and Apps use isolated editor/proxy; inactive-profile rename/save/delete passed; clean ff93f2c proxy failure, singleton and R3 cleanup passed | Physical-controller acceptance |
-| Floating utilities and PiP | Clean ff93f2c PiP floats, shrinks above keyboard, and R3 closes only PiP; network utility tabs at 960×540 with keyboard | Narrow-output PiP and physical-controller acceptance |
+| Floating utilities and PiP | Clean ff93f2c PiP floats and shrinks above keyboard; installed 261c9dc narrow PiP fits at 227×128 with keyboard and injected R3 closes only PiP; network utility tabs at 960×540 | Other physical screens; physical PiP-specific controller acceptance |
 | Shared data read/write | All six mounts passed non-root file operations and host UID mapping; Thunar create/rename/permanent-delete passed; scripts absent in live 261c9dc namespace with host files preserved | Thunar Trash reports filesystem-boundary error; recovery remains unresolved |
 | Home persistence | Existing home migrated in place; retained Firefox profile opens; clean ff93f2c uninstall/reinstall retained inode 6291460 and UID/GID 62000 | Future upgrades remain subject to regression testing |
 | Return confirmation and normal restoration | 261c9dc confirmed Return restores ES in 2.19s with ACL/runtime cleanup; earlier narrow confirmation survives pointer movement and Escape retains Desktop | Final physical Return confirmation not separately reported |
