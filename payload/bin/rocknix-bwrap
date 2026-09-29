@@ -26,6 +26,16 @@ WORK_ROOT = Path("/run")
 SHARED_DATA = ("Desktop", "Steam", "backup", "games-external", "games-internal", "roms")
 
 
+def write_identity(work):
+    """Create sandbox-only accounts without changing native ROCKNIX users."""
+    (work / "passwd").write_text(
+        "root:x:0:0:root:/root:/bin/sh\n"
+        f"rocknix:x:{PROBE_UID}:{PROBE_UID}:ROCKNIX Desktop:/home/rocknix:/bin/bash\n")
+    (work / "group").write_text(f"root:x:0:\nrocknix:x:{PROBE_UID}:\n")
+    os.chmod(work / "passwd", 0o644)
+    os.chmod(work / "group", 0o644)
+
+
 def debian_command(root, executable, *args):
     lib = root / "usr/lib/aarch64-linux-gnu"
     return [str(lib / "ld-linux-aarch64.so.1"), "--library-path", str(lib),
@@ -235,12 +245,7 @@ def main():
             migrate_home(home)
             subprocess.run(["mount", "--bind", str(home), str(work / "home")], check=True)
             home_bound = True
-        (work / "passwd").write_text(
-            "root:x:0:0:root:/root:/bin/sh\n"
-            f"rocknix:x:{PROBE_UID}:{PROBE_UID}:Desktop probe:/home/rocknix:/bin/bash\n")
-        (work / "group").write_text(f"root:x:0:\nrocknix:x:{PROBE_UID}:\n")
-        os.chmod(work / "passwd", 0o644)
-        os.chmod(work / "group", 0o644)
+        write_identity(work)
         if opts.desktop:
             (work / "shared").mkdir(mode=0o755)
             for name in SHARED_DATA:

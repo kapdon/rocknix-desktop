@@ -16,6 +16,17 @@ spec = importlib.util.spec_from_loader(loader.name, loader)
 runtime = importlib.util.module_from_spec(spec)
 loader.exec_module(runtime)
 
+with tempfile.TemporaryDirectory() as directory:
+    identity = Path(directory)
+    runtime.write_identity(identity)
+    assert (identity / "passwd").read_text().splitlines() == [
+        "root:x:0:0:root:/root:/bin/sh",
+        "rocknix:x:62000:62000:ROCKNIX Desktop:/home/rocknix:/bin/bash",
+    ]
+    assert (identity / "group").read_text() == "root:x:0:\nrocknix:x:62000:\n"
+    for name in ("passwd", "group"):
+        assert (identity / name).stat().st_mode & 0o777 == 0o644
+
 with patch.dict(os.environ, {"SWAYSOCK": "/host/root.sock",
                             "DBUS_SESSION_BUS_ADDRESS": "unix:path=/host/bus",
                             "MOZ_DISABLE_CONTENT_SANDBOX": "1",
