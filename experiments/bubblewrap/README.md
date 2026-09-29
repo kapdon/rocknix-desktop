@@ -29,8 +29,7 @@ copy of the old runtime is kept on the device. Existing home data stays in place
   UID 62000). No recursive chown/ACL modification of ROMs or shared data.
 - `/storage/scripts` is excluded entirely by user direction: host maintenance
   scripts are not a Desktop dependency. No administrator-editing UI is needed.
-  This source change still needs deployment; the installed ff93f2c bundle has
-  the earlier read-only mount. Host-root SSH access remains unchanged.
+  Deployed in the clean 261c9dc bundle; host-root SSH access remains unchanged.
 
 This is not a per-app sandbox. Apps share their home, network, display protocols
 and audio access. Browser renderer sandboxes remain separate and must be tested.
@@ -38,6 +37,24 @@ The existing localhost Pulse endpoint is used; no native ROCKNIX configuration,
 account database, keyboard binary or package installation is changed.
 
 ## Parity and acceptance ledger
+
+Scripts-exclusion deployment: built clean source
+`261c9dc8aead09f3799221526366ceb2d0a4ec60` at 2026-09-29T04:41:30Z, bundle SHA256
+`84d2941b2ea33aaa738f29c78682fc66a378a01ece49ade5df8e0b035f8c5aa2`.
+Home-preserving upgrade from ff93f2c passed; home inode 6291460 and UID/GID 62000
+were unchanged. Reopened Desktop; Thunar's live root namespace has no
+`/storage/scripts`, while the host directory still exists. Thunar remains UID
+62000, CapEff=0, NoNewPrivs=1. Removed this upgrade's exact recovery directory
+`upgrade.Weh15g` (including temporary home backup) and staging directory
+`bwrap-261c9dc.oKSWt6`; no recovery copy was retained. Prior ff93f2c hardware
+results are historical evidence; this deployment specifically verifies the
+scripts-exclusion change and successful startup.
+
+On 261c9dc, actual Return confirmation restored Gaming in 2.19 seconds and
+Waybar PID 671823 SIGKILL restored it in 1.07 seconds. Both retained host Sway
+PID 7857, left no UID 62000 app processes or runtime directories, restored the
+recorded display/decoder ACLs, and reopened the non-root panel and keyboard.
+No browser or recording processes were active before these tests.
 
 User acceptance update: the user reports that physical controller navigation,
 R3 close, keyboard toggle and speaker audio all work on the installed Bubblewrap
@@ -59,17 +76,17 @@ deployment is needed for that change; the scripts policy decision is resolved.
 | --- | --- | --- |
 | Tools → Desktop, one tabbed workspace, persistent host Sway | Clean ff93f2c package launched through actual Tools UI, including after reboot; panel/files and preview render | Physical-controller user acceptance |
 | Apps favorites/search and keyboard-visible sizing | Clean ff93f2c RP6 Apps launches; keyboard-visible search and long confirmation labels fit at 960×540 logical; multiword search launches | Other physical devices are not established by RP6 scaling |
-| Confirm/back, West/North fields, Select cycle, R3 close | Injected RP6 InputPlumber key events cycle/close/dismiss correctly | Physical-controller user acceptance; West/North recheck |
-| Keyboard Simple/symbols, panel and L3 toggle | Clean ff93f2c on-screen letters, 123/ABC and Shift typed qa1A; F13 shows/hides; UID 62000 and keyboard-crash restoration previously verified | Physical touch/controller user acceptance; compose variants not rechecked |
+| Confirm/back, West/North fields, Select cycle, R3 close | Injected events cycle/close/dismiss; user confirms physical controller navigation and R3 work | West/North individual field sequences not separately reported |
+| Keyboard Simple/symbols, panel and L3 toggle | Clean ff93f2c on-screen letters, 123/ABC and Shift typed qa1A; user confirms physical keyboard toggle works; keyboard-crash restoration verified | Physical touch typing and compose variants not separately reported |
 | Firefox | Clean ff93f2c Apps launch, HTTPS, local H.264 progression, seccomp content/RDD and adaptive PiP passed; earlier detailed logs prove V4L2 frames | Broader streaming/media flow |
 | Vesktop without disabling sandbox | Actual Apps launch reaches Discord login; renderer seccomp=2 and distinct user/PID namespaces | Voice, screen sharing are not established by login screen |
 | GPU | Real-session glmark2 uses freedreno FD740; non-root FFmpeg and Firefox use Iris; Wayland vkcube completes 1200 frames on Turnip Adreno 740 | Full media flow; final package |
-| Audio/status/battery/clock | Non-root synthetic speaker-output monitor loopback passed; pavucontrol, Wi-Fi/battery/clock rendered | Audible output/user acceptance, microphone, device switching |
+| Audio/status/battery/clock | Non-root output-monitor loopback passed; user confirms speaker audio works; pavucontrol, Wi-Fi/battery/clock rendered | Microphone and device switching not established |
 | Network editing | Settings and Apps use isolated editor/proxy; inactive-profile rename/save/delete passed; clean ff93f2c proxy failure, singleton and R3 cleanup passed | Physical-controller acceptance |
 | Floating utilities and PiP | Clean ff93f2c PiP floats, shrinks above keyboard, and R3 closes only PiP; network utility tabs at 960×540 with keyboard | Narrow-output PiP and physical-controller acceptance |
-| Shared data read/write | All six mounts passed non-root create/edit/rename/copy/delete and host UID mapping; clean-package Thunar create/rename/permanent-delete passed on backup | Thunar Trash reports filesystem-boundary error; scripts exclusion needs deployment verification |
+| Shared data read/write | All six mounts passed non-root file operations and host UID mapping; Thunar create/rename/permanent-delete passed; scripts absent in live 261c9dc namespace with host files preserved | Thunar Trash reports filesystem-boundary error; recovery remains unresolved |
 | Home persistence | Existing home migrated in place; retained Firefox profile opens; clean ff93f2c uninstall/reinstall retained inode 6291460 and UID/GID 62000 | Future upgrades remain subject to regression testing |
-| Return confirmation and normal restoration | Clean ff93f2c confirmed Return restores ES, exact ACL and removes runtime/apps; narrow keyboard-visible confirmation survives pointer movement and Escape retains Desktop | Physical-controller user acceptance |
+| Return confirmation and normal restoration | 261c9dc confirmed Return restores ES in 2.19s with ACL/runtime cleanup; earlier narrow confirmation survives pointer movement and Escape retains Desktop | Final physical Return confirmation not separately reported |
 | Crash restoration | Whole cgroup, keyboard, Waybar and compositor SIGKILL recovery passed; early-setup journal cleanup and real reboot passed | Final physical acceptance; abrupt power loss is not tested |
 | Build/install/uninstall/provenance | Offline tests pass; clean ff93f2c bundle built, installed after uninstall, and launched; home inode preserved; native-file hashes unchanged | Remaining final-package media checks; GitHub release flow untested for this branch and requires publication approval |
 
