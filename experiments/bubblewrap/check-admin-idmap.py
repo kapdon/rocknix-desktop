@@ -28,6 +28,21 @@ def main():
     source, mapped, runtime = (base / name for name in ('source', 'mapped', 'runtime'))
     for path in (source, mapped, runtime):
         path.mkdir(mode=0o755)
+    package = source / 'package-source'
+    (package / 'DEBIAN').mkdir(parents=True)
+    (package / 'usr/share/rocknix-admin-probe').mkdir(parents=True)
+    (package / 'DEBIAN/control').write_text(
+        'Package: rocknix-admin-probe\nVersion: 1.0\nArchitecture: all\n'
+        'Maintainer: ROCKNIX Desktop test <test@example.invalid>\n'
+        'Description: Disposable namespace-root package transaction fixture\n')
+    (package / 'usr/share/rocknix-admin-probe/data').write_text('package payload\n')
+    postinst = package / 'DEBIAN/postinst'
+    postinst.write_text('#!/bin/sh\nset -eu\n'
+                       'test "$(id -u)" = 0\n'
+                       'test "$DPKG_ROOT" = /tmp/admin-fixture/install\n'
+                       'chown 101:102 "$DPKG_ROOT/usr/share/rocknix-admin-probe/data"\n'
+                       'printf "configured\\n" > "$DPKG_ROOT/maintainer-script-ran"\n')
+    postinst.chmod(0o755)
     mounts = []
     child = None
     try:
@@ -64,7 +79,8 @@ def main():
                         '--tmpfs', '/root', '--tmpfs', '/storage', '--tmpfs', '/sys',
                         '--bind', str(mapped), '/tmp/admin-fixture', '--cap-drop', 'ALL',
                         '--cap-add', 'CAP_CHOWN', '--cap-add', 'CAP_FOWNER',
-                        '--clearenv', '--setenv', 'PATH', '/usr/bin:/bin', '--chdir', '/',
+                        '--cap-add', 'CAP_FSETID',
+                        '--clearenv', '--setenv', 'PATH', '/usr/sbin:/usr/bin:/sbin:/bin', '--chdir', '/',
                         '--', '/bin/sh', '-eu', '-c', '''
 test "$(id -u)" = 0
 test ! -e /storage/roms
@@ -78,6 +94,20 @@ touch /tmp/admin-fixture/root-file
 test "$(stat -c %u:%g /tmp/admin-fixture/root-file)" = 0:0
 cat /proc/self/uid_map
 grep '^NoNewPrivs:' /proc/self/status
+dpkg-deb --build /tmp/admin-fixture/package-source /tmp/admin-fixture/probe.deb
+mkdir /tmp/admin-fixture/install
+dpkg --root=/tmp/admin-fixture/install --log=/tmp/admin-fixture/dpkg.log \
+    --force-script-chrootless --install /tmp/admin-fixture/probe.deb
+test "$(cat /tmp/admin-fixture/install/maintainer-script-ran)" = configured
+test "$(stat -c %u:%g /tmp/admin-fixture/install/usr/share/rocknix-admin-probe/data)" = 101:102
+test "$(dpkg-query --admindir=/tmp/admin-fixture/install/var/lib/dpkg \
+    -W -f='${Status}' rocknix-admin-probe)" = 'install ok installed'
+# Leave a copy of the installed file for host-side ownership verification.
+cp -p /tmp/admin-fixture/install/usr/share/rocknix-admin-probe/data /tmp/admin-fixture/installed-proof
+dpkg --root=/tmp/admin-fixture/install --log=/tmp/admin-fixture/dpkg.log \
+    --force-script-chrootless --purge rocknix-admin-probe
+test ! -e /tmp/admin-fixture/install/usr/share/rocknix-admin-probe/data
+echo 'PASS: dpkg install, maintainer script, service ownership and purge'
 ''']
                 os.execve(args[0], args, {'PATH': '/usr/bin:/bin'})
             except BaseException:
@@ -103,6 +133,8 @@ grep '^NoNewPrivs:' /proc/self/status
         assert (source / 'package-file').stat().st_uid == 101
         assert (source / 'package-file').stat().st_gid == 102
         assert (source / 'root-file').stat().st_uid == 0
+        assert (source / 'installed-proof').stat().st_uid == 101
+        assert (source / 'installed-proof').stat().st_gid == 102
         print('PASS: namespace root preserves Debian root/service ownership through idmap', flush=True)
     finally:
         if child is not None:

@@ -219,8 +219,19 @@ created root-owned files and changed a package-style file to Debian UID/GID
 Bubblewrap reported NoNewPrivs=1. Host storage, hardware and service sockets were
 not exposed to this probe. The fixture and private mounts were removed afterward.
 
-This establishes the ownership primitive for a Debian-only administrator session,
-not an implemented desktop installer or a successful APT transaction. The test
+The extended probe also passed a real `dpkg` install/configure/purge transaction
+using a synthetic, dependency-free package in a separate disposable package root
+and database. Its post-install script ran as namespace root, changed payload
+ownership to 101:102, and wrote a completion marker. Both installed status and
+payload removal were checked; the host independently verified retained ownership.
+The initial transaction attempt exposed a missing `/usr/sbin:/sbin` in the probe's
+PATH; adding the normal administrator paths resolved it without extra privileges.
+
+This uses `--force-script-chrootless` with a purpose-built script that explicitly
+targets `DPKG_ROOT`; it does not establish compatibility with arbitrary package
+scripts or a normal APT transaction. The installed runtime stayed read-only.
+This establishes the ownership and package-manager primitives for a Debian-only
+administrator session, not an implemented desktop installer. The test
 range is checked against host accounts but is not a production allocation policy.
 Production work still needs range/ownership validation, a controlled entry point,
 real package-script tests, lifecycle locking, and upgrade persistence. The root
