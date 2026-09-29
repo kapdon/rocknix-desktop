@@ -27,8 +27,10 @@ copy of the old runtime is kept on the device. Existing home data stays in place
   send a fixed toggle request, never signal a user-supplied host PID.
 - Shared data uses temporary idmapped mounts (host root ownership maps to desktop
   UID 62000). No recursive chown/ACL modification of ROMs or shared data.
-- `/storage/scripts` remains read-only because it can contain host-executed code.
-  This is an explicitly unresolved privileged-editing workflow, not parity.
+- `/storage/scripts` is excluded entirely by user direction: host maintenance
+  scripts are not a Desktop dependency. No administrator-editing UI is needed.
+  This source change still needs deployment; the installed ff93f2c bundle has
+  the earlier read-only mount. Host-root SSH access remains unchanged.
 
 This is not a per-app sandbox. Apps share their home, network, display protocols
 and audio access. Browser renderer sandboxes remain separate and must be tested.
@@ -37,6 +39,12 @@ account database, keyboard binary or package installation is changed.
 
 ## Parity and acceptance ledger
 
+User acceptance update: the user reports that physical controller navigation,
+R3 close, keyboard toggle and speaker audio all work on the installed Bubblewrap
+build. This is physical-user evidence, distinct from injected checks. It does
+not additionally establish microphone, device switching, every individual
+West/North field sequence or a full Return-to-Gaming acceptance run.
+
 Latest consistency audit (source `c83a8b0`): all 22 installed host scripts and
 `/usr/local/bin` overlay scripts SHA-256-match this worktree. Changes after the
 installed ff93f2c source are documentation and experiment/test helpers only;
@@ -44,8 +52,8 @@ there is no newer runtime implementation awaiting a rebuild. The complete
 `bash tests/check.sh` suite passed, including ownership-preserving packaging,
 early-failure cleanup, network helper, launcher sizing and controller contracts.
 Live origin/dev remains `39fa395a34578d2373ce20b618bfc150f3eaa892`.
-This audit does not replace the outstanding physical acceptance or scripts
-privilege-policy decision below.
+This historical audit predates removal of the scripts mount. A new runtime
+deployment is needed for that change; the scripts policy decision is resolved.
 
 | Requirement from dev / migration | Current evidence | Remaining acceptance |
 | --- | --- | --- |
@@ -59,7 +67,7 @@ privilege-policy decision below.
 | Audio/status/battery/clock | Non-root synthetic speaker-output monitor loopback passed; pavucontrol, Wi-Fi/battery/clock rendered | Audible output/user acceptance, microphone, device switching |
 | Network editing | Settings and Apps use isolated editor/proxy; inactive-profile rename/save/delete passed; clean ff93f2c proxy failure, singleton and R3 cleanup passed | Physical-controller acceptance |
 | Floating utilities and PiP | Clean ff93f2c PiP floats, shrinks above keyboard, and R3 closes only PiP; network utility tabs at 960×540 with keyboard | Narrow-output PiP and physical-controller acceptance |
-| Shared data read/write | All six mounts passed non-root create/edit/rename/copy/delete and host UID mapping; clean-package Thunar create/rename/permanent-delete passed on backup | Thunar Trash reports filesystem-boundary error; baseline comparison and repair needed; scripts workflow decision |
+| Shared data read/write | All six mounts passed non-root create/edit/rename/copy/delete and host UID mapping; clean-package Thunar create/rename/permanent-delete passed on backup | Thunar Trash reports filesystem-boundary error; scripts exclusion needs deployment verification |
 | Home persistence | Existing home migrated in place; retained Firefox profile opens; clean ff93f2c uninstall/reinstall retained inode 6291460 and UID/GID 62000 | Future upgrades remain subject to regression testing |
 | Return confirmation and normal restoration | Clean ff93f2c confirmed Return restores ES, exact ACL and removes runtime/apps; narrow keyboard-visible confirmation survives pointer movement and Escape retains Desktop | Physical-controller user acceptance |
 | Crash restoration | Whole cgroup, keyboard, Waybar and compositor SIGKILL recovery passed; early-setup journal cleanup and real reboot passed | Final physical acceptance; abrupt power loss is not tested |

@@ -41,6 +41,17 @@ assert video_args.count('/dev/video0') == 2
 assert '/dev/video1' not in video_args
 assert '/dev/video0' not in args
 
+# Exercise a host where every shared directory, including scripts, exists.
+# The allowlist must not grow simply because another host directory exists.
+with patch.object(Path, 'is_dir', return_value=True):
+    shared_args = runtime.sandbox_command(Path('/test/root'), Path('/test/run'),
+                                         ['/bin/true'], True, True)
+assert '/storage/scripts' not in shared_args
+assert '/storage' not in [shared_args[i + 1] for i, value in enumerate(shared_args)
+                         if value in ('--bind', '--ro-bind')]
+for name in runtime.SHARED_DATA:
+    assert '/storage/' + name in shared_args
+
 with tempfile.TemporaryDirectory() as directory:
     home = Path(directory) / "home"
     home.mkdir()

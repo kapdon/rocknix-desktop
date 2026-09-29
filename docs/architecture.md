@@ -52,7 +52,8 @@ durability.
   existing nobody UID; that shared identity is a documented limitation.
 - Shared data uses temporary idmapped mounts: desktop UID 62000 writes map to
   host root ownership without recursively changing shared files. Host-executed
-  `/storage/scripts` is read-only pending a privileged-editing decision.
+  `/storage/scripts` is not mounted: host maintenance scripts are not a Desktop
+  dependency. Host-root SSH access is unchanged.
 
 Separate home/shared bind mounts have a known GLib Trash limitation: matching
 filesystem device IDs can select the home Trash, but rename across the mounts

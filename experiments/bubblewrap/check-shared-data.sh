@@ -22,5 +22,5 @@ for name in Desktop Steam backup games-external games-internal roms; do
   test "$(stat -c %u "$work/renamed")" = 62000
   printf 'PASS: %s create/edit/rename/copy/delete; user UID 62000\n' "$parent"
 done
-test ! -w /storage/scripts
-printf 'PASS: scripts remains read-only pending privileged-editing decision\n'
+test ! -e /storage/scripts
+printf 'PASS: host scripts are not exposed to Desktop\n'

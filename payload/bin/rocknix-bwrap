@@ -75,10 +75,8 @@ def sandbox_command(root, work, command, graphical=False, desktop=False, video_n
             path = work / "shared" / name
             if path.is_dir():
                 args += ["--bind", str(path), "/storage/" + name]
-        # Host-executed scripts are not ordinary shared data. Keep them readable
-        # pending an explicit privileged editing workflow, not silently rootable.
-        if Path("/storage/scripts").is_dir():
-            args += ["--ro-bind", "/storage/scripts", "/storage/scripts"]
+        # Host maintenance scripts are not a Desktop dependency. Do not expose
+        # /storage/scripts, even read-only; only SHARED_DATA is allowlisted.
         for name, value in os.environ.items():
             if name.startswith("ROCKNIX_") or name == "TZ":
                 args += ["--setenv", name, value]

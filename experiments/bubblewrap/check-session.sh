@@ -17,7 +17,7 @@ test -w /run/rocknix-xfce/host-control
 test -w /run/rocknix-xfce/control
 test ! -e /run/rocknix-xfce/wvkbd.pid
 test -w /storage/roms
-test ! -w /storage/scripts
+test ! -e /storage/scripts
 unshare -Ur /bin/true
 printf 'PASS: identity, host exclusion, readonly controls and nested userns\n'
 shared_test=$(mktemp /storage/Desktop/.bubblewrap-parity.XXXXXX)
