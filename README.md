@@ -31,7 +31,7 @@ currently out of scope.
 
 | Device | ROCKNIX build | Tested |
 | --- | --- | --- |
-| Retroid Pocket 6 | 20260928 nightly (`7cfc0cd`, next) | Yes |
+| Retroid Pocket 6 | 20260930 nightly (`9fd38fa`, next) | Yes |
 | Retroid Pocket 6 (top D-pad) | | |
 | Retroid Pocket Nova | | |
 | AYN Odin 2 | | |
@@ -69,7 +69,7 @@ This command selects the latest published stable version. To select a specific
 version, use the same installer and add `--release TAG`, for example:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash -s -- --release v0.1.1
+curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash -s -- --release v0.1.0
 ```
 
 For the rolling development build, add `--dev`:
