@@ -1,0 +1,285 @@
+/* Visual reference: Art Book Next 9a50ef366e750aabfab29e6915a2867607212971.
+ * Map its book-like fields and flat selectors onto native GTK controls without
+ * copying EmulationStation assets or turning every control into a rounded card. */
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+
+@define-color rocknix_canvas #000000;
+@define-color rocknix_panel #111111;
+@define-color rocknix_field #222222;
+@define-color rocknix_selector #444444;
+@define-color rocknix_text #ffffff;
+@define-color rocknix_text_secondary rgba(255, 255, 255, 0.67);
+@define-color rocknix_text_disabled rgba(255, 255, 255, 0.20);
+
+* {
+  font-family: "Roboto", sans-serif;
+  font-size: 18px;
+  text-shadow: none;
+  box-shadow: none;
+}
+
+window,
+.background {
+  color: @rocknix_text;
+  background-color: @rocknix_field;
+}
+
+headerbar,
+.titlebar,
+menubar,
+toolbar {
+  color: @rocknix_text;
+  background-color: @rocknix_canvas;
+  background-image: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+headerbar,
+.titlebar {
+  min-height: 54px;
+}
+
+headerbar button,
+.titlebar button,
+toolbar button {
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  background-color: transparent;
+}
+
+menubar > menuitem {
+  min-height: 44px;
+  padding: 0 10px;
+  color: @rocknix_text_secondary;
+}
+
+button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 5px 12px;
+  color: @rocknix_text_secondary;
+  background-color: @rocknix_field;
+  background-image: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+button:hover,
+button:checked,
+button:active,
+button:focus,
+menubar > menuitem:hover {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
+
+button:disabled {
+  color: @rocknix_text_disabled;
+  background-color: @rocknix_panel;
+}
+
+entry,
+spinbutton {
+  min-height: 46px;
+  padding: 4px 10px;
+  color: @rocknix_text;
+  caret-color: @rocknix_text;
+  background-color: @rocknix_panel;
+  border: 1px solid @rocknix_selector;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+entry:focus,
+spinbutton:focus {
+  border-color: @rocknix_text_secondary;
+  box-shadow: inset 0 0 0 1px @rocknix_text_secondary;
+}
+
+selection,
+text selection,
+entry selection {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
+
+.view,
+textview text,
+iconview {
+  color: @rocknix_text;
+  background-color: @rocknix_field;
+}
+
+.view:selected,
+row:selected,
+iconview:selected {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
+
+row {
+  min-height: 46px;
+}
+
+.sidebar,
+placessidebar list {
+  color: @rocknix_text_secondary;
+  background-color: @rocknix_panel;
+}
+
+.sidebar row,
+placessidebar row {
+  min-height: 48px;
+  padding: 1px 10px;
+}
+
+.sidebar row:selected,
+placessidebar row:selected {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
+
+menu,
+.menu,
+popover,
+popover.background {
+  color: @rocknix_text;
+  background-color: @rocknix_panel;
+  border: 0;
+  border-radius: 0;
+}
+
+menuitem {
+  min-height: 46px;
+  padding: 3px 14px;
+  color: @rocknix_text_secondary;
+}
+
+menuitem:hover,
+menuitem:focus {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
+
+notebook > header {
+  color: @rocknix_text_secondary;
+  background-color: @rocknix_canvas;
+}
+
+notebook > header tab {
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 0;
+}
+
+notebook > header tab:checked {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
+
+scrollbar slider {
+  min-width: 16px;
+  min-height: 16px;
+  background-color: @rocknix_selector;
+  border: 3px solid @rocknix_field;
+  border-radius: 0;
+}
+
+scrollbar:hover slider {
+  background-color: @rocknix_text_secondary;
+}
+
+scale trough,
+progressbar trough {
+  min-height: 8px;
+  background-color: @rocknix_panel;
+  border-radius: 0;
+}
+
+scale highlight,
+progressbar progress {
+  min-height: 8px;
+  background-color: @rocknix_selector;
+  border-radius: 0;
+}
+
+scale slider {
+  min-width: 28px;
+  min-height: 28px;
+  background-color: @rocknix_text;
+  border: 0;
+  border-radius: 0;
+}
+
+switch {
+  min-width: 48px;
+  min-height: 28px;
+  background-color: @rocknix_panel;
+  border: 1px solid @rocknix_selector;
+  border-radius: 14px;
+}
+
+switch:checked {
+  background-color: @rocknix_selector;
+}
+
+switch slider {
+  min-width: 24px;
+  min-height: 24px;
+  background-color: @rocknix_text;
+  border-radius: 12px;
+}
+
+tooltip {
+  color: @rocknix_text;
+  background-color: @rocknix_panel;
+  border: 1px solid @rocknix_selector;
+  border-radius: 0;
+}
+
+tooltip label {
+  color: @rocknix_text;
+  padding: 7px 9px;
+}
+
+/* Native connection lists use an inline toolbar and tree cells, not GtkListBox
+ * rows. Match Adwaita's specificity so these controls retain our touch sizing. */
+toolbar.inline-toolbar toolbutton > button.flat {
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  color: @rocknix_text_secondary;
+  background-color: @rocknix_field;
+  background-image: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: none;
+  -gtk-icon-shadow: none;
+}
+
+toolbar.inline-toolbar toolbutton > button.flat:hover,
+toolbar.inline-toolbar toolbutton > button.flat:focus,
+toolbar.inline-toolbar toolbutton > button.flat:active {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+  background-image: none;
+  box-shadow: none;
+}
+
+toolbar.inline-toolbar toolbutton > button.flat:disabled {
+  color: @rocknix_text_disabled;
+  background-color: @rocknix_panel;
+  background-image: none;
+  box-shadow: none;
+}
+
+treeview.view:selected,
+treeview.view:selected:focus {
+  color: @rocknix_text;
+  background-color: @rocknix_selector;
+}
