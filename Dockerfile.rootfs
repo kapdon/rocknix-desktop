@@ -1,0 +1,199 @@
+# syntax=docker/dockerfile:1
+
+FROM --platform=$BUILDPLATFORM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS ffmpeg-rpi-builder
+
+ARG TARGETARCH
+
+RUN test "${TARGETARCH}" = "arm64" \
+    && dpkg --add-architecture arm64 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+       build-essential \
+       ca-certificates \
+       gcc-aarch64-linux-gnu \
+       libc6-dev-arm64-cross \
+       libdrm-dev:arm64 \
+       libudev-dev:arm64 \
+       patch \
+       pkg-config \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+ADD --checksum=sha256:f864a7d595b7d7ad50e2600c5002efa824e939cac941ebde487bf326f80f533a \
+  https://github.com/RPi-Distro/ffmpeg/archive/2fe08f3bd52c6e795df8353d29deb89596b5099d.tar.gz \
+  /tmp/ffmpeg-rpi.tar.gz
+COPY build-support/ffmpeg/build.sh /usr/local/bin/build-firefox-ffmpeg
+RUN chmod 0755 /usr/local/bin/build-firefox-ffmpeg \
+    && /usr/local/bin/build-firefox-ffmpeg
+
+FROM --platform=$BUILDPLATFORM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS keyboard-builder
+ARG TARGETARCH
+RUN test "${TARGETARCH}" = "arm64" \
+    && dpkg --add-architecture arm64 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends build-essential gcc-aarch64-linux-gnu \
+       libc6-dev-arm64-cross libwayland-dev:arm64 libxkbcommon-dev:arm64 \
+       libpango1.0-dev:arm64 libwayland-bin pkg-config python3 patch ca-certificates
+ADD --checksum=sha256:e3f82302367cdacf7a0c59d6d1bb4f5140083da1b3083da7c835dab0c250034c \
+    https://github.com/jjsullivan5196/wvkbd/archive/refs/tags/v0.17.tar.gz /tmp/wvkbd.tar.gz
+COPY build-support/wvkbd/ /tmp/wvkbd-custom/
+RUN mkdir /tmp/wvkbd \
+    && tar -xzf /tmp/wvkbd.tar.gz --strip-components=1 -C /tmp/wvkbd \
+    && cd /tmp/wvkbd \
+    && patch -p1 < /tmp/wvkbd-custom/002-output.patch \
+    && patch -p1 < /tmp/wvkbd-custom/003-no-popup.patch \
+    && python3 /tmp/wvkbd-custom/customize.py /tmp/wvkbd \
+    && PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig \
+       make -j4 CC=aarch64-linux-gnu-gcc wvkbd-mobintl \
+    && aarch64-linux-gnu-strip wvkbd-mobintl
+
+FROM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS desktop-apps
+
+ARG TARGETARCH
+
+RUN test "${TARGETARCH}" = "arm64"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Bootstrap certificates through APT's signed-index/hash-verified HTTP path,
+# then use HTTPS for runtime downloads (some HTTP caches serve stale .deb data).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources
+
+RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
+    && chmod 0755 /usr/sbin/policy-rc.d \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+       adwaita-icon-theme \
+       alsa-utils \
+       bash \
+       ca-certificates \
+       dbus \
+       desktop-file-utils \
+       fonts-dejavu-core \
+       fonts-liberation \
+       fonts-noto-color-emoji \
+       fonts-noto-core \
+       fonts-roboto \
+       ffmpeg \
+       firefox-esr \
+       foot \
+       fuzzel \
+       glmark2-wayland \
+       gvfs \
+       gvfs-backends \
+       iproute2 \
+       less \
+       libgl1-mesa-dri \
+       libvulkan1 \
+       mesa-utils \
+       mesa-vulkan-drivers \
+       mousepad \
+       mpv \
+       nano \
+       pavucontrol \
+       procps \
+       pulseaudio-utils \
+       qt6-wayland \
+       ristretto \
+       shared-mime-info \
+       thunar \
+       tumbler \
+       vulkan-tools \
+       waybar \
+       wayland-utils \
+       wl-clipboard \
+       xdg-user-dirs \
+       xdg-utils \
+       xfce4-taskmanager \
+    && rm -f \
+       /usr/share/applications/firefox-esr.desktop \
+       /usr/share/applications/foot-server.desktop \
+       /usr/share/applications/footclient.desktop \
+    && rm -f /usr/sbin/policy-rc.d \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-desktop-packages.tsv
+
+COPY rootfs-overlay/ /
+COPY --from=fuzzel-artifacts /opt/rocknix-fuzzel/ /opt/rocknix-fuzzel/
+COPY --from=keyboard-builder /tmp/wvkbd/wvkbd-mobintl /usr/local/bin/wvkbd-rocknix
+COPY --from=keyboard-builder /tmp/wvkbd/LICENSE /usr/local/share/wvkbd/LICENSE
+COPY --from=keyboard-builder /tmp/wvkbd.tar.gz /usr/local/share/wvkbd/source.tar.gz
+COPY build-support/wvkbd/ /usr/local/share/wvkbd/custom/
+COPY --from=ffmpeg-rpi-builder /opt/ffmpeg-rpi-7.1.5/ /opt/ffmpeg-rpi-7.1.5/
+# Distribute the exact source (including the RPi patch) and build/adjustment
+# script beside our privately rebuilt LGPL libraries, not only an upstream URL.
+COPY --from=ffmpeg-rpi-builder /tmp/ffmpeg-rpi.tar.gz /opt/ffmpeg-rpi-7.1.5/share/source/ffmpeg-rpi.tar.gz
+COPY --from=ffmpeg-rpi-builder /usr/local/bin/build-firefox-ffmpeg /opt/ffmpeg-rpi-7.1.5/share/source/build.sh
+
+RUN chmod 0755 \
+      /usr/sbin/policy-rc.d \
+      /usr/local/bin/rocknix-version \
+      /usr/local/bin/rocknix-return \
+      /usr/local/bin/rocknix-keyboard-toggle \
+      /usr/local/bin/rocknix-launcher \
+      /usr/local/bin/rocknix-display-menu \
+      /usr/local/bin/rocknix-display-metrics \
+      /usr/local/bin/rocknix-fuzzel \
+      /usr/local/bin/rocknix-network-settings \
+      /usr/local/bin/rocknix-status \
+      /usr/local/bin/rocknix-window-switcher \
+      /usr/local/bin/rocknix-firefox \
+      /usr/local/bin/rocknix-sway-session \
+      /usr/local/bin/rocknix-lxc-session \
+      /usr/local/bin/rocknix-fex /usr/local/bin/FEX \
+    && mkdir -p \
+      /home/rocknix-default/Desktop \
+      /home/rocknix-default/.config \
+      /run \
+      /storage/Desktop \
+      /storage/Steam \
+      /storage/backup \
+      /storage/games-external \
+      /storage/games-internal \
+    && cp /usr/share/applications/rocknix-return.desktop /home/rocknix-default/Desktop/ \
+    && cp /usr/share/applications/rocknix-keyboard.desktop /home/rocknix-default/Desktop/ \
+    && cp /usr/share/applications/rocknix-about.desktop /home/rocknix-default/Desktop/ \
+    && chmod 0755 /home/rocknix-default/Desktop/*.desktop \
+    && chmod 1777 /tmp \
+    && rm -f /etc/machine-id
+
+# Writable system-container runtime. Native ROCKNIX does not run any executable
+# from this tree with host-root privileges; LXC uses separate trusted host tools.
+FROM desktop-apps AS lxc-desktop
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends sudo python3 python3-gi gir1.2-gtk-3.0 systemd systemd-sysv \
+    && chmod 0755 /usr/local/bin/rocknix-container-update /usr/local/bin/rocknix-default-password \
+    && useradd --create-home --uid 1000 --shell /bin/bash --groups sudo rocknix \
+    && passwd --lock root \
+    && /usr/local/bin/rocknix-default-password \
+    && rm -f /usr/sbin/policy-rc.d \
+    && systemctl set-default multi-user.target \
+    && systemctl enable rocknix-desktop-session.service \
+    && systemctl mask getty.target console-getty.service NetworkManager.service \
+       NetworkManager-wait-online.service systemd-networkd.service \
+       systemd-networkd.socket systemd-networkd-wait-online.service \
+       sys-kernel-config.mount sys-kernel-debug.mount systemd-firstboot.service \
+    && mkdir -p /etc/systemd/journald.conf.d \
+    && printf '[Journal]\nStorage=volatile\nRuntimeMaxUse=32M\n' \
+       > /etc/systemd/journald.conf.d/rocknix-container.conf \
+    && printf 'ROCKNIX_LXC_RUNTIME=1\n' >> /etc/rocknix-desktop-release \
+    && rm -f /etc/machine-id /var/lib/dbus/machine-id \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-desktop-packages.tsv
+COPY build-support/trash/check-packages.py build-support/trash/install-image.py /tmp/trash-tools/
+# A named context supplied by build-rootfs.sh / the ARM64 release workflow.
+# Install after bootstrap so Python is present and no later APT step replaces
+# the tested package family. Never overwrite libraries with a private prefix.
+RUN --network=none --mount=from=trash-packages,target=/tmp/trash-packages,ro \
+    python3 /tmp/trash-tools/check-packages.py /tmp/trash-packages \
+    && python3 /tmp/trash-tools/install-image.py /tmp/trash-packages \
+    && mkdir -p /usr/local/share/rocknix-desktop/trash-source \
+    && cp /tmp/trash-packages/*.dsc /tmp/trash-packages/*.tar.* \
+       /tmp/trash-packages/*.buildinfo /tmp/trash-packages/*.changes \
+       /usr/local/share/rocknix-desktop/trash-source/ \
+    && rm -r /tmp/trash-tools \
+    && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-desktop-packages.tsv
