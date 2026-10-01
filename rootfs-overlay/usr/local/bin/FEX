@@ -1,0 +1,3 @@
+#!/bin/sh
+# Regular root-owned entry point for launchers that reject PATH and symlinks.
+exec /usr/local/bin/rocknix-fex "$@"

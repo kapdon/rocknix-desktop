@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+runtime=/run/rocknix-fex
+if [ ! -x "$runtime/bin/FEX" ] || [ ! -x "$runtime/bin/FEXServer" ] ||
+   [ ! -r "$runtime/lib/libfmt.so.12" ] || [ ! -d "$runtime/ArchLinux/usr" ]; then
+    printf 'ROCKNIX FEX runtime is unavailable in this Desktop session.\n' >&2
+    exit 126
+fi
+# Only this translator and its children receive the native library directory.
+# Do not change the desktop loader environment or write the host FEX config.
+export LD_LIBRARY_PATH="$runtime/lib"
+export FEX_ROOTFS="$runtime/ArchLinux"
+exec "$runtime/bin/FEX" "$@"
