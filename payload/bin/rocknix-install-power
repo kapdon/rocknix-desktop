@@ -1,0 +1,27 @@
+#!/usr/bin/python3
+"""Refuse install/update writes with low or unknown main-device battery."""
+from pathlib import Path
+
+BATTERY = Path('/sys/class/power_supply/battery')
+MINIMUM = 10
+
+
+def require_power(battery=BATTERY):
+    try:
+        if (battery / 'type').read_text().strip() != 'Battery':
+            raise ValueError('not the main battery')
+        raw = (battery / 'capacity').read_text().strip()
+        if not raw.isascii() or not raw.isdecimal():
+            raise ValueError('invalid capacity')
+        capacity = int(raw)
+        if not 0 <= capacity <= 100:
+            raise ValueError('capacity out of range')
+    except (OSError, ValueError) as error:
+        raise RuntimeError('Cannot read the device battery; installation/update blocked. Restore battery telemetry and retry.') from error
+    if capacity < MINIMUM:
+        raise RuntimeError(f'Battery is {capacity}%; charge to at least {MINIMUM}% before installation/update, even when plugged in.')
+    return capacity
+
+
+if __name__ == '__main__':
+    print(f'Battery check passed: {require_power()}% (minimum {MINIMUM}%).')
