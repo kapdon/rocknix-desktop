@@ -9,14 +9,14 @@ cp scripts/publish-release.sh "$scratch/repo/scripts/"
 cp scripts/publish-development.sh "$scratch/repo/scripts/"
 cp scripts/prune-development-assets.sh "$scratch/repo/scripts/"
 printf 'dist/\n' >"$scratch/repo/.gitignore"
-git init -q --initial-branch=main "$scratch/repo"
+git init -q --initial-branch=dev "$scratch/repo"
 git -C "$scratch/repo" config user.name 'Release fixture'
 git -C "$scratch/repo" config user.email 'fixture@example.invalid'
 git -C "$scratch/repo" add .
 git -C "$scratch/repo" commit -qm 'Release fixture'
 git init -q --bare "$scratch/remote"
 git -C "$scratch/repo" remote add origin "$scratch/remote"
-git -C "$scratch/repo" push -q origin main
+git -C "$scratch/repo" push -q origin dev
 revision=$(git -C "$scratch/repo" rev-parse HEAD)
 mkdir "$scratch/archive"
 printf 'commit=%s\nbuilt=2026-09-30T11:00:00Z\n' "$revision" >"$scratch/archive/build-info"
@@ -64,6 +64,8 @@ for tag in v0.1.0-alpha.1 v0.1.0; do
   grep -q '^release view .*--json assets' "$PUBLISH_LOG"
   if grep -q '/releases/tags/v0.1.0' "$PUBLISH_LOG"; then exit 1; fi
   grep -q '^release create .*--draft' "$PUBLISH_LOG"
+  grep -Fxq -- 'Built: 2026-09-30T11:00:00Z' "$PUBLISH_LOG"
+  grep -qF -- "$(printf 'Commit: `%s`' "$revision")" "$PUBLISH_LOG"
   grep -q '^release upload .*latest.json' "$PUBLISH_LOG"
   grep -q '^release edit .*--draft=false' "$PUBLISH_LOG"
   if [[ "$tag" = *-* ]]; then grep -q -- '--prerelease' "$PUBLISH_LOG";
@@ -71,7 +73,7 @@ for tag in v0.1.0-alpha.1 v0.1.0; do
   if [[ "$tag" = *-* ]]; then grep -q -- '--latest=false' "$PUBLISH_LOG";
   else grep -q -- '--latest=true' "$PUBLISH_LOG"; fi
   jq -e --arg revision "$revision" --arg tag "$tag" \
-    '.commit == $revision and .version == $tag and .released_at == "2026-09-30T12:00:00Z"' \
+    '.commit == $revision and .version == $tag and .released_at == "2026-09-30T12:00:00Z" and .built_at == "2026-09-30T11:00:00Z"' \
     "$scratch/repo/dist/latest.json" >/dev/null
 done
 for attempt in 1 2; do
@@ -106,4 +108,7 @@ if bash "$scratch/repo/scripts/publish-release.sh" v0.1.0 >/dev/null 2>&1; then 
 git -C "$scratch/repo" switch -qc candidate
 git -C "$scratch/repo" commit --allow-empty -qm 'Untested candidate'
 if bash "$scratch/repo/scripts/publish-release.sh" v0.2.0 >/dev/null 2>&1; then exit 1; fi
-printf 'PASS: main provenance, immutable versioned tags, latest-only dev assets and complete-before-retirement\n'
+git -C "$scratch/repo" push -q origin HEAD:refs/heads/dev
+git -C "$scratch/repo" switch -q --detach "$revision"
+if bash "$scratch/repo/scripts/publish-release.sh" v0.2.0 >/dev/null 2>&1; then exit 1; fi
+printf 'PASS: exact dev provenance, immutable versioned tags, latest-only dev assets and complete-before-retirement\n'

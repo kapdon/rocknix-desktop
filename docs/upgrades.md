@@ -3,7 +3,7 @@
 ## Release selection
 
 The default installer selects the rolling development release. To use a
-versioned release, use its published installer with `--release TAG`.
+versioned release, use the same `dev` installer with `--release TAG`.
 See the [README installation commands](../README.md#install-or-update).
 
 The public workflow has three operations: Install, Update and Uninstall.

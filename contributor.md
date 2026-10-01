@@ -85,8 +85,8 @@ device to the support table without testing on that physical hardware.
 
 ## Releases
 
-`dev` is the rolling testing branch; target contribution PRs at `dev`, not
-`main`. Manually run **Development bundle** on `dev` after local and relevant
+`dev` is the default development branch; target contribution PRs at `dev`.
+Manually run **Development bundle** on `dev` after local and relevant
 hardware validation. Eligible non-RP6 devices receive an automatic, default-No
 warning and use the narrow [SM8550 profile](docs/devices.md).
 This applies to development and versioned releases; `--yes` cannot bypass the
@@ -108,8 +108,9 @@ current asset set and removes superseded dev assets. The pointer includes
 fixture tests cover pointer-failure retention and deletion order. The rolling
 `development` tag is mutable; versioned tags are not.
 
-Promote tested commits to `main`, then manually run **Versioned release** on
-`main` with the chosen version. `vX.Y.Z` publishes a normal release; alpha,
+Manually run **Versioned release** on the tested `dev` commit with the chosen
+version. The publisher requires the exact current remote `dev` commit.
+`vX.Y.Z` publishes a normal release; alpha,
 beta and RC tags publish pre-releases. The workflow makes the release public
 only after all installer assets are uploaded. Never move a versioned tag or replace its
 assets. Installation selects a channel/version explicitly; publication does not

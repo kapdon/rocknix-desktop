@@ -66,7 +66,11 @@ curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.
 ```
 
 This command selects the latest published development build. To select a
-versioned release, use its published installer and add `--release TAG`.
+versioned release, use the same installer and add `--release TAG`, for example:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash -s -- --release v0.1.0
+```
 Available versions are on the
 [releases page](https://github.com/kapdon/rocknix-desktop/releases).
 
