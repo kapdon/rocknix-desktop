@@ -1,0 +1,181 @@
+#!/usr/bin/python3
+"""Update LXC Desktop without replacing its Debian rootfs or private home.
+
+The checksum establishes integrity, not publisher trust: bundles contain host
+root code and must come from the trusted Desktop build. No old runtime/home
+backup is made. An interrupted update stays guarded and resumes with the same
+bundle; all guest commands execute through mapped LXC attach.
+"""
+import argparse
+import fcntl
+import grp
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import pwd
+import re
+import runpy
+import shutil
+import signal
+import stat
+import subprocess
+import tarfile
+import tempfile
+
+PROJECT = Path('/storage/rocknix-desktop')
+BASE = PROJECT / 'managed/host'
+DATA = PROJECT / 'data'
+ROOTFS = DATA / 'rootfs'
+WORKSPACE = BASE / 'state'
+GUARD = WORKSPACE / 'upgrade-in-progress.json'
+STATE = Path('/run/rocknix-lxc-upgrade')
+UNIT = Path('/storage/.config/system.d/rocknix-desktop.service')
+HOOK = Path('/storage/.config/autostart/999-rocknix-desktop')
+ENTRY = Path('/storage/.config/modules/Desktop Mode.sh')
+FILES = {'build-info', 'desktop-integration.tar.gz', 'README.md', 'uninstall.sh',
+         'upgrade.sh', 'upgrade-lxc.py'}
+UPDATE_RESERVE = 256 * 1024**2
+
+
+def helper_path(name):
+    directory = Path(__file__).absolute().parent
+    if Path(__file__).name == 'upgrade-lxc.py':
+        # The same updater is copied beside upgrade.sh in a bundle and in the
+        # installed host tree. Helpers themselves retain their payload/bin or
+        # bin locations; they are never read from the guest rootfs.
+        directory = directory / ('bin' if (directory / 'bin').is_dir() else 'payload/bin')
+    path = directory / name
+    safe_directory(directory)
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        raise RuntimeError('unsafe updater helper')
+    return path
+
+
+def check_staging_space(target, members):
+    """Reject known insufficient space before extracting or starting maintenance.
+
+    Reserve is headroom, not a guarantee: guest package writes, filesystem
+    metadata and concurrent storage users can still exhaust space later.
+    The incoming replacement rootfs is deliberately excluded from the estimate.
+    """
+    staged = sum(((item.size + 4095) // 4096) * 4096 if item.isfile()
+                 else 4096 for item in members)
+    required = staged + UPDATE_RESERVE
+    available = shutil.disk_usage(target).free
+    if available < required:
+        raise RuntimeError(f'insufficient update staging space: need at least '
+                           f'{required} bytes, available {available}; '
+                           'free space and retry with the same bundle')
+
+
+def select_layout(project):
+    """Require the complete canonical layout; never infer fresh guest data."""
+    host = project / 'managed/host'
+    if os.path.lexists(project / '.fresh-install.json'):
+        raise RuntimeError('finish the guarded fresh installation before updating')
+    if not all(os.path.lexists(path) for path in
+               (host, host / 'state', project / 'data/rootfs', project / 'data/home')):
+        raise RuntimeError('incomplete Desktop storage layout; run Install to replace Desktop data')
+    return host, project / 'data', host / 'state', host / 'state/upgrade-in-progress.json'
+
+
+def configure_layout():
+    global BASE, DATA, ROOTFS, WORKSPACE, GUARD
+    BASE, DATA, WORKSPACE, GUARD = select_layout(PROJECT)
+    for path in (BASE, DATA, WORKSPACE):
+        safe_directory(path)
+    ROOTFS = DATA / 'rootfs'
+
+
+def integration_bytes(source):
+    """Render trusted native integration for the selected installation only."""
+    content = source.read_bytes()
+    content = content.replace(str(PROJECT / 'data/rootfs').encode(), str(ROOTFS).encode())
+    return content.replace(str(PROJECT / 'managed/host').encode(), str(BASE).encode())
+
+
+def safe_directory(path):
+    for item in (path, *path.parents):
+        info = item.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise RuntimeError(f'unsafe host directory: {item}')
+
+
+def no_mounts(path):
+    for line in Path('/proc/self/mountinfo').read_text().splitlines():
+        mount = line.split()[4].replace('\\040', ' ')
+        if mount == str(path) or mount.startswith(str(path) + '/'):
+            raise RuntimeError(f'mounted data under {path}; recover the runtime first')
+
+
+def validate_existing_storage(base):
+    """Already-mapped LXC data is never recursively re-owned during updates."""
+    safe_directory(base)
+    for name, owner in (('rootfs', 200000), ('home', 201000)):
+        info = (base / name).lstat()
+        if not stat.S_ISDIR(info.st_mode) or (info.st_uid, info.st_gid) != (owner, owner):
+            raise RuntimeError(f'expected mapped LXC {name} directory owned by {owner}')
+    # Descendants legitimately include service accounts, guest-root-owned home
+    # files and additional guest users. Their ownership is not ours to rewrite.
+
+
+def retained_marker(host):
+    marker = host / 'state/uninstalled.json'
+    if not os.path.lexists(marker):
+        return None
+    safe_directory(marker.parent)
+    info = marker.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        raise RuntimeError('unsafe retained-installation marker')
+    record = json.loads(marker.read_text())
+    if record.get('format') != 1 or record.get('phase') != 'removed':
+        raise RuntimeError('finish interrupted uninstall before reinstalling')
+    if set(record.get('files', {})) != {str(HOOK), str(ENTRY), str(UNIT)} or \
+            any(not isinstance(value, str) or not re.fullmatch('[0-9a-f]{64}', value)
+                for value in record['files'].values()):
+        raise RuntimeError('invalid retained integration record')
+    # A clean reinstall must not overwrite a replacement supplied by the user.
+    # Interrupted updates instead follow their existing checksum-bound journal.
+    if not os.path.lexists(GUARD):
+        for path in (HOOK, ENTRY, UNIT):
+            if os.path.lexists(path):
+                raise RuntimeError(f'integration appeared after uninstall: {path}')
+    return marker
+
+
+def idle():
+    desktop = subprocess.run(
+        ['systemctl', 'show', '--property=ActiveState', '--value', 'rocknix-desktop.service'],
+        capture_output=True, text=True, check=True)
+    if desktop.stdout.strip() != 'inactive':
+        raise RuntimeError('Desktop Mode must be fully inactive before updating')
+    for unit in ('sway.service', 'essway.service'):
+        subprocess.run(['systemctl', 'is-active', '--quiet', unit], check=True)
+    no_mounts(BASE)
+    if DATA != BASE:
+        no_mounts(DATA)
+
+
+def atomic(path, data, mode=0o644):
+    safe_directory(path.parent)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise RuntimeError(f'unsafe managed host destination: {path}')
+    fd, name = tempfile.mkstemp(prefix='.rocknix-update-', dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(data)
+            os.fchmod(stream.fileno(), mode)
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+        fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
