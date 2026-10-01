@@ -1,0 +1,4 @@
+// This hook only changes guest fstab hints, never package selection or holds.
+// Bootstrap may not have Python yet. A policy error must not block security updates.
+DPkg::Pre-Invoke { "if test -x /usr/bin/python3; then /usr/bin/python3 /usr/local/bin/rocknix-trash-policy --apt --disable || true; fi"; };
+DPkg::Post-Invoke { "if test -x /usr/bin/python3; then /usr/bin/python3 /usr/local/bin/rocknix-trash-policy --apt || true; fi"; };
