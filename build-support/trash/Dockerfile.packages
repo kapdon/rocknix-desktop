@@ -1,0 +1,46 @@
+# Build the Debian package family used by the Desktop image and guest updater.
+# Keep Debian's build rules, backends, tests, and security patch series.
+FROM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS sources
+ARG GLIB_VERSION=2.84.4-3~deb13u5
+ARG GVFS_VERSION=1.57.2-2+deb13u1
+ARG JOBS=6
+RUN sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates build-essential \
+       dpkg-dev devscripts equivs python3 \
+    && sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources
+WORKDIR /build
+RUN apt-get update \
+    && apt-get source glib2.0=${GLIB_VERSION} gvfs=${GVFS_VERSION} \
+    && apt-get build-dep -y glib2.0=${GLIB_VERSION} gvfs=${GVFS_VERSION}
+RUN useradd --create-home --uid 1000 --shell /bin/bash builder \
+    && mkdir /artifacts \
+    && chown -R builder:builder /build /artifacts
+COPY patch-trash.py mount-identity.h prepare-package.py /patch/
+FROM sources AS builder
+# No private library prefix, LD_LIBRARY_PATH, apt hold, or repository pin.
+# Later Debian revisions must supersede these local versions normally.
+# GLib's permission tests require an ordinary user, even on native ARM64 CI.
+USER builder
+ENV HOME=/home/builder USER=builder LOGNAME=builder
+RUN python3 /patch/prepare-package.py glib /build/glib2.0-2.84.4 "${GLIB_VERSION}" \
+    && cd /build/glib2.0-2.84.4 \
+    && dpkg-source -b . \
+    && (dpkg-buildpackage -us -uc -b -j${JOBS} > /build/glib-package-build.log 2>&1 \
+        || { tail -n 60 /build/glib-package-build.log; \
+             python3 -c 'import json,pathlib; p=pathlib.Path("debian/build/deb/meson-logs/testlog.json"); rows=[json.loads(s) for s in p.read_text().splitlines()] if p.exists() else []; [print(r["name"], r.get("result"), r.get("stdout", "")[-12000:], r.get("stderr", "")[-12000:]) for r in rows if r.get("result") not in ("OK", "SKIP", "EXPECTEDFAIL")]'; \
+             exit 1; })
+RUN python3 /patch/prepare-package.py gvfs /build/gvfs-1.57.2 "${GVFS_VERSION}" \
+    && cd /build/gvfs-1.57.2 \
+    && dpkg-source -b . \
+    && dpkg-buildpackage -us -uc -b -j${JOBS}
+RUN cp /build/*.deb /build/*.udeb /build/*.dsc /build/*.tar.* /build/*.buildinfo /build/*.changes /artifacts/ \
+    && mkdir /artifacts/build-logs \
+    && cp /build/glib-package-build.log /artifacts/build-logs/ \
+    && cp -a /build/glib2.0-2.84.4/debian/build/deb/meson-logs /artifacts/build-logs/glib \
+    && find /build/gvfs-1.57.2 -type d -name meson-logs -exec cp -a '{}' /artifacts/build-logs/gvfs \; \
+    && test -d /artifacts/build-logs/gvfs \
+    && cd /artifacts && find . -type f ! -name SHA256SUMS.tmp -exec sha256sum '{}' + > SHA256SUMS.tmp \
+    && mv SHA256SUMS.tmp SHA256SUMS
+FROM scratch AS artifact
+COPY --from=builder /artifacts/ /
