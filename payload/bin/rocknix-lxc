@@ -1,0 +1,291 @@
+#!/usr/bin/python3
+"""Host-owned supervisor for a writable, UID-mapped Debian system container.
+
+Runtime configuration is generated here, never imported from the Debian tree.
+Desktop bridge/data mounts are added by the host integration, not by the guest.
+"""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import runpy
+import signal
+import stat
+import subprocess
+import time
+
+NETWORK = runpy.run_path(str(Path(__file__).with_name('rocknix-lxc-network')))
+DESKTOP = runpy.run_path(str(Path(__file__).with_name('rocknix-lxc-desktop')))
+UID, COUNT = 200000, 65536
+UNIFIED = Path('/sys/fs/cgroup/unified')
+
+
+def safe_path(path):
+    path = Path(path)
+    if not path.is_absolute() or not re.fullmatch(r'/[A-Za-z0-9_./-]+', str(path)) or '..' in path.parts:
+        raise RuntimeError('unsafe runtime path')
+    return path
+
+
+def process_identity(pid):
+    try:
+        return Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19]
+    except FileNotFoundError:
+        return None
+
+
+class Runtime:
+    def __init__(self, tools, rootfs, state=Path('/run/rocknix-lxc'), memory_bytes=4 * 1024**3,
+                 recovery_only=False):
+        if os.geteuid() != 0:
+            raise RuntimeError('host supervisor only')
+        self.tools = NETWORK['trusted_tools'](safe_path(tools))
+        self.rootfs = safe_path(rootfs)
+        self.recovery_only = recovery_only
+        if not recovery_only:
+            for path in self.rootfs.parents:
+                info = path.lstat()
+                if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+                    raise RuntimeError('unsafe container rootfs ancestor')
+            info = self.rootfs.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != UID or info.st_gid != UID:
+                raise RuntimeError('rootfs must be a directory owned by mapped container root')
+        self.state = safe_path(state)
+        if self.state.parent != Path('/run') or not self.state.name.startswith('rocknix-lxc'):
+            raise RuntimeError('runtime state must be a dedicated host /run directory')
+        self.name = self.state.name
+        self.configs = self.state / 'containers'
+        self.config = self.configs / self.name / 'config'
+        self.scope = UNIFIED / self.name
+        if not 128 * 1024**2 <= memory_bytes <= 8 * 1024**3:
+            raise RuntimeError('invalid desktop memory limit')
+        self.memory_bytes = memory_bytes
+        self.child = self.network = self.output = None
+        self.desktop = None
+        self.owned = False
+
+    def command(self, name, *args):
+        lib = self.tools / 'usr/lib/aarch64-linux-gnu'
+        return [str(lib / 'ld-linux-aarch64.so.1'), '--library-path', str(lib),
+                str(self.tools / 'usr/bin' / name), *map(str, args)]
+
+    def attach(self, *args, timeout=15, input=None):
+        return subprocess.run(self.command('lxc-attach', '-P', self.configs,
+            '-n', self.name, '--clear-env', '--', *args),
+            env={'PATH': '/usr/bin:/bin'}, text=True, input=input,
+            capture_output=True, timeout=timeout)
+
+    def save(self, record):
+        path = self.state / 'resources.new'
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'w') as stream:
+            json.dump(record, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        path.replace(self.state / 'resources.json')
+
+    def start(self, desktop=None):
+        if self.recovery_only:
+            raise RuntimeError('recovery-only instance cannot start a container')
+        # Do not overwrite an orphan journal or adopt another running container.
+        # LXC must traverse its mount staging parent after dropping to mapped
+        # root. This grants traversal only, not directory listing or writes;
+        # config, journal and logs remain private to host root.
+        self.state.mkdir(mode=0o711)
+        self.owned = True
+        record = {'memory_enabled': False, 'scope_created': False,
+                  'owner': os.getpid(), 'identity': process_identity(os.getpid())}
+        self.save(record)
+        try:
+            self.config.parent.mkdir(parents=True, mode=0o700)
+            (self.state / 'mount').mkdir()
+            rootfs, mount_config = self.rootfs, ''
+            if desktop is not None:
+                self.desktop = DESKTOP['DesktopMounts'](self.tools, self.state, self.rootfs, **desktop)
+                rootfs, mount_config = self.desktop.prepare()
+            else:
+                # Maintenance also needs to boot under private installation
+                # parents. Stage only the rootfs; no GUI/home/shared data binds.
+                os.unshare(os.CLONE_NEWNS)
+                subprocess.run(['/usr/bin/mount', '--make-rprivate', '/'], check=True)
+                rootfs = self.state / 'rootfs'
+                rootfs.mkdir(mode=0o755)
+                subprocess.run(['/usr/bin/mount', '--bind', str(self.rootfs), str(rootfs)], check=True)
+            self.config.write_text(f'''lxc.rootfs.path = dir:{rootfs}
+lxc.rootfs.mount = {self.state / 'mount'}
+lxc.uts.name = rocknix-desktop
+lxc.idmap = u 0 {UID} {COUNT}
+lxc.idmap = g 0 {UID} {COUNT}
+lxc.net.0.type = empty
+lxc.mount.auto = proc:mixed sys:ro cgroup:mixed:force
+lxc.mount.entry = tmpfs run tmpfs nosuid,nodev,mode=755,create=dir 0 0
+lxc.autodev = 1
+lxc.tty.max = 0
+lxc.pty.max = 32
+lxc.console.path = none
+lxc.apparmor.profile = unconfined
+lxc.init.cmd = /sbin/init
+lxc.environment = container=lxc
+lxc.cgroup.pids.max = 1536
+lxc.cgroup.cpu.shares = 512
+lxc.cgroup.relative = 1
+lxc.cgroup.devices.deny = a
+lxc.cap.drop = mac_admin mac_override sys_time sys_module sys_rawio
+lxc.seccomp.profile = {self.tools / 'usr/share/lxc/config/common.seccomp'}
+''')
+            self.config.chmod(0o600)
+            with self.config.open('a') as stream:
+                for device in ('1:3', '1:5', '1:7', '1:8', '1:9', '5:0', '5:1', '5:2', '136:*'):
+                    stream.write(f'lxc.cgroup.devices.allow = c {device} rwm\n')
+                stream.write(mount_config)
+            if self.scope.exists():
+                raise RuntimeError('resource scope already exists; recovery required')
+            if 'memory' not in (UNIFIED / 'cgroup.subtree_control').read_text().split():
+                record['memory_enabled'] = True
+                self.save(record)  # Journal before changing the host controller.
+                (UNIFIED / 'cgroup.subtree_control').write_text('+memory')
+            record['scope_created'] = True
+            self.save(record)
+            self.scope.mkdir()
+            (self.scope / 'memory.max').write_text(str(self.memory_bytes))
+            (self.scope / 'memory.swap.max').write_text('0')
+            self.output = os.fdopen(os.open(self.state / 'console.log',
+                os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600), 'w+')
+            os.close(os.open(self.state / 'lxc.log',
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600))
+            def enter_scope():
+                # LXC creates in-container mount parents using this umask.
+                # Keep them traversable by UID 1000; logs were precreated 0600.
+                os.umask(0o022)
+                (self.scope / 'cgroup.procs').write_text(str(os.getpid()))
+            self.child = subprocess.Popen(self.command('lxc-start', '-P', self.configs,
+                '-n', self.name, '-f', self.config, '-F', '-l', 'WARN', '-o', self.state / 'lxc.log'),
+                stdout=self.output, stderr=subprocess.STDOUT, env={'PATH': '/usr/bin:/bin'},
+                preexec_fn=enter_scope)
+            deadline = time.monotonic() + 45
+            while self.child.poll() is None and time.monotonic() < deadline:
+                result = self.attach('/bin/systemctl', 'is-active', 'multi-user.target', 'dbus.service')
+                if result.returncode == 0:
+                    break
+                time.sleep(.2)
+            else:
+                raise RuntimeError('container systemd startup failed')
+            pid = int(subprocess.check_output(self.command('lxc-info', '-P', self.configs,
+                                                           '-n', self.name, '-pH')))
+            membership = Path(f'/proc/{pid}/cgroup').read_text()
+            group = next(line.split(':', 2)[2] for line in membership.splitlines() if line.startswith('0::'))
+            if self.scope not in (UNIFIED / group.lstrip('/')).parents:
+                raise RuntimeError('container escaped the memory scope')
+            self.network = NETWORK['NetworkLease'](self.tools, pid, stage_parent=self.state).start()
+            # Execute and write only *inside* the mapped container. Never follow
+            # mutable /etc symlinks with host-root filesystem operations.
+            result = self.attach('/bin/sh', '-ec',
+                'rm -f /etc/resolv.conf; umask 022; cat > /etc/resolv.conf',
+                input=NETWORK['resolvers']())
+            if result.returncode:
+                raise RuntimeError(f'container resolver setup failed: {result.stderr}')
+            return self
+        except BaseException:
+            for name in ('console.log', 'lxc.log'):
+                path = self.state / name
+                if path.exists():
+                    print(path.read_text()[-8000:], flush=True)
+            self.close()
+            raise
+
+    def start_session(self, values):
+        if self.desktop is None:
+            raise RuntimeError('desktop endpoints have not been prepared')
+        environment = DESKTOP['session_environment'](values, self.desktop.profile)
+        result = self.attach('/bin/sh', '-ec',
+            'umask 022; cat > /run/rocknix-bridge/session.env; '
+            'systemctl start rocknix-desktop-session.service', input=environment)
+        if result.returncode:
+            raise RuntimeError(f'desktop session start failed: {result.stderr}')
+
+    def recover(self):
+        """ExecStopPost entry: refuse live owners and only consume host state."""
+        if not self.state.exists() and not self.state.is_symlink():
+            return
+        info = self.state.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o711:
+            raise RuntimeError('unsafe runtime recovery directory')
+        path = self.state / 'resources.json'
+        if not path.exists():
+            # No resource mutation precedes the first journal. Only a completely
+            # empty interrupted mkdir may be discarded without a journal.
+            self.state.rmdir()
+            return
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600:
+            raise RuntimeError('unsafe runtime recovery journal')
+        record = json.loads(path.read_text())
+        if process_identity(int(record['owner'])) == record['identity']:
+            raise RuntimeError('runtime supervisor is still alive; refusing concurrent recovery')
+        self.owned = True
+        self.close()
+
+    def close(self):
+        if not self.owned:
+            return
+        if self.config.exists():
+            result = subprocess.run(self.command('lxc-stop', '-P', self.configs,
+                '-n', self.name, '-t', '15'), capture_output=True, timeout=20)
+            if result.returncode:
+                subprocess.run(self.command('lxc-stop', '-P', self.configs,
+                    '-n', self.name, '-k'), capture_output=True, timeout=10)
+            state = subprocess.run(self.command('lxc-info', '-P', self.configs,
+                '-n', self.name, '-sH'), capture_output=True, text=True, timeout=10)
+            if state.returncode == 0 and state.stdout.strip() != 'STOPPED':
+                raise RuntimeError('container did not stop; retaining recovery state')
+        if self.child is not None:
+            self.child.wait(timeout=10)
+        if self.network is not None:
+            self.network.close()
+            self.network = None
+        if self.output is not None:
+            self.output.close()
+            self.output = None
+        if self.desktop is not None:
+            self.desktop.close()
+            self.desktop = None
+        else:
+            DESKTOP['DesktopMounts'].recover(self.tools, self.state)
+        staged_root = self.state / 'rootfs'
+        if staged_root.is_symlink():
+            raise RuntimeError('unsafe maintenance rootfs staging')
+        if staged_root.exists():
+            if os.path.ismount(staged_root):
+                subprocess.run(['/usr/bin/umount', str(staged_root)], check=True)
+            info = staged_root.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0:
+                raise RuntimeError('unsafe maintenance rootfs staging owner')
+            staged_root.rmdir()
+        # On supervisor SIGKILL, PDEATHSIG terminates the helper and its private
+        # mounts disappear. Only empty, host-owned staging directories remain.
+        for path in self.state.glob('rocknix-lxc-network-root-*'):
+            info = path.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
+                raise RuntimeError('unsafe orphan network staging directory')
+            path.rmdir()
+        record = json.loads((self.state / 'resources.json').read_text())
+        if record['scope_created'] and self.scope.exists():
+            for directory, _, _ in os.walk(self.scope, topdown=False):
+                group = Path(directory)
+                if (group / 'cgroup.procs').read_text().strip():
+                    raise RuntimeError('resource scope still has processes; retaining recovery state')
+                group.rmdir()
+        if record['memory_enabled']:
+            (UNIFIED / 'cgroup.subtree_control').write_text('-memory')
+        # State is host-owned and not exposed to the guest. Still remove only
+        # known files/empty directories, never a recursive guest-controlled tree.
+        for name in ('resources.json', 'resources.new', 'console.log', 'lxc.log'):
+            (self.state / name).unlink(missing_ok=True)
+        if self.config.exists():
+            self.config.unlink()
+        for path in (self.config.parent, self.configs, self.state / 'mount'):
+            if path.exists():
+                path.rmdir()
+        self.state.rmdir()
+        self.owned = False
