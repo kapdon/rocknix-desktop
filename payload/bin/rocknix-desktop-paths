@@ -1,0 +1,15 @@
+#!/bin/bash
+# Source from a trusted installed host script. Never infer fresh rootfs/home from
+# missing data or source configuration from container-writable data.
+BASE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P) || return 1
+[ "$BASE" = /storage/rocknix-desktop/managed/host ] || {
+  printf 'Refusing unsupported Desktop host location: %s\n' "$BASE" >&2
+  return 1
+}
+ROOTFS=/storage/rocknix-desktop/data/rootfs
+HOME_SOURCE=/storage/rocknix-desktop/data/home
+LOG_DIR=/storage/rocknix-desktop/managed/logs
+HOST_TOOLS="$BASE/host-tools"
+UPGRADE_GUARD="$BASE/state/upgrade-in-progress.json"
+UNINSTALLED_GUARD="$BASE/state/uninstalled.json"
+FRESH_INSTALL_GUARD=/storage/rocknix-desktop/.fresh-install.json

@@ -1,0 +1,68 @@
+#!/usr/bin/python3
+"""Initialize fresh LXC data ownership without modifying retained user data."""
+import os
+from pathlib import Path
+import stat
+
+OFFSET, COUNT, USER = 200000, 65536, 201000
+
+
+def inventory(root):
+    root = Path(root)
+    info = root.lstat()
+    if not stat.S_ISDIR(info.st_mode):
+        raise RuntimeError('initialization root must be a real directory')
+    mounts = [line.split()[4].replace('\\040', ' ') for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+    if any(path == str(root) or path.startswith(str(root) + '/') for path in mounts):
+        raise RuntimeError('initialization tree contains mounted data')
+    paths = [root]
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        paths.extend(Path(directory) / name for name in dirs + files)
+    inodes = {}
+    for path in paths:
+        entry = path.lstat()
+        if entry.st_dev != info.st_dev:
+            raise RuntimeError('initialization crosses filesystem boundary')
+        key = entry.st_dev, entry.st_ino
+        inodes.setdefault(key, []).append((path, entry))
+    for entries in inodes.values():
+        entry = entries[0][1]
+        if stat.S_ISREG(entry.st_mode) and entry.st_nlink != len(entries):
+            raise RuntimeError('initialization file has a hardlink outside its tree')
+    return [entries[0] for entries in inodes.values()]
+
+
+def shift_rootfs(root, dry_run=False):
+    entries = inventory(root)
+    def mapped(value):
+        if 0 <= value < COUNT:
+            return OFFSET + value
+        if OFFSET <= value < OFFSET + COUNT:
+            return value  # Interrupted initialization is safe to resume.
+        raise RuntimeError(f'unexpected rootfs identity: {value}')
+    changes = [(path, info, mapped(info.st_uid), mapped(info.st_gid)) for path, info in entries]
+    if dry_run:
+        return len(changes)
+    for path, info, uid, gid in changes:
+        if (uid, gid) == (info.st_uid, info.st_gid):
+            continue
+        os.chown(path, uid, gid, follow_symlinks=False)
+        if not stat.S_ISLNK(info.st_mode):
+            os.chmod(path, stat.S_IMODE(info.st_mode))  # Preserve sudo setuid bits.
+
+
+def validate_fresh_home(home):
+    info = home.lstat()
+    if not stat.S_ISDIR(info.st_mode) or any(home.iterdir()) or \
+            (info.st_uid, info.st_gid) not in ((0, 0), (USER, USER)):
+        raise RuntimeError('fresh home must be an empty real directory with expected ownership')
+
+
+def initialize_storage(data):
+    # Validate both trees before changing either. Retained installations are
+    # validated by the updater and never passed through this initializer.
+    home = data / 'home'
+    shift_rootfs(data / 'rootfs', dry_run=True)
+    validate_fresh_home(home)
+    shift_rootfs(data / 'rootfs')
+    os.chown(home, USER, USER, follow_symlinks=False)
