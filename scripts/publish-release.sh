@@ -8,7 +8,8 @@ tag=${1:?provide a version such as v0.1.0-alpha.1 or v0.1.0}
   printf 'Invalid release version\n' >&2; exit 1;
 }
 revision=$(git rev-parse HEAD)
-[ "$(git ls-remote --heads origin refs/heads/dev | cut -f1)" = "$revision" ] || {
+remote_revision=$(git ls-remote --heads origin refs/heads/dev | cut -f1)
+[ "$remote_revision" = "$revision" ] || {
   printf 'Release source must match dev\n' >&2; exit 1;
 }
 [ -z "$(git status --porcelain)" ] || { printf 'Source tree is dirty\n' >&2; exit 1; }
