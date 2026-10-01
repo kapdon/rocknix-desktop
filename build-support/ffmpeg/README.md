@@ -11,7 +11,8 @@ archive SHA-256 and applies that revision's
 
 The result is installed under `/opt/ffmpeg-rpi-7.1.5`. Only
 `/usr/local/bin/rocknix-firefox` adds this library directory to
-`LD_LIBRARY_PATH`; stock FFmpeg and MPV use Debian's packages. This build
+`LD_LIBRARY_PATH`. MPV uses its own [codec correction](../mpv-ffmpeg/README.md);
+the system FFmpeg remains package-managed. This Firefox build
 includes only the codecs and helpers needed for H.264/AAC playback and is not
 a system FFmpeg replacement.
 

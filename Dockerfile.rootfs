@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS ffmpeg-rpi-builder
+FROM --platform=$BUILDPLATFORM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS ffmpeg-cross-builder
 
 ARG TARGETARCH
 
@@ -19,12 +19,26 @@ RUN test "${TARGETARCH}" = "arm64" \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+FROM ffmpeg-cross-builder AS ffmpeg-rpi-builder
 ADD --checksum=sha256:f864a7d595b7d7ad50e2600c5002efa824e939cac941ebde487bf326f80f533a \
   https://github.com/RPi-Distro/ffmpeg/archive/2fe08f3bd52c6e795df8353d29deb89596b5099d.tar.gz \
   /tmp/ffmpeg-rpi.tar.gz
 COPY build-support/ffmpeg/build.sh /usr/local/bin/build-firefox-ffmpeg
 RUN chmod 0755 /usr/local/bin/build-firefox-ffmpeg \
     && /usr/local/bin/build-firefox-ffmpeg
+
+FROM ffmpeg-cross-builder AS mpv-ffmpeg-builder
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends devscripts equivs g++-aarch64-linux-gnu
+ADD --checksum=sha256:de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f \
+    https://deb.debian.org/debian/pool/main/f/ffmpeg/ffmpeg_7.1.5.orig.tar.xz /tmp/ffmpeg_7.1.5.orig.tar.xz
+ADD --checksum=sha256:a1be51d8a10744952fe94fa318bf71bbc8074bed0951382c079ab7ef227f74ef \
+    https://deb.debian.org/debian/pool/main/f/ffmpeg/ffmpeg_7.1.5-0+deb13u1.debian.tar.xz /tmp/ffmpeg_7.1.5-0+deb13u1.debian.tar.xz
+COPY build-support/mpv-ffmpeg/build.sh /tmp/mpv-ffmpeg/build.sh
+RUN sh /tmp/mpv-ffmpeg/build.sh prepare
+COPY build-support/mpv-ffmpeg/*.patch /tmp/mpv-ffmpeg/
+RUN sh /tmp/mpv-ffmpeg/build.sh
 
 FROM --platform=$BUILDPLATFORM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS keyboard-builder
 ARG TARGETARCH
@@ -123,6 +137,7 @@ COPY --from=keyboard-builder /tmp/wvkbd/LICENSE /usr/local/share/wvkbd/LICENSE
 COPY --from=keyboard-builder /tmp/wvkbd.tar.gz /usr/local/share/wvkbd/source.tar.gz
 COPY build-support/wvkbd/ /usr/local/share/wvkbd/custom/
 COPY --from=ffmpeg-rpi-builder /opt/ffmpeg-rpi-7.1.5/ /opt/ffmpeg-rpi-7.1.5/
+COPY --from=mpv-ffmpeg-builder /opt/rocknix-mpv/ /opt/rocknix-mpv/
 # Distribute the exact source (including the RPi patch) and build/adjustment
 # script beside our privately rebuilt LGPL libraries, not only an upstream URL.
 COPY --from=ffmpeg-rpi-builder /tmp/ffmpeg-rpi.tar.gz /opt/ffmpeg-rpi-7.1.5/share/source/ffmpeg-rpi.tar.gz
@@ -141,6 +156,7 @@ RUN chmod 0755 \
       /usr/local/bin/rocknix-status \
       /usr/local/bin/rocknix-window-switcher \
       /usr/local/bin/rocknix-firefox \
+      /usr/local/bin/mpv \
       /usr/local/bin/rocknix-sway-session \
       /usr/local/bin/rocknix-lxc-session \
       /usr/local/bin/rocknix-fex /usr/local/bin/FEX \

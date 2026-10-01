@@ -33,13 +33,14 @@ def allowed(name):
     if str(path) != name or path.is_absolute() or '..' in path.parts:
         return False
     return (name in IDENTITY | CONFIG or
-            name in ('usr/local/bin/wvkbd-rocknix', 'usr/local/bin/FEX') or
+            name in ('usr/local/bin/wvkbd-rocknix', 'usr/local/bin/FEX', 'usr/local/bin/mpv') or
             (path.parent == PurePosixPath('usr/local/bin') and path.name.startswith('rocknix-')) or
             (path.parent == PurePosixPath('usr/share/applications') and
              (path.name.startswith('rocknix-') or path.name == 'nm-connection-editor.desktop')) or
             any(name.startswith(prefix) for prefix in (
                 'usr/share/themes/ROCKNIX/', 'usr/local/share/wvkbd/',
-                'opt/ffmpeg-rpi-7.1.5/', 'opt/rocknix-fuzzel/', 'home/rocknix-default/')))
+                'opt/ffmpeg-rpi-7.1.5/', 'opt/rocknix-mpv/',
+                'opt/rocknix-fuzzel/', 'home/rocknix-default/')))
 
 
 def fingerprint(path):

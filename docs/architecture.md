@@ -74,9 +74,10 @@ See [keyboard build details](../build-support/wvkbd/README.md) and
 
 ## Graphics and media
 
-Mesa Freedreno/Turnip provide native Wayland OpenGL/Vulkan. MPV uses Debian's
-package-managed FFmpeg libraries and prefers Qualcomm Iris H.264 decoding with
-software fallback.
+Mesa Freedreno/Turnip provide native Wayland OpenGL/Vulkan. MPV prefers Qualcomm
+Iris H.264 decoding. Its [codec library](../build-support/mpv-ffmpeg/README.md)
+preserves Debian's standard codec configuration and resets the hardware decoder
+when seeking. Other FFmpeg libraries remain package-managed.
 
 Firefox uses a separate minimal pinned FFmpeg build and a profile selecting
 the H.264 path. Its wrapper selects libraries only for Firefox and its children;

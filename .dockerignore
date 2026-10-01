@@ -3,6 +3,8 @@
 !rootfs-overlay
 !rootfs-overlay/**
 !build-support/ffmpeg/build.sh
+!build-support/mpv-ffmpeg
+!build-support/mpv-ffmpeg/**
 !build-support/wvkbd
 !build-support/wvkbd/**
 !build-support/fuzzel
