@@ -149,18 +149,49 @@ Container sudo cannot become native host root. See [architecture](docs/architect
 
 ## Storage and backup
 
-Persistent Debian/apps/accounts are in `/storage/rocknix-desktop/data/rootfs`;
-files/settings are in `data/home`. Back up **all of data/** while Desktop,
-containers and maintenance are stopped, preserving numeric owners, permissions,
-links, ACLs and extended attributes. Copying home alone omits apps/accounts.
+All persistent ROCKNIX Desktop project data lives under
+**`/storage/rocknix-desktop/`**. The layout separates personal and Debian data
+from project-managed host files:
+
+```text
+/storage/rocknix-desktop/
+├── managed/
+│   ├── host/
+│   │   ├── bin/                trusted launch and maintenance helpers
+│   │   ├── input/              controller mappings
+│   │   ├── integration/        native launcher and boot-hook sources
+│   │   ├── host-tools/         bundled host binaries and libraries
+│   │   └── state/              device consent, journals and update staging
+│   │       └── display/
+│   │           └── preferences.json  confirmed resolution/scaling choices
+│   └── logs/                   session diagnostics
+├── data/
+│   ├── rootfs/                 Debian, installed apps and accounts
+│   └── home/                   personal files, app profiles and settings
+└── install.*/                  installer downloads/staging, when present
+```
+
+`data/rootfs/` becomes the container's `/`, including installed packages,
+passwords and system settings. `data/home/` becomes `/home/rocknix`.
+Update preserves both; Install replaces them after the overwrite warning.
+The helpers and dependencies in `managed/host/` are refreshed by Update.
+Its `state/` also holds persistent display preferences and operation guards;
+do not delete active journals, staging or guards. Failed installer staging may
+remain in `install.*` directories for recovery.
+
+Back up **all of `data/`** while Desktop, containers and maintenance are stopped,
+preserving numeric owners, permissions, links, ACLs and extended attributes.
+Guest root maps to host UID/GID 200000; guest `rocknix` maps to 201000.
+Copying home alone omits apps/accounts. Include
+`managed/host/state/display/preferences.json` if you want saved display choices.
 Offline backup/restore has not been hardware-validated.
 
-Trusted tools and journals live in `managed/`; do not delete active staging or
-guards. Confirmed display preferences are separately stored in
-`managed/host/state/display/preferences.json`; include that file if needed.
-The five shared folders (Desktop, Steam, backup, games-internal, games-external)
-under `/storage` need separate backups. `/storage/Desktop` keeps its native name.
-See [storage reference](docs/storage.md).
+The five shared folders (`Desktop`, `Steam`, `backup`, `games-internal`,
+`games-external`) remain directly under `/storage`, outside this project tree.
+They are mounted individually for Desktop apps and need separate backups;
+`/storage/Desktop` keeps its native name. Small native Tools, boot and service
+hooks remain at ROCKNIX's required paths; transient mounts and sockets live
+under `/run`. See the [storage reference](docs/storage.md).
 
 Exit Desktop before uninstalling, then run the installer with `--uninstall`
 in a root SSH session on the ROCKNIX device:
