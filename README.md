@@ -69,7 +69,7 @@ This command selects the latest published stable version. To select a specific
 version, use the same installer and add `--release TAG`, for example:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash -s -- --release v0.1.0
+curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash -s -- --release v0.1.1
 ```
 
 For the rolling development build, add `--dev`:
