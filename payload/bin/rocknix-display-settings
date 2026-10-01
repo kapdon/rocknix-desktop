@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+"""Host-owned display adapter for the Desktop Settings menu.
+
+Only fixed requests reach the transaction policy. The guest never supplies
+paths, executable names, raw compositor commands or recovery state.
+"""
+import copy
+import json
+import os
+from pathlib import Path
+import runpy
+import stat
+import subprocess
+import tempfile
+import time
+
+POLICY = runpy.run_path(str(Path(__file__).with_name('rocknix-display-policy')))
+
+
+class Store:
+    def __init__(self, directory, owner=0):
+        self.directory, self.owner = Path(directory), owner
+        for path in (self.directory, *self.directory.parents):
+            info = path.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != owner or info.st_mode & 0o022:
+                raise ValueError(f'unsafe display-state directory: {path}')
+
+    def path(self, name):
+        if name not in ('session.json', 'preferences.json', 'display.json'):
+            raise ValueError('unknown display-state file')
+        return self.directory / name
+
+    def read(self, name, default):
+        path = self.path(name)
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except FileNotFoundError:
+            return copy.deepcopy(default)
+        with os.fdopen(fd) as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != self.owner or info.st_mode & 0o022 or info.st_nlink != 1:
+                raise ValueError('unsafe display-state file')
+            data = stream.read(65537)
+            if len(data) > 65536:
+                raise ValueError('oversized display state')
+            return json.loads(data)
+
+    def write(self, name, value, permissions=0o600):
+        path = self.path(name)
+        if os.path.lexists(path):
+            self.read(name, None)
+        fd, temporary = tempfile.mkstemp(prefix='.display-', dir=self.directory)
+        try:
+            with os.fdopen(fd, 'w') as stream:
+                json.dump(value, stream, allow_nan=False)
+                stream.write('\n')
+                stream.flush()
+                os.fchmod(stream.fileno(), permissions)
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+            fd = os.open(self.directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+
+def validate_state(state):
+    if not isinstance(state, dict) or set(state) != {'original', 'pending'}:
+        raise ValueError('invalid display journal')
+    if not isinstance(state['original'], dict) or len(state['original']) > 16:
+        raise ValueError('invalid display restoration set')
+    for name, original in state['original'].items():
+        POLICY['command'](original)
+        if original['name'] != name:
+            raise ValueError('mismatched restoration output')
+    pending = state['pending']
+    if pending is not None:
+        if not isinstance(pending, dict) or set(pending) != {'token', 'before', 'after', 'deadline'}:
+            raise ValueError('invalid display preview')
+        import re
+        if not isinstance(pending['token'], str) or not re.fullmatch('[0-9a-f]{32}', pending['token']):
+            raise ValueError('invalid display confirmation token')
+        POLICY['number'](pending['deadline'], 0, 1e12)
+        for key in ('before', 'after'):
+            POLICY['command'](pending[key])
+        name = pending['before']['name']
+        if name != pending['after']['name'] or name not in state['original']:
+            raise ValueError('preview lacks original restoration state')
+    return state
+
+
+def sway_apply(command):
+    result = subprocess.run(['swaymsg', '-r', '--', command], check=True,
+                            capture_output=True, text=True, timeout=3)
+    answers = json.loads(result.stdout)
+    if not isinstance(answers, list) or not answers or any(a.get('success') is not True for a in answers):
+        raise RuntimeError('compositor rejected display change')
+
+
+class Host:
+    def __init__(self, store, outputs, apply=sway_apply, clock=time.monotonic):
+        self.store, self.outputs = store, outputs
+        def persist(value):
+            preferences = store.read('preferences.json', {})
+            if not isinstance(preferences, dict) or len(preferences) > 16:
+                raise ValueError('invalid display preferences')
+            preferences[value['name']] = value
+            store.write('preferences.json', preferences)
+        self.transaction = POLICY['Transaction'](
+            lambda state: store.write('session.json', state), apply, clock, persist)
+        state = validate_state(store.read('session.json', self.transaction.state))
+        self.transaction.state = copy.deepcopy(state)
+        self.transaction.durable = copy.deepcopy(state)
+
+    def output(self, name):
+        matches = [o for o in self.outputs() if o.get('active') is True and o.get('name') == name]
+        if len(matches) != 1:
+            raise ValueError('display is no longer available')
+        POLICY['snapshot'](matches[0])
+        return matches[0]
+
+    def request(self, words):
+        # No shell splitting/evaluation: caller passes a bounded token sequence.
+        if not isinstance(words, list) or not all(isinstance(w, str) and len(w) <= 128 for w in words):
+            raise ValueError('invalid display request')
+        t = self.transaction
+        if len(words) == 3 and words[0] == 'scale':
+            return t.preview(self.output(words[1]), scale=float(words[2]))
+        if len(words) == 5 and words[0] == 'mode':
+            return t.preview(self.output(words[1]), selected_mode=dict(
+                zip(('width', 'height', 'refresh'), map(int, words[2:]))))
+        if len(words) == 2 and words[0] in ('keep', 'revert'):
+            t.tick()
+            pending = t.state['pending']
+            if pending is None or words[1] != pending['token']:
+                raise ValueError('preview expired or changed')
+            return t.keep(words[1]) if words[0] == 'keep' else t.revert()
+        raise ValueError('unsupported display request')
+
+    def begin(self, name):
+        t = self.transaction
+        if t.state['original']:
+            raise ValueError('restore the previous display session before starting')
+        output = self.output(name)
+        preference = self.store.read('preferences.json', {}).get(name)
+        if preference is None:
+            t.begin(output)
+        else:
+            try:
+                if not isinstance(preference, dict) or preference.get('name') != name:
+                    raise ValueError('invalid preferred output')
+                target = POLICY['selection'](output, preference['scale'], preference['mode'])
+            except (ValueError, KeyError, TypeError):
+                # Connector names can survive a monitor or EDID change. Never
+                # let an obsolete preference prevent Desktop from starting.
+                t.begin(output)
+                return
+            t.remember(output)
+            t.apply(POLICY['command'](target))
+
+
+def outputs():
+    result = subprocess.run(['swaymsg', '-r', '-t', 'get_outputs'], check=True,
+                            capture_output=True, text=True, timeout=3)
+    data = json.loads(result.stdout)
+    if not isinstance(data, list) or len(data) > 16:
+        raise ValueError('invalid compositor output list')
+    return data
+
+
+def main():
+    import fcntl
+    import sys
+    if os.getuid() != 0 or Path('/proc/self/uid_map').read_text().split() != ['0', '0', '4294967295']:
+        raise RuntimeError('requires native host root')
+    action, *arguments = sys.argv[1:]
+    if action not in ('begin', 'request', 'tick', 'publish', 'restore'):
+        raise ValueError('unknown host display action')
+    runtime = Path('/run/rocknix-display-state')
+    if action == 'restore' and not runtime.exists():
+        return
+    runtime.mkdir(mode=0o700, exist_ok=True)
+    session = Store(runtime)
+    persistent_path = Path(__file__).resolve().parent.parent / 'state/display'
+    persistent_path.mkdir(mode=0o700, exist_ok=True)
+    persistent = Store(persistent_path)
+    class RoutedStore:
+        def read(self, name, default):
+            return (persistent if name == 'preferences.json' else session).read(name, default)
+        def write(self, name, value):
+            return (persistent if name == 'preferences.json' else session).write(name, value)
+    fd = os.open(runtime / 'lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as lock:
+        info = os.fstat(lock.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022 or info.st_nlink != 1:
+            raise ValueError('unsafe display lock')
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        host = Host(RoutedStore(), outputs)
+        error = None
+        try:
+            if action == 'begin':
+                if len(arguments) != 1: raise ValueError('begin requires one output')
+                host.begin(arguments[0])
+            elif action == 'request':
+                host.request(arguments)
+            elif action == 'tick':
+                if arguments: raise ValueError('tick takes no arguments')
+                host.transaction.tick()
+            elif action == 'publish':
+                if arguments: raise ValueError('publish takes no arguments')
+            else:
+                if arguments: raise ValueError('restore takes no arguments')
+                host.transaction.restore()
+        except (ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+            if action != 'request': raise
+            error = str(exc)[:160]
+        # The session publishes only after regenerating live UI metrics, so a
+        # confirmation menu never starts using the previous output dimensions.
+        if action == 'publish' or error:
+            public = Store('/run/rocknix-desktop')
+            available = []
+            for output in outputs():
+                if not output.get('active'): continue
+                try:
+                    item = POLICY['snapshot'](output)
+                    item['modes'] = [POLICY['mode'](m) for m in output.get('modes', [])]
+                    item['transform'] = output.get('transform', 'normal')
+                    item['scales'] = []
+                    for scale in POLICY['SCALES']:
+                        try: POLICY['selection'](output, scale=scale)
+                        except ValueError: continue
+                        item['scales'].append(scale)
+                    available.append(item)
+                except (ValueError, KeyError): continue
+            public.write('display.json', {'outputs': available,
+                'pending': host.transaction.state['pending'], 'error': error}, 0o644)
+
+
+if __name__ == '__main__':
+    main()
