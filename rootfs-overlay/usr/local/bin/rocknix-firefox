@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+BROWSER_HOME=/home/rocknix/.rocknix-firefox
+PROFILE="${BROWSER_HOME}/profile"
+FFMPEG_LIB=/opt/ffmpeg-rpi-7.1.5/lib
+
+mkdir -p "${PROFILE}"
+chmod 0700 "${BROWSER_HOME}" "${PROFILE}"
+
+cat >"${PROFILE}/user.js" <<'EOF'
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.aboutwelcome.enabled", false);
+user_pref("browser.startup.homepage", "about:blank");
+user_pref("browser.tabs.warnOnClose", false);
+user_pref("media.av1.enabled", false);
+user_pref("media.webm.enabled", false);
+user_pref("media.mediasource.webm.enabled", false);
+EOF
+
+if [ -d "${FFMPEG_LIB}" ]; then
+  export LD_LIBRARY_PATH="${FFMPEG_LIB}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+fi
+
+export HOME="${BROWSER_HOME}"
+export MOZ_ENABLE_WAYLAND=1
+export GDK_BACKEND=wayland
+
+exec firefox-esr --no-remote --profile "${PROFILE}" "$@"
