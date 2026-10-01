@@ -1,0 +1,170 @@
+#!/usr/bin/python3
+"""Private LXC networking, executed only from the trusted host payload.
+
+The application rootfs supplies no host executable, loader, configuration or
+hook. slirp runs in a private mount namespace with empty /etc and /run, then
+applies its own pivot, seccomp and capability restrictions before readiness.
+"""
+import ctypes
+import ipaddress
+import os
+from pathlib import Path
+import select
+import signal
+import stat
+import subprocess
+import tempfile
+
+CONTAINER_UID = 200000
+CONTAINER_COUNT = 65536
+
+
+def resolvers(path=Path('/run/systemd/resolve/resolv.conf')):
+    """Use upstream IPv4 DNS, never a host-loopback forwarding service."""
+    addresses = []
+    for line in path.read_text().splitlines():
+        fields = line.split()
+        if len(fields) != 2 or fields[0] != 'nameserver':
+            continue
+        address = ipaddress.ip_address(fields[1])
+        if (address.version == 4 and not address.is_loopback and
+                not address.is_unspecified and not address.is_multicast):
+            value = str(address)
+            if value not in addresses:
+                addresses.append(value)
+    if not addresses:
+        raise RuntimeError('No upstream IPv4 DNS; refusing host-loopback DNS exposure')
+    return ''.join(f'nameserver {address}\n' for address in addresses)
+
+
+def trusted_tools(tools):
+    tools = Path(tools)
+    for path in (tools, *tools.parents):
+        info = path.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise RuntimeError(f'untrusted host tools ancestor: {path}')
+    return tools
+
+
+def prepare_helper(root, parent):
+    """Called between fork and exec by a single-threaded host supervisor."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    # A SIGKILLed supervisor cannot leave a userspace network running. Set this
+    # before setup and check the fork/prctl race; systemd cgroup cleanup remains
+    # the second line of defence. slirp keeps euid 0 (with capabilities reduced).
+    if libc.prctl(1, signal.SIGKILL, 0, 0, 0) != 0:
+        raise OSError(ctypes.get_errno(), 'set network parent-death signal')
+    if os.getppid() != parent:
+        os._exit(1)
+    os.unshare(os.CLONE_NEWNS)
+    libc.mount.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p,
+                           ctypes.c_ulong, ctypes.c_void_p]
+    for source, target, flags in ((None, b'/', 16384 | 262144),
+                                  (b'/', os.fsencode(root), 4096 | 16384)):
+        if libc.mount(source, target, None, flags, None) != 0:
+            raise OSError(ctypes.get_errno(), 'private network helper mount')
+    for directory in ('etc', 'run'):
+        if libc.mount(b'tmpfs', os.fsencode(root / directory), b'tmpfs',
+                      2 | 4 | 8, ctypes.c_char_p(b'size=16k,mode=755')) != 0:
+            raise OSError(ctypes.get_errno(), 'empty network helper configuration')
+    os.chroot(root)
+    os.chdir('/')
+
+
+class NetworkLease:
+    def __init__(self, tools, pid, stage_parent=Path('/run')):
+        if os.geteuid() != 0:
+            raise RuntimeError('host supervisor only')
+        self.tools = trusted_tools(tools)
+        self.pid = int(pid)
+        self.stage_parent = Path(stage_parent)
+        info = self.stage_parent.lstat()
+        if (self.stage_parent != Path('/run') and self.stage_parent.parent != Path('/run')) or \
+                not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise RuntimeError('unsafe network staging parent')
+        self.child = None
+        self.root = None
+        self.log = None
+        self.verify_container()
+
+    def verify_container(self):
+        if self.pid <= 1:
+            raise RuntimeError('invalid container init PID')
+        process = Path(f'/proc/{self.pid}')
+        if process.stat().st_uid != CONTAINER_UID:
+            raise RuntimeError('container init is not mapped root')
+        expected = [0, CONTAINER_UID, CONTAINER_COUNT]
+        for mapping in ('uid_map', 'gid_map'):
+            fields = [int(value) for value in (process / mapping).read_text().split()]
+            if fields != expected:
+                raise RuntimeError(f'unexpected container {mapping}')
+        if os.readlink(process / 'ns/net') == os.readlink('/proc/1/ns/net'):
+            raise RuntimeError('container shares the host network namespace')
+
+    def start(self):
+        if self.root is not None:
+            raise RuntimeError('network lease already started')
+        self.verify_container()
+        self.root = Path(tempfile.mkdtemp(prefix='rocknix-lxc-network-root-', dir=self.stage_parent))
+        self.log = tempfile.TemporaryFile(mode='w+')
+        read_fd, write_fd = os.pipe()
+        lib = self.tools / 'usr/lib/aarch64-linux-gnu'
+        parent = os.getpid()
+        try:
+            self.child = subprocess.Popen([
+                str(lib / 'ld-linux-aarch64.so.1'), '--library-path', str(lib),
+                str(self.tools / 'usr/bin/slirp4netns'), '--configure',
+                '--disable-host-loopback', '--disable-dns', '--enable-sandbox',
+                '--enable-seccomp', '--ready-fd', str(write_fd), str(self.pid), 'tap0'],
+                stdout=self.log, stderr=subprocess.STDOUT,
+                env={'PATH': '/usr/bin:/bin'}, pass_fds=(write_fd,),
+                preexec_fn=lambda: prepare_helper(self.root, parent))
+            os.close(write_fd)
+            write_fd = None
+            if not select.select([read_fd], [], [], 10)[0] or os.read(read_fd, 1) != b'1':
+                raise RuntimeError('private network helper did not become ready')
+            self.verify_sandbox()
+            return self
+        except BaseException:
+            self.log.seek(0)
+            diagnostic = self.log.read()[-8000:]
+            self.close()
+            if diagnostic:
+                print(diagnostic, flush=True)
+            raise
+        finally:
+            os.close(read_fd)
+            if write_fd is not None:
+                os.close(write_fd)
+
+    def verify_sandbox(self):
+        if self.child.poll() is not None:
+            raise RuntimeError('network helper exited')
+        process = Path(f'/proc/{self.child.pid}')
+        status = dict(line.split(':', 1) for line in (process / 'status').read_text().splitlines())
+        if status['Seccomp'].strip() != '2' or status['NoNewPrivs'].strip() != '1':
+            raise RuntimeError('network helper sandbox missing')
+        for field in ('CapEff', 'CapPrm', 'CapBnd', 'CapInh', 'CapAmb'):
+            if int(status[field].strip(), 16) & ~(1 << 10):
+                raise RuntimeError('network helper retained excess capabilities')
+        view = process / 'root'
+        if (list((view / 'etc').iterdir()) or list((view / 'run').iterdir()) or
+                (view / 'storage').exists()):
+            raise RuntimeError('network helper retained host data access')
+
+    def close(self):
+        if self.child is not None and self.child.poll() is None:
+            self.child.terminate()
+            try:
+                self.child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.child.kill()
+                self.child.wait(timeout=5)
+        if self.log is not None:
+            self.log.close()
+            self.log = None
+        if self.root is not None:
+            # All mounts belonged to the child's private namespace. Never
+            # recursively remove this path; an unexpected mount must fail closed.
+            self.root.rmdir()
+            self.root = None
