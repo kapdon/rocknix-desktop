@@ -1,0 +1,157 @@
+#!/usr/bin/python3
+"""Trusted non-root Pulse bridge; no guest-supplied host commands or modules."""
+import fcntl
+import os
+from pathlib import Path
+import runpy
+import resource
+import shutil
+import signal
+import stat
+import subprocess
+import time
+
+WORK = Path('/run/rocknix-audio')
+UID = 65534
+
+
+def prepare_child(drop_privileges):
+    # This trusted helper lives outside the guest's memory cgroup. Bound each
+    # process's address space and this dedicated identity's task count; do not
+    # claim these are a combined RSS or CPU budget for the whole sandbox.
+    resource.setrlimit(resource.RLIMIT_AS, (1024**3, 1024**3))
+    resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    drop_privileges()
+
+
+def configuration():
+    return '''.fail
+load-module module-tunnel-sink-new server=unix:/run/native-pulse sink_name=rocknix_output
+load-module module-tunnel-source-new server=unix:/run/native-pulse source_name=rocknix_input
+set-default-sink rocknix_output
+set-default-source rocknix_input
+load-module module-native-protocol-unix socket=/run/audio/pulse auth-anonymous=1
+'''
+
+
+def command(runtime, source, work):
+    args = runtime['sandbox_command'](source, work, [
+        '/usr/bin/pulseaudio', '--daemonize=no', '--use-pid-file=no',
+        '--exit-idle-time=-1', '--disable-shm=yes', '--disallow-exit=yes',
+        '--disallow-module-loading=yes', '--log-target=stderr',
+        '-n', '--file=/run/audio-config.pa'])
+    separator = args.index('--')
+    args[separator:separator] = [
+        '--unshare-net',
+        '--ro-bind', str(work / 'native-pulse'), '/run/native-pulse',
+        '--ro-bind', str(work / 'audio.pa'), '/run/audio-config.pa',
+        '--bind', str(work / 'endpoint'), '/run/audio']
+    return args
+
+
+class AudioBridge:
+    def __init__(self, tools):
+        self.tools = Path(tools)
+        self.child = None
+        self.lock = None
+        self.native_mounted = False
+
+    @staticmethod
+    def recover(locked=False):
+        if not os.path.lexists(WORK):
+            return
+        if not locked:
+            lock = AudioBridge.acquire_lock()
+            try:
+                AudioBridge.recover(locked=True)
+            finally:
+                os.close(lock)
+            return
+        if not os.path.lexists(WORK): return
+        info = WORK.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise RuntimeError('unsafe audio runtime directory')
+        for line in Path('/proc/self/mountinfo').read_text().splitlines():
+            mount = line.split()[4]
+            if mount == str(WORK) or mount.startswith(str(WORK) + '/'):
+                raise RuntimeError('audio runtime still mounted')
+        shutil.rmtree(WORK)
+
+    @staticmethod
+    def acquire_lock():
+        lock = os.open('/run/rocknix-audio.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        try:
+            info = os.fstat(lock)
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & 0o077:
+                raise RuntimeError('unsafe audio runtime lock')
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return lock
+        except BaseException:
+            os.close(lock)
+            raise
+
+    def start(self):
+        if os.geteuid() != 0:
+            raise RuntimeError('host supervisor only')
+        runtime = runpy.run_path(str(Path(__file__).with_name('rocknix-helper-sandbox')))
+        for function in ('sandbox_command', 'drop_privileges'):
+            runtime[function].__globals__['PROBE_UID'] = UID
+        network = runpy.run_path(str(Path(__file__).with_name('rocknix-lxc-network')))
+        source = network['trusted_tools'](self.tools)
+        if not (source / 'usr/bin/pulseaudio').is_file():
+            raise RuntimeError('trusted audio runtime missing')
+        self.lock = self.acquire_lock()
+        self.recover(locked=True)
+        WORK.mkdir(mode=0o755)
+        # Stage only this endpoint. Nobody must not traverse or receive access
+        # to the native root user's private runtime directory.
+        os.unshare(os.CLONE_NEWNS)
+        subprocess.run(['mount', '--make-rprivate', '/'], check=True)
+        (WORK / 'native-pulse').touch(mode=0o600)
+        subprocess.run(['mount', '--bind', '/run/0-runtime-dir/pulse/native',
+                        str(WORK / 'native-pulse')], check=True)
+        self.native_mounted = True
+        for name in ('home', 'runtime', 'endpoint'):
+            (WORK / name).mkdir(mode=0o700)
+            os.chown(WORK / name, UID, UID)
+        (WORK / 'passwd').write_text(f'root:x:0:0:root:/root:/bin/sh\nrocknix:x:{UID}:{UID}:Desktop audio:/home/rocknix:/bin/sh\n')
+        (WORK / 'group').write_text(f'root:x:0:\nrocknix:x:{UID}:\n')
+        (WORK / 'audio.pa').write_text(configuration())
+        for name in ('passwd', 'group', 'audio.pa'): (WORK / name).chmod(0o644)
+        self.child = subprocess.Popen(command(runtime, source, WORK),
+            preexec_fn=lambda: prepare_child(runtime['drop_privileges']),
+            env={'PATH': '/usr/bin:/bin'}, start_new_session=True)
+        endpoint = WORK / 'endpoint/pulse'
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if self.child.poll() is not None:
+                raise RuntimeError('audio bridge exited during startup')
+            if endpoint.exists():
+                info = endpoint.lstat()
+                if not stat.S_ISSOCK(info.st_mode) or info.st_uid != UID:
+                    raise RuntimeError('unexpected audio endpoint')
+                os.chown(endpoint, 0, 201000)
+                endpoint.chmod(0o660)
+                return endpoint
+            time.sleep(.05)
+        raise RuntimeError('audio bridge startup timed out')
+
+    def close(self):
+        if self.lock is None:
+            return
+        if self.child is not None:
+            if self.child.poll() is None:
+                os.killpg(self.child.pid, signal.SIGTERM)
+                try: self.child.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    os.killpg(self.child.pid, signal.SIGKILL)
+                    self.child.wait()
+            self.child = None
+        if self.native_mounted:
+            subprocess.run(['umount', str(WORK / 'native-pulse')], check=True)
+            self.native_mounted = False
+        self.recover(locked=True)
+        if self.lock is not None:
+            os.close(self.lock)
+            self.lock = None
