@@ -204,3 +204,117 @@ discover_output_metrics() {
 window_count_loop() {
   exec env ROCKNIX_BAR_HEIGHT="${BAR_HEIGHT}" "${BASE}/bin/rocknix-window-policy"
 }
+
+host_control_loop() {
+  local command
+  local -a words
+  exec 8<>"${HOST_CONTROL_FIFO}"
+
+  while :; do
+    command=""
+    if IFS= read -r -t 1 -n 512 command <&8; then
+      case "${command}" in
+        next) "${BASE}/bin/rocknix-window-cycle" >/dev/null ;;
+        layout) swaymsg 'layout toggle tabbed splith' >/dev/null ;;
+        keyboard) "${BASE}/bin/rocknix-keyboard-toggle" >/dev/null ;;
+        network) "${BASE}/bin/rocknix-network" & ;;
+        display\ *)
+          read -r -a words <<<"${command}"
+          python3 "${BASE}/bin/rocknix-display-settings" request "${words[@]:1}" || true
+          ;;
+      esac
+    fi
+    python3 "${BASE}/bin/rocknix-display-settings" tick || true
+    refresh_display_metrics || true
+    python3 "${BASE}/bin/rocknix-display-settings" publish || true
+  done
+}
+
+refresh_display_metrics() {
+  KEYBOARD_FONT_SIZE=0
+  discover_output_metrics || return 1
+  local names='OUTPUT_NAME LOGICAL_WIDTH LOGICAL_HEIGHT BAR_HEIGHT BAR_FONT_SIZE STATUS_FONT_SIZE BAR_PADDING KEYBOARD_HEIGHT KEYBOARD_FONT_SIZE LAUNCHER_FONT_SIZE LAUNCHER_LINE_HEIGHT LAUNCHER_HORIZONTAL_PAD LAUNCHER_VERTICAL_PAD'
+  local name
+  local -a values=()
+  for name in ${names}; do values+=("${name}" "${!name}"); done
+  python3 - "${RUNTIME_DIR}/display-metrics.json" "${values[@]}" <<'PY'
+import json, os, sys, tempfile
+from pathlib import Path
+path = Path(sys.argv[1])
+values = dict(zip(sys.argv[2::2], sys.argv[3::2]))
+data = {k: v if k == 'OUTPUT_NAME' else int(v) for k, v in values.items()}
+text = json.dumps(data, sort_keys=True) + '\n'
+if path.exists() and path.read_text() == text:
+    raise SystemExit(0)
+fd, temporary = tempfile.mkstemp(prefix='.metrics-', dir=path.parent)
+try:
+    with os.fdopen(fd, 'w') as stream:
+        stream.write(text)
+        os.fchmod(stream.fileno(), 0o644)
+    os.replace(temporary, path)
+finally:
+    if os.path.exists(temporary): os.unlink(temporary)
+PY
+}
+
+network_status_loop() {
+  while :; do
+    timeout 2 nmcli --terse --fields TYPE,STATE device status >"${RUNTIME_DIR}/network-state.new" 2>/dev/null || true
+    mv -f "${RUNTIME_DIR}/network-state.new" "${RUNTIME_DIR}/network-state"
+    sleep 5
+  done
+}
+
+mkdir -p "${LOG_DIR}" "${HOME_SOURCE}"
+if [ -f "${LOG}" ]; then
+  mv -f "${LOG}" "${LOG}.previous"
+fi
+: >"${LOG}"
+# Keep the service journal descriptors independent of the tee process, which
+# systemd can terminate before this shell runs its EXIT trap.
+exec {SESSION_STDOUT}>&1 {SESSION_STDERR}>&2
+exec > >(tee -a "${LOG}") 2>&1
+
+printf '%s Sway Desktop Mode session starting\n' "$(date -Is)"
+
+cleanup() {
+  local rc=$?
+  trap - EXIT INT TERM HUP
+  exec 1>&${SESSION_STDOUT} 2>&${SESSION_STDERR}
+
+  if [ -n "${HOST_CONTROL_PID}" ]; then
+    kill -TERM "${HOST_CONTROL_PID}" 2>/dev/null || true
+  fi
+  if [ -n "${WINDOW_WATCH_PID}" ]; then
+    kill -TERM "${WINDOW_WATCH_PID}" 2>/dev/null || true
+  fi
+  if [ -n "${NETWORK_WATCH_PID}" ]; then
+    kill -TERM "${NETWORK_WATCH_PID}" 2>/dev/null || true
+  fi
+  if [ -f "${SWAY_STYLE_MARKER}" ] && systemctl is-active --quiet sway.service; then
+    swaymsg reload >/dev/null 2>&1 || true
+    rm -f "${SWAY_STYLE_MARKER}"
+  fi
+  if [ "${BINDING_INSTALLED}" = 1 ] && systemctl is-active --quiet sway.service; then
+    swaymsg 'unbindsym XF86Tools' >/dev/null 2>&1 || true
+    swaymsg 'unbindsym F13' >/dev/null 2>&1 || true
+    swaymsg 'unbindsym F14' >/dev/null 2>&1 || true
+    swaymsg 'unbindsym F15' >/dev/null 2>&1 || true
+    swaymsg 'unbindsym XF86Launch5' >/dev/null 2>&1 || true
+    swaymsg 'unbindsym XF86Launch6' >/dev/null 2>&1 || true
+    rm -f "${RUNTIME_DIR}/bindings-owned"
+  fi
+  rm -f \
+    "${RUNTIME_DIR}/keyboard-visible" \
+    "${RUNTIME_DIR}/window-count" \
+    "${RUNTIME_DIR}/window-count.new" \
+    "${RUNTIME_DIR}/network-state" \
+    "${RUNTIME_DIR}/network-state.new" \
+    "${HOST_CONTROL_FIFO}" \
+    "${RUNTIME_DIR}/keyboard-control" \
+    "${CONTROL_FIFO}"
+  rmdir "${RUNTIME_DIR}" 2>/dev/null || true
+
+  printf '%s Sway Desktop Mode session ended with status %s\n' "$(date -Is)" "${rc}"
+  exit "${rc}"
+}
