@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>RP6 Sway Firefox hardware video test</title>
+<style>
+  body { background: #17212b; color: white; font: 24px sans-serif; }
+  video { display: block; width: 90vw; max-height: 78vh; margin: 1rem auto; }
+</style>
+<h1>RP6 Sway Firefox - H.264 playback</h1>
+<video src="rp6-sway-h264-60s.mp4" muted controls></video>
+<pre></pre>
+<script>
+  const gl = document.createElement('canvas').getContext('webgl2');
+  const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+  document.querySelector('pre').textContent = JSON.stringify({
+    webgl2: Boolean(gl),
+    renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : null
+  });
+</script>
