@@ -1,0 +1,37 @@
+[Unit]
+Description=ROCKNIX Desktop user session
+Requires=dbus.service
+After=dbus.service systemd-user-sessions.service
+ConditionPathExists=/run/rocknix-bridge/session.env
+ConditionPathExists=/run/rocknix-desktop/control
+# This unit exists only in Debian. PID 1 powers off the LXC container; the
+# independent host supervisor performs the existing Gaming restoration.
+SuccessAction=poweroff
+FailureAction=poweroff
+
+[Service]
+Type=simple
+User=rocknix
+Group=rocknix
+WorkingDirectory=/home/rocknix
+RuntimeDirectory=rocknix-session
+RuntimeDirectoryMode=0700
+Environment=HOME=/home/rocknix USER=rocknix LOGNAME=rocknix SHELL=/bin/bash
+Environment=XDG_RUNTIME_DIR=/run/rocknix-session XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=sway
+Environment=WAYLAND_DISPLAY=/run/rocknix-bridge/wayland-1 PULSE_SERVER=unix:/run/rocknix-bridge/pulse
+Environment=GDK_BACKEND=wayland QT_QPA_PLATFORM=wayland SDL_VIDEODRIVER=wayland MOZ_ENABLE_WAYLAND=1
+EnvironmentFile=/run/rocknix-bridge/session.env
+# sudo must work inside this unprivileged system container. Browser processes
+# apply their own sandbox restrictions; do not disable setuid globally here.
+NoNewPrivileges=no
+# Firefox alone uses over 300 tasks on the RP6. Debian's percentage default
+# becomes only 76 under a 512-task container cap and breaks browser startup.
+TasksMax=1024
+ExecStartPre=+/usr/bin/python3 /usr/local/bin/rocknix-trash-policy
+ExecStart=/usr/local/bin/rocknix-lxc-session
+KillMode=control-group
+TimeoutStopSec=10
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

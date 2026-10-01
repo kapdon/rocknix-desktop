@@ -1,0 +1,173 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+export HOME=/home/rocknix
+export USER=rocknix
+export LOGNAME=rocknix
+export SHELL=/bin/bash
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export XDG_CONFIG_HOME="${HOME}/.config"
+export XDG_CACHE_HOME="${HOME}/.cache"
+export XDG_DATA_HOME="${HOME}/.local/share"
+export XDG_CONFIG_DIRS=/etc/xdg
+export XDG_DATA_DIRS=/usr/local/share:/usr/share
+
+CONTROL_FIFO=/run/rocknix-desktop/control
+RUNTIME_DIR=${XDG_RUNTIME_DIR:?}
+WAYBAR_CONFIG=${RUNTIME_DIR}/waybar-config.jsonc
+WAYBAR_STYLE=${RUNTIME_DIR}/waybar-style.css
+WAYBAR_PID=""
+CONTROL_PID=""
+WVKBD_PID=""
+KEYBOARD_CONTROL_PID=""
+METRICS_WATCH_PID=""
+
+cleanup() {
+  trap - EXIT INT TERM HUP
+  [ -z "${CONTROL_PID}" ] || kill "${CONTROL_PID}" 2>/dev/null || true
+  [ -z "${WAYBAR_PID}" ] || kill "${WAYBAR_PID}" 2>/dev/null || true
+  [ -z "${KEYBOARD_CONTROL_PID}" ] || kill "${KEYBOARD_CONTROL_PID}" 2>/dev/null || true
+  [ -z "${WVKBD_PID}" ] || kill "${WVKBD_PID}" 2>/dev/null || true
+  [ -z "${METRICS_WATCH_PID}" ] || kill "${METRICS_WATCH_PID}" 2>/dev/null || true
+  # Never wait for app children such as Thunar. On exit, systemd terminates
+  # the entire desktop cgroup with a bounded timeout.
+}
+trap cleanup EXIT
+trap 'exit 143' TERM HUP
+trap 'exit 130' INT
+
+mkdir -p \
+  "${HOME}/Desktop" \
+  "${XDG_CONFIG_HOME}" \
+  "${XDG_CACHE_HOME}" \
+  "${XDG_DATA_HOME}"
+
+start_chrome() {
+if [ -f /usr/local/bin/rocknix-display-metrics ]; then
+  source /usr/local/bin/rocknix-display-metrics
+  load_display_metrics
+fi
+logical_width=${ROCKNIX_LOGICAL_WIDTH:-1280}
+bar_height=${ROCKNIX_BAR_HEIGHT:-48}
+bar_font_size=${ROCKNIX_BAR_FONT_SIZE:-18}
+status_font_size=${ROCKNIX_STATUS_FONT_SIZE:-16}
+bar_padding=${ROCKNIX_BAR_PADDING:-12}
+for value in logical_width bar_height bar_font_size status_font_size bar_padding; do
+  [[ ${!value} =~ ^[0-9]+$ ]] || exit 1
+done
+
+if [ "${logical_width}" -le 1000 ]; then
+  sed \
+    -e 's/"format": "Keyboard"/"format": "Keys"/' \
+    -e 's/"format": "Exit Desktop"/"format": "Exit"/' \
+    /etc/xdg/waybar/config.jsonc >"${WAYBAR_CONFIG}"
+else
+  cp /etc/xdg/waybar/config.jsonc "${WAYBAR_CONFIG}"
+fi
+cp /etc/xdg/waybar/style.css "${WAYBAR_STYLE}"
+{
+  printf '\n/* Runtime metrics from the active Sway output. */\n'
+  printf '* { font-size: %spx; }\n' "${bar_font_size}"
+  printf '%s\n' \
+    '#custom-apps,' \
+    '#custom-windows,' \
+    '#custom-status,' \
+    '#custom-keyboard,' \
+    '#custom-return {'
+  printf '  min-height: %spx;\n  padding: 0 %spx;\n}\n' "${bar_height}" "${bar_padding}"
+  printf '%s\n' '#battery,' '#clock {'
+  printf '  min-height: %spx;\n  padding: 0 %spx;\n  font-size: %spx;\n}\n' \
+    "${bar_height}" "$((bar_padding - 2))" "${status_font_size}"
+} >>"${WAYBAR_STYLE}"
+
+source /usr/local/bin/rocknix-home-integration
+refresh_home_integration /home/rocknix-default "$HOME"
+refresh_storage_links "$HOME"
+
+[ -p "${CONTROL_FIFO}" ] || { printf 'Desktop control FIFO is missing\n' >&2; exit 1; }
+
+local keyboard_visibility=(--hidden)
+if [ -f /run/rocknix-desktop/keyboard-visible ]; then keyboard_visibility=(); fi
+wvkbd-rocknix \
+  -H "${ROCKNIX_KEYBOARD_HEIGHT}" -L "${ROCKNIX_KEYBOARD_HEIGHT}" \
+  -fg 222222 -fg-sp 111111 -bg 000000 -R 0 \
+  --text ffffff --text-sp ffffff -press 444444 --press-sp 444444 \
+  -fn "Roboto ${ROCKNIX_KEYBOARD_FONT_SIZE}" -l simple,special \
+  --landscape-layers simple,special "${keyboard_visibility[@]}" --output "${ROCKNIX_OUTPUT_NAME}" &
+WVKBD_PID=$!
+(
+  while IFS= read -r command </run/rocknix-desktop/keyboard-control; do
+    if [ "${command}" = toggle ]; then
+      kill -34 "${WVKBD_PID}"
+    fi
+  done
+) &
+KEYBOARD_CONTROL_PID=$!
+
+waybar -c "${WAYBAR_CONFIG}" -s "${WAYBAR_STYLE}" &
+WAYBAR_PID=$!
+}
+
+metrics_signature() {
+  if [ -f /run/rocknix-desktop/display-metrics.json ]; then
+    sha256sum /run/rocknix-desktop/display-metrics.json
+  else
+    printf 'no-display-metrics\n'
+  fi
+}
+
+watch_metrics() {
+  local original=$1
+  while [ "$(metrics_signature)" = "${original}" ]; do sleep 0.25; done
+}
+
+signature=$(metrics_signature)
+start_chrome
+watch_metrics "${signature}" &
+METRICS_WATCH_PID=$!
+
+(
+  read -r command <"${CONTROL_FIFO}"
+  [ "${command}" = return ]
+) &
+CONTROL_PID=$!
+
+(
+  thunar /storage >/dev/null 2>&1
+) &
+
+while :; do
+wait -n "${WAYBAR_PID}" "${CONTROL_PID}" "${WVKBD_PID}" "${KEYBOARD_CONTROL_PID}" "${METRICS_WATCH_PID}"
+if ! kill -0 "${WAYBAR_PID}" 2>/dev/null; then
+  printf 'Waybar exited unexpectedly\n' >&2
+  exit 1
+fi
+if ! kill -0 "${WVKBD_PID}" 2>/dev/null || ! kill -0 "${KEYBOARD_CONTROL_PID}" 2>/dev/null; then
+  printf 'Desktop keyboard exited unexpectedly\n' >&2
+  exit 1
+fi
+if ! kill -0 "${CONTROL_PID}" 2>/dev/null; then
+  break
+fi
+if ! kill -0 "${METRICS_WATCH_PID}" 2>/dev/null; then
+  # Only a successful metrics-watch completion reaches this branch. Unexpected
+  # panel/keyboard loss above still terminates Desktop for host recovery.
+  signature=$(metrics_signature)
+  kill "${WAYBAR_PID}" "${WVKBD_PID}" "${KEYBOARD_CONTROL_PID}" 2>/dev/null || true
+  # These are owned UI helpers, never app children. Bound their retirement.
+  for iteration in {1..20}; do
+    if ! kill -0 "${WAYBAR_PID}" 2>/dev/null && ! kill -0 "${WVKBD_PID}" 2>/dev/null &&
+       ! kill -0 "${KEYBOARD_CONTROL_PID}" 2>/dev/null; then break; fi
+    sleep .05
+  done
+  kill -KILL "${WAYBAR_PID}" "${WVKBD_PID}" "${KEYBOARD_CONTROL_PID}" 2>/dev/null || true
+  wait "${WAYBAR_PID}" "${WVKBD_PID}" "${KEYBOARD_CONTROL_PID}" 2>/dev/null || true
+  start_chrome
+  watch_metrics "${signature}" &
+  METRICS_WATCH_PID=$!
+fi
+done
+
+printf 'Return to EmulationStation requested.\n'

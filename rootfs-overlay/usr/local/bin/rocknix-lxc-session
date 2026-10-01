@@ -1,0 +1,14 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+[ "$(id -u)" = 1000 ] && [ "$(id -un)" = rocknix ] || {
+  printf 'Desktop session must run as the unprivileged rocknix account\n' >&2
+  exit 1
+}
+[ -S "${WAYLAND_DISPLAY:?}" ] || { printf 'Wayland endpoint missing\n' >&2; exit 1; }
+[ -p /run/rocknix-desktop/control ] || { printf 'Desktop control endpoint missing\n' >&2; exit 1; }
+# Some clients use WAYLAND_DISPLAY in lock-file names. Keep the restricted
+# bridge socket, but expose it through this user's private runtime directory.
+ln -sfn -- "$WAYLAND_DISPLAY" "${XDG_RUNTIME_DIR:?}/wayland-1"
+export WAYLAND_DISPLAY=wayland-1
+exec /usr/bin/dbus-run-session -- /usr/local/bin/rocknix-sway-session
