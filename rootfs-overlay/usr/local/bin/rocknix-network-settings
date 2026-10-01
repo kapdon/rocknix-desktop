@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+[ -p /run/rocknix-desktop/host-control ] || exit 1
+exec timeout 2 /bin/sh -c 'printf "network\n" >/run/rocknix-desktop/host-control'
