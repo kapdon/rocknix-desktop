@@ -1,0 +1,7 @@
+/build/
+/dist/
+__pycache__/
+*.pyc
+.env
+*.log
+/.impeccable/hook.cache.json
