@@ -1,0 +1,32 @@
+#!/bin/sh
+
+set -u
+
+network=Offline
+state_class=offline
+device_state=$(cat /run/rocknix-desktop/network-state 2>/dev/null || true)
+if printf '%s\n' "${device_state}" | grep -q '^wifi:connected$'; then
+  network='Wi-Fi'
+  state_class=connected
+elif printf '%s\n' "${device_state}" | grep -q '^ethernet:connected$'; then
+  network=Network
+  state_class=connected
+fi
+
+audio=Audio
+if command -v pactl >/dev/null 2>&1; then
+  muted=$(pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null | awk '{print $2; exit}')
+  volume=$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null |
+    awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+%$/) { print $i; exit } }')
+  if [ "${muted}" = yes ]; then
+    audio=Muted
+    [ "${state_class}" = offline ] || state_class=muted
+  elif [ -n "${volume}" ]; then
+    audio="Vol ${volume}"
+  fi
+fi
+
+text=Settings
+
+printf '{"text":"%s","tooltip":"%s · %s\\nOpen network, audio, display or layout settings","class":"%s"}\n' \
+  "${text}" "${network}" "${audio}" "${state_class}"

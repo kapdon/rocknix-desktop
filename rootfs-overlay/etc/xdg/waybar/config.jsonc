@@ -1,0 +1,52 @@
+{
+  "layer": "top",
+  "position": "bottom",
+  "spacing": 0,
+  "margin-top": 0,
+  "margin-bottom": 0,
+  "margin-left": 0,
+  "margin-right": 0,
+  "modules-left": ["custom/apps", "custom/windows"],
+  "modules-right": ["custom/status", "battery", "clock", "custom/keyboard", "custom/return"],
+  "custom/apps": {
+    "format": "Apps",
+    "tooltip-format": "Open apps • D-pad moves\nBottom button: launch • Right button: dismiss\nR3: close focused window",
+    "on-click": "/usr/local/bin/rocknix-launcher"
+  },
+  "custom/windows": {
+    "exec": "/usr/local/bin/rocknix-window-switcher status",
+    "return-type": "json",
+    "interval": 1,
+    "on-click": "/usr/local/bin/rocknix-window-switcher next"
+  },
+  "custom/status": {
+    "exec": "/usr/local/bin/rocknix-status",
+    "return-type": "json",
+    "interval": 5,
+    "on-click": "/usr/local/bin/rocknix-launcher settings"
+  },
+  "battery": {
+    "interval": 15,
+    "format": "{capacity}%",
+    "format-charging": "Charging {capacity}%",
+    "states": {
+      "warning": 25,
+      "critical": 10
+    }
+  },
+  "clock": {
+    "interval": 1,
+    "format": "{:%H:%M}",
+    "tooltip-format": "{:%A, %B %d}"
+  },
+  "custom/keyboard": {
+    "format": "Keyboard",
+    "tooltip-format": "Show or hide the on-screen keyboard • L3",
+    "on-click": "/usr/local/bin/rocknix-keyboard-toggle"
+  },
+  "custom/return": {
+    "format": "Exit Desktop",
+    "tooltip-format": "Close desktop apps and return to ROCKNIX",
+    "on-click": "/usr/local/bin/rocknix-return"
+  }
+}

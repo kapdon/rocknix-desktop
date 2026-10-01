@@ -1,0 +1,106 @@
+/* Visual reference: Art Book Next 9a50ef366e750aabfab29e6915a2867607212971.
+ * Keep its black help rail, Roboto typography, translucent secondary text,
+ * and flat #444 selector instead of translating the palette into UI cards. */
+@define-color canvas #000000;
+@define-color surface #111111;
+@define-color selected #444444;
+@define-color text #ffffff;
+@define-color text-secondary rgba(255, 255, 255, 0.67);
+@define-color text-muted rgba(255, 255, 255, 0.47);
+
+* {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: none;
+  font-family: "Roboto", sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  min-height: 0;
+}
+
+window#waybar {
+  background: @canvas;
+  color: @text;
+}
+
+.modules-left {
+  margin-left: 0;
+}
+
+.modules-right {
+  margin-right: 0;
+}
+
+#custom-apps,
+#custom-windows,
+#custom-status,
+#custom-keyboard,
+#custom-return {
+  min-height: 64px;
+  padding: 0 14px;
+  color: @text-secondary;
+  background: transparent;
+}
+
+#battery,
+#clock {
+  min-height: 64px;
+  padding: 0 10px;
+  color: @text-secondary;
+  background: transparent;
+  font-size: 18px;
+}
+
+#custom-windows.single {
+  min-width: 0;
+  padding: 0;
+}
+
+#custom-keyboard {
+  margin-left: 6px;
+}
+
+#custom-return {
+  padding-right: 22px;
+  color: @text;
+}
+
+#custom-apps:hover,
+#custom-apps:active,
+#custom-windows:active,
+#custom-windows:hover,
+#custom-status:active,
+#custom-status:hover,
+#custom-keyboard:active,
+#custom-keyboard:hover,
+#custom-return:active,
+#custom-return:hover {
+  color: @text;
+  background: @selected;
+}
+
+#custom-status.offline,
+#custom-status.muted {
+  color: @text-muted;
+}
+
+#battery.warning,
+#battery.critical:not(.charging) {
+  color: @text;
+}
+
+tooltip {
+  color: @text;
+  background: @surface;
+  border: 1px solid @selected;
+  border-radius: 0;
+}
+
+tooltip label {
+  padding: 8px 10px;
+  color: @text;
+  font-family: "Roboto", sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+}
