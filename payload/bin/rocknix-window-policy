@@ -1,0 +1,113 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+# Session-owned defaults, not a global for_window ruleset. Only named utility
+# apps and Firefox's exact English PiP title are managed. Native transient
+# dialogs retain Sway's own behavior.
+declare -A applied=() preferred_width=() preferred_height=()
+runtime_dir=${ROCKNIX_RUNTIME_DIR:-/run/rocknix-desktop}
+bar_height=${ROCKNIX_BAR_HEIGHT:-48}
+[[ $bar_height =~ ^[0-9]+$ ]] && ((bar_height >= 24 && bar_height <= 160)) || exit 1
+
+policy_tick() {
+  local tree rows id kind x y width height gw gh fullscreen signature command
+  local margin aw ah ww wh px py count=0
+  local -A alive=()
+  tree=$(swaymsg -r -t get_tree) || return 0
+  rows=$(printf '%s' "$tree" | jq -r '
+    def integer: type == "number" and floor == .;
+    def dimension: integer and . > 0 and . <= 32768;
+    [.. | objects | select(.type? == "workspace" and .name? == "98:Desktop")
+     | .rect as $area | .. | objects
+     | select((.type? == "con" or .type? == "floating_con") and
+              (.shell? == "xdg_shell" or .shell? == "xwayland"))
+     | select(((.nodes // []) | length) == 0 and ((.floating_nodes // []) | length) == 0)
+     | select(.id | integer and . > 0)
+     | select(($area.x | integer) and ($area.y | integer) and
+              ($area.width | dimension) and ($area.height | dimension))
+     | ((.app_id // .window_properties.class // "") | ascii_downcase) as $app
+     | (if ($app == "firefox" or $app == "firefox-esr") and .name == "Picture-in-Picture"
+        then "pip"
+        elif ((($app == "pavucontrol" or $app == "org.pulseaudio.pavucontrol")
+               and .name == "Volume Control") or
+              ($app == "nm-connection-editor" and
+               (.name == "Network Connections" or ((.name // "") | startswith("Editing ")))))
+        then "settings" else "unmanaged" end) as $kind
+     | [.id, $kind, $area.x, $area.y, $area.width, $area.height,
+        (if (.geometry.width? | dimension) then .geometry.width else 640 end),
+        (if (.geometry.height? | dimension) then .geometry.height else 360 end),
+        (.fullscreen_mode // 0)] | @tsv] | .[]
+  ') || return 0
+  while IFS=$'\t' read -r id kind x y width height gw gh fullscreen; do
+    [ -n "$id" ] || continue
+    count=$((count + 1))
+    alive[$id]=1
+    [ "$kind" != unmanaged ] || continue
+    # Retain the client's initial aspect ratio/preferred size across tiling and
+    # keyboard-driven changes; later geometry reflects our own configure events.
+    if [ -z "${preferred_width[$id]:-}" ]; then
+      preferred_width[$id]=$gw
+      preferred_height[$id]=$gh
+    fi
+    signature="$kind:$x:$y:$width:$height:$fullscreen"
+    [ "${applied[$id]:-}" != "$signature" ] || continue
+    if [ "$fullscreen" != 0 ]; then
+      applied[$id]=$signature
+      continue
+    fi
+    margin=$((bar_height / 4))
+    aw=$((width - 2 * margin))
+    ah=$((height - 2 * margin))
+    ((aw > 0 && ah > 0)) || continue
+    if [ "$kind" = pip ]; then
+      # Bottom-right in the *usable* workspace, including the keyboard's
+      # exclusive zone. Preserve portrait, square and widescreen video ratios.
+      ww=$((aw * 42 / 100))
+      wh=$((ww * preferred_height[$id] / preferred_width[$id]))
+      if ((wh > ah * 45 / 100)); then
+        wh=$((ah * 45 / 100))
+        ww=$((wh * preferred_width[$id] / preferred_height[$id]))
+      fi
+      ((ww > 0 && wh > 0)) || continue
+      px=$((x + width - margin - ww))
+      py=$((y + height - margin - wh))
+      command="floating enable, border none, resize set $ww px $wh px, move absolute position $px px $py px"
+    else
+      # Leave room for actual form content. If it cannot fit as a floating
+      # utility, use the full tabbed area instead of shrinking its controls.
+      ww=$((720 * bar_height / 48))
+      wh=$((480 * bar_height / 48))
+      ((ww >= preferred_width[$id])) || ww=${preferred_width[$id]}
+      ((wh >= preferred_height[$id])) || wh=${preferred_height[$id]}
+      if ((ww <= aw && wh <= ah)); then
+        # Pixel borders have predictable extents and don't consume a large
+        # second title row. R3 remains the controller close affordance.
+        px=$((x + (width - ww) / 2))
+        py=$((y + (height - wh) / 2))
+        command="floating enable, border pixel 2, resize set $ww px $wh px, move absolute position $px px $py px"
+      else
+        command='floating disable, border normal'
+      fi
+    fi
+    # IDs are numeric leaf IDs from a fresh tree. The workspace criterion also
+    # protects a window moved elsewhere between observation and command.
+    if swaymsg -r "[con_id=$id workspace=\"^98:Desktop$\"] $command" |
+        jq -e 'length > 0 and all(.[]; .success == true)' >/dev/null; then
+      applied[$id]=$signature
+    fi
+  done <<<"$rows"
+  printf '%s\n' "$count" >"$runtime_dir/window-count.new"
+  mv -f "$runtime_dir/window-count.new" "$runtime_dir/window-count"
+  for id in "${!applied[@]}"; do
+    if [ -z "${alive[$id]:-}" ]; then
+      unset 'applied[$id]' 'preferred_width[$id]' 'preferred_height[$id]'
+    fi
+  done
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  while :; do
+    policy_tick
+    sleep 1
+  done
+fi

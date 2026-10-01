@@ -1,0 +1,39 @@
+#!/bin/sh
+
+set -eu
+
+RUNTIME_DIR=/run/rocknix-desktop
+COUNT_FILE=${RUNTIME_DIR}/window-count
+HOST_CONTROL=${RUNTIME_DIR}/host-control
+
+case "${1:-status}" in
+  status)
+    count=0
+    [ ! -r "${COUNT_FILE}" ] || count=$(cat "${COUNT_FILE}")
+    case "${count}" in
+      ''|*[!0-9]*) count=0 ;;
+    esac
+    if [ "${count}" -gt 1 ]; then
+      logical_width=${ROCKNIX_LOGICAL_WIDTH:-1280}
+      case "${logical_width}" in
+        ''|*[!0-9]*) logical_width=1280 ;;
+      esac
+      if [ "${logical_width}" -le 1000 ]; then
+        text="Windows ${count}"
+      else
+        text="Windows ${count} · Select"
+      fi
+      printf '{"text":"%s","tooltip":"Select: switch app • R3: close focused window","class":"multiple"}\n' "${text}"
+    else
+      printf '{"text":"","tooltip":"","class":"single"}\n'
+    fi
+    ;;
+  next|layout)
+    [ -p "${HOST_CONTROL}" ] || exit 1
+    exec timeout 2 /bin/sh -c 'printf "%s\n" "$1" >"$2"' \
+      rocknix-window-switcher "$1" "${HOST_CONTROL}"
+    ;;
+  *)
+    exit 2
+    ;;
+esac
