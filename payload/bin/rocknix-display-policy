@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""Display transaction core; integration must supply trusted journal/IPC adapters.
+
+Never accepts raw Sway commands.
+Journal callbacks must durably persist state before applying a display mutation.
+"""
+import copy
+import math
+import re
+import secrets
+
+SCALES = (1.0, 1.25, 1.5, 1.75, 2.0)
+PREVIEW_SECONDS = 15
+
+
+def number(value, low, high):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ValueError('invalid numeric display value')
+    if not low <= value <= high:
+        raise ValueError('display value outside supported range')
+    return value
+
+
+def mode(value):
+    result = {}
+    for key, low, high in (('width', 1, 32768), ('height', 1, 32768), ('refresh', 1000, 1000000)):
+        item = number(value[key], low, high)
+        if int(item) != item:
+            raise ValueError('display mode must use integer dimensions and millihertz')
+        result[key] = int(item)
+    return result
+
+
+def snapshot(output):
+    name = output['name']
+    if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}', name):
+        raise ValueError('unsupported output name')
+    if output.get('active') is not True:
+        raise ValueError('output is not active')
+    return {'name': name, 'scale': number(output['scale'], .25, 8),
+            'mode': mode(output['current_mode'])}
+
+
+def command(value):
+    # Revalidate even journal-originated values before constructing Sway syntax.
+    value = snapshot({'name': value['name'], 'active': True,
+                      'scale': value['scale'], 'current_mode': value['mode']})
+    m = value['mode']
+    return (f"output {value['name']} mode {m['width']}x{m['height']}@"
+            f"{m['refresh'] // 1000}.{m['refresh'] % 1000:03d}Hz scale {value['scale']:g}")
+
+
+def selection(output, scale=None, selected_mode=None):
+    current = snapshot(output)
+    if scale is not None:
+        number(scale, 1, 2)
+        if scale not in SCALES:
+            raise ValueError('unsupported scale')
+        current['scale'] = scale
+    if selected_mode is not None:
+        candidate = mode(selected_mode)
+        if candidate not in [mode(m) for m in output.get('modes', [])]:
+            raise ValueError('mode is not advertised by this output')
+        current['mode'] = candidate
+    # Keep enough logical space for the handheld panel, launcher and keyboard.
+    width, height = current['mode']['width'], current['mode']['height']
+    if output.get('transform') in ('90', '270', 'flipped-90', 'flipped-270'):
+        width, height = height, width
+    if width / current['scale'] < 640 or height / current['scale'] < 480:
+        raise ValueError('selection leaves too little usable desktop space')
+    return current
+
+
+class Transaction:
+    """Single preview at a time; confirmed Desktop preferences never replace
+    the native restoration snapshot. Adapters run only host-owned code.
+    """
+    def __init__(self, journal, apply, clock, persist):
+        self.journal, self.apply, self.clock, self.persist = journal, apply, clock, persist
+        self.state = {'original': {}, 'pending': None}
+        self.durable = copy.deepcopy(self.state)
+
+    def save(self):
+        try:
+            self.journal(copy.deepcopy(self.state))
+        except Exception:
+            self.state = copy.deepcopy(self.durable)
+            raise
+        self.durable = copy.deepcopy(self.state)
+
+    def remember(self, output):
+        value = snapshot(output)
+        if value['name'] not in self.state['original']:
+            self.state['original'][value['name']] = value
+            self.save()
+
+    def begin(self, output):
+        self.remember(output)
+        # The first Desktop session is 1.0 regardless of native Gaming scale.
+        target = selection(output, scale=1.0)
+        self.apply(command(target))
+
+    def preview(self, output, scale=None, selected_mode=None):
+        self.tick()
+        if self.state['pending'] is not None:
+            raise ValueError('confirm or revert the existing preview first')
+        target = selection(output, scale, selected_mode)
+        self.remember(output)
+        token = secrets.token_hex(16)
+        self.state['pending'] = {'token': token, 'before': snapshot(output),
+                                 'after': target, 'deadline': self.clock() + PREVIEW_SECONDS}
+        self.save()
+        try:
+            self.apply(command(target))
+        except Exception:
+            self.revert()
+            raise
+        return token
+
+    def keep(self, token):
+        self.tick()
+        pending = self.state['pending']
+        if pending is None or token != pending['token']:
+            raise ValueError('preview expired or changed')
+        self.persist(copy.deepcopy(pending['after']))
+        self.state['pending'] = None
+        self.save()
+
+    def revert(self):
+        pending = self.state['pending']
+        if pending is not None:
+            self.apply(command(pending['before']))
+            self.state['pending'] = None
+            self.save()
+
+    def tick(self):
+        pending = self.state['pending']
+        if pending is not None and self.clock() >= pending['deadline']:
+            self.revert()
+
+    def restore(self):
+        # Retain recovery state if any output restore fails; caller can retry.
+        for original in self.state['original'].values():
+            self.apply(command(original))
+        self.state = {'original': {}, 'pending': None}
+        self.save()

@@ -1,0 +1,29 @@
+#!/bin/bash
+# Source this reader; never source the bridge data as shell code.
+load_display_metrics() {
+  local values name value
+  [ -f /run/rocknix-desktop/display-metrics.json ] || return 0
+  values=$(python3 - <<'PY'
+import json, re
+from pathlib import Path
+p = Path('/run/rocknix-desktop/display-metrics.json')
+data = json.loads(p.read_text())
+keys = ('LOGICAL_WIDTH LOGICAL_HEIGHT BAR_HEIGHT BAR_FONT_SIZE STATUS_FONT_SIZE '
+        'BAR_PADDING KEYBOARD_HEIGHT KEYBOARD_FONT_SIZE LAUNCHER_FONT_SIZE '
+        'LAUNCHER_LINE_HEIGHT LAUNCHER_HORIZONTAL_PAD LAUNCHER_VERTICAL_PAD').split()
+for key in keys:
+    value = data[key]
+    if type(value) is not int or not 1 <= value <= 32768:
+        raise ValueError('invalid display metric')
+name = data['OUTPUT_NAME']
+if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}', name):
+    raise ValueError('invalid display name')
+for key in keys:
+    print('ROCKNIX_' + key + '\t' + str(data[key]))
+print('ROCKNIX_OUTPUT_NAME\t' + name)
+PY
+  ) || return 1
+  while IFS=$'\t' read -r name value; do
+    export "${name}=${value}"
+  done <<<"${values}"
+}
