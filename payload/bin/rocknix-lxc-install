@@ -1,0 +1,172 @@
+#!/usr/bin/python3
+"""Fresh separated-layout install; resume with the same extracted bundle."""
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import runpy
+import stat
+import subprocess
+
+
+def sync_dir(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def install(bundle, project, api, storage):
+    host, data = project / 'managed/host', project / 'data'
+    journal = project / '.fresh-install.json'
+    for path in (bundle, project):
+        api['safe_directory'](path)
+        api['no_mounts'](path)
+    match = re.search(r'^commit=([0-9a-f]{40})$', (bundle / 'build-info').read_text(), re.M)
+    if not match:
+        raise RuntimeError('missing candidate revision')
+    for name in ('payload/bin', 'payload/input', 'payload/integration', 'host-tools'):
+        api['safe_directory'](bundle / name)
+    resuming = os.path.lexists(journal)
+    if resuming:
+        info = journal.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise RuntimeError('unsafe fresh-install journal')
+        record = json.loads(journal.read_text())
+        if record.get('format') != 1 or record.get('bundle') != str(bundle) or \
+                record.get('commit') != match[1] or record.get('phase') not in ('prepared', 'activating'):
+            raise RuntimeError('resume using original extracted bundle')
+    else:
+        if any(os.path.lexists(project / name) for name in ('managed', 'data')):
+            raise RuntimeError('existing or partial layout is not a fresh installation')
+        root = bundle / 'rootfs'
+        info = root.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_dev != project.stat().st_dev:
+            raise RuntimeError('rootfs must be a same-filesystem directory')
+        if 'ROCKNIX_LXC_RUNTIME=1' not in (root / 'etc/rocknix-desktop-release').read_text().splitlines():
+            raise RuntimeError('candidate is not LXC')
+        storage['shift_rootfs'](root, dry_run=True)
+        record = {'format': 1, 'bundle': str(bundle), 'commit': match[1],
+                  'phase': 'prepared', 'rootfs': [info.st_dev, info.st_ino]}
+    values = api['install_host'].__globals__
+    values.update(BASE=host, DATA=data, ROOTFS=data / 'rootfs')
+    expected = {values['UNIT']: api['integration_bytes'](bundle / 'payload/systemd/rocknix-desktop.service'),
+                values['HOOK']: api['integration_bytes'](bundle / 'payload/integration/999-rocknix-desktop'),
+                values['ENTRY']: api['integration_bytes'](bundle / 'payload/integration/Desktop Mode.sh')}
+    for path, content in expected.items():
+        if os.path.lexists(path):
+            info = path.lstat()
+            if not resuming or not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or \
+                    info.st_mode & 0o022 or path.read_bytes() != content:
+                raise RuntimeError(f'existing integration would be overwritten: {path}')
+    api['atomic'](journal, (json.dumps(record) + '\n').encode(), 0o600)
+    for path in (project / 'managed', host, host / 'state', project / 'managed/logs',
+                 data):
+        path.mkdir(exist_ok=True)
+        api['safe_directory'](path)
+        sync_dir(path.parent)
+    source, destination = bundle / 'rootfs', data / 'rootfs'
+    present = [p for p in (source, destination) if os.path.lexists(p)]
+    if len(present) != 1:
+        raise RuntimeError('ambiguous or missing rootfs')
+    info = present[0].lstat()
+    if not stat.S_ISDIR(info.st_mode) or [info.st_dev, info.st_ino] != record['rootfs']:
+        raise RuntimeError('rootfs identity changed')
+    if present[0] == source:
+        source.rename(destination)
+        sync_dir(bundle)
+        sync_dir(data)
+    home = data / 'home'
+    if not os.path.lexists(home):
+        home.mkdir()
+        sync_dir(data)
+    if not stat.S_ISDIR(home.lstat().st_mode) or any(home.iterdir()):
+        raise RuntimeError('fresh home must be an empty real directory')
+    storage['initialize_storage'](data)
+    record['phase'] = 'activating'
+    api['atomic'](journal, (json.dumps(record) + '\n').encode(), 0o600)
+    for path in expected:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        api['safe_directory'](path.parent)
+    api['install_host'](bundle, preserve_candidate=True)
+    subprocess.run([str(host / 'bin/preflight')], check=True,
+                   env={**os.environ, 'ROCKNIX_UPGRADE_CHECK': '1'})
+    api['validate_existing_storage'](data)
+    journal.unlink()
+    sync_dir(project)
+    print(f'Desktop installed; Debian and home retained under {data}. Desktop was not started.')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--bundle', type=Path, required=True)
+    parser.add_argument('--replace', action='store_true',
+                        help='internal: caller confirmed overwriting all Desktop apps and home')
+    args = parser.parse_args()
+    if os.geteuid() != 0 or os.uname().machine != 'aarch64' or \
+            Path('/proc/self/uid_map').read_text().split() != ['0', '0', '4294967295']:
+        raise RuntimeError('requires native ARM64 host root')
+    bundle = args.bundle.absolute()
+    profile = runpy.run_path(str(bundle / 'payload/bin/rocknix-device-profile'))
+    profile['resolve'](os.environ.get('ROCKNIX_UNTESTED_DEVICE_CONFIRMED') == '1')
+    runpy.run_path(str(bundle / 'payload/bin/rocknix-install-power'))['require_power']()
+    api = runpy.run_path(str(bundle / 'payload/bin/rocknix-lxc-upgrade'))
+    storage = runpy.run_path(str(bundle / 'payload/bin/rocknix-lxc-storage'))
+    lock_path = '/storage/.rocknix-desktop-install.lock'
+    try:
+        inherited = os.fstat(9)
+        existing = os.stat(lock_path, follow_symlinks=False)
+        if (inherited.st_dev, inherited.st_ino) != (existing.st_dev, existing.st_ino):
+            raise RuntimeError('unexpected inherited installation descriptor')
+        fd = os.dup(9)
+    except OSError:
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as lock:
+        info = os.fstat(lock.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022 or info.st_nlink != 1:
+            raise RuntimeError('unsafe installation lock')
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        maintenance = runpy.run_path(str(bundle / 'payload/bin/rocknix-desktop-maintenance'))
+        maintenance['require_idle']()
+        project = Path('/storage/rocknix-desktop')
+        api['safe_directory'](project.parent)
+        project.mkdir(exist_ok=True)
+        if args.replace:
+            # Reject an unusable candidate before deleting any existing data.
+            api['safe_directory'](bundle)
+            api['no_mounts'](bundle)
+            if not re.search(r'^commit=([0-9a-f]{40})$', (bundle / 'build-info').read_text(), re.M):
+                raise RuntimeError('missing candidate revision')
+            root = bundle / 'rootfs'
+            info = root.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_dev != project.stat().st_dev:
+                raise RuntimeError('replacement rootfs must be a same-filesystem directory')
+            if 'ROCKNIX_LXC_RUNTIME=1' not in (root / 'etc/rocknix-desktop-release').read_text().splitlines():
+                raise RuntimeError('replacement candidate is not LXC')
+            for name in ('payload/bin', 'payload/input', 'payload/integration', 'host-tools'):
+                api['safe_directory'](bundle / name)
+            storage['shift_rootfs'](root, dry_run=True)
+            # The candidate is downloaded outside managed/data. Never erase the
+            # currently executing bundle as part of the installation reset.
+            if any(bundle == project / name or project / name in bundle.parents
+                   for name in ('managed', 'data')):
+                raise RuntimeError('replacement bundle must be outside installed Desktop data')
+            values = api['install_host'].__globals__
+            host, data = project / 'managed/host', project / 'data'
+            values.update(BASE=host, DATA=data, ROOTFS=data / 'rootfs')
+            targets = {
+                values['HOOK']: api['integration_bytes'](bundle / 'payload/integration/999-rocknix-desktop'),
+                values['ENTRY']: api['integration_bytes'](bundle / 'payload/integration/Desktop Mode.sh'),
+                values['UNIT']: api['integration_bytes'](bundle / 'payload/systemd/rocknix-desktop.service'),
+            }
+            runpy.run_path(str(bundle / 'payload/bin/rocknix-install-replace'))['replace'](
+                project, targets, api['safe_directory'], api['no_mounts'])
+            subprocess.run(['systemctl', 'daemon-reload'], check=True)
+        install(bundle, project, api, storage)
+
+
+if __name__ == '__main__':
+    main()
