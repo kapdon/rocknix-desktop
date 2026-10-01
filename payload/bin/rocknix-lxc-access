@@ -1,0 +1,122 @@
+#!/usr/bin/python3
+"""Journal narrow RP6 endpoint ACL grants using independent trusted host tools.
+
+No code from the writable application rootfs may be used for these operations.
+The supervisor must call restore on normal exit and from its crash recovery path.
+"""
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import runpy
+
+PROFILE = runpy.run_path(str(Path(__file__).with_name('rocknix-device-profile')))
+
+DESKTOP_UID = 201000
+STATE = Path('/run/rocknix-lxc-access')
+
+
+class AccessLease:
+    def __init__(self, tools, state=STATE):
+        if os.geteuid() != 0:
+            raise RuntimeError('host supervisor only')
+        self.tools = Path(tools)
+        self.state = Path(state)
+        parent = self.state.parent.lstat()
+        if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_mode & 0o022:
+            raise RuntimeError('unsafe access journal parent')
+        for path in (self.tools, *self.tools.parents):
+            info = path.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+                raise RuntimeError(f'untrusted host tools ancestor: {path}')
+        self.lock = os.open(str(state) + '.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        info = os.fstat(self.lock)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600:
+            os.close(self.lock)
+            raise RuntimeError('unsafe access lock')
+        fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if self.state.exists() or self.state.is_symlink():
+            info = self.state.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
+                raise RuntimeError('unsafe access journal')
+            self.restore()
+        self.state.mkdir(mode=0o700)
+
+    def command(self, name, *args, input=None):
+        lib = self.tools / 'usr/lib/aarch64-linux-gnu'
+        return subprocess.check_output([
+            str(lib / 'ld-linux-aarch64.so.1'), '--library-path', str(lib),
+            str(self.tools / 'usr/bin' / name), *args], text=True, input=input,
+            env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'})
+
+    @staticmethod
+    def validate(path):
+        path = Path(path)
+        info = path.lstat()
+        if info.st_uid != 0:
+            raise RuntimeError('endpoint must be host-owned')
+        if re.fullmatch(r'/run/0-runtime-dir/wayland-[0-9]+', str(path)):
+            if not stat.S_ISSOCK(info.st_mode):
+                raise RuntimeError('not a display socket')
+        elif path == Path('/dev/dri/renderD128'):
+            PROFILE['render_endpoint'](path)
+        elif path == Path('/dev/video0'):
+            if (not stat.S_ISCHR(info.st_mode) or
+                (os.major(info.st_rdev), os.minor(info.st_rdev)) != (81, 0) or
+                Path('/sys/class/video4linux/video0/name').read_text().strip() != 'qcom-iris-decoder'):
+                raise RuntimeError('not the RP6 decoder')
+        else:
+            raise RuntimeError(f'endpoint is not allowlisted: {path}')
+        return info
+
+    def grant(self, path):
+        path = Path(path)
+        info = self.validate(path)
+        record = self.state / 'grants.json'
+        grants = json.loads(record.read_text()) if record.exists() else []
+        if any(grant['path'] == str(path) for grant in grants):
+            raise RuntimeError('duplicate endpoint grant')
+        grants.append({'path': str(path), 'identity': [info.st_dev, info.st_ino],
+                       'acl': self.command('getfacl', '-p', '-n', str(path))})
+        temporary = self.state / 'grants.new'
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'w') as output:
+            json.dump(grants, output)
+            output.flush()
+            os.fsync(output.fileno())
+        temporary.replace(record)
+        # Journal precedes the grant so recovery also covers setup failures.
+        self.command('setfacl', '-m', f'u:{DESKTOP_UID}:rw', str(path))
+
+    def restore(self):
+        record = self.state / 'grants.json'
+        grants = json.loads(record.read_text()) if record.exists() else []
+        for grant in reversed(grants):
+            info = self.validate(grant['path'])
+            if [info.st_dev, info.st_ino] != grant['identity']:
+                raise RuntimeError('endpoint replaced; refusing to restore ACL to a different inode')
+            self.command('setfacl', '--restore=-', input=grant['acl'])
+            if self.command('getfacl', '-p', '-n', grant['path']) != grant['acl']:
+                raise RuntimeError('endpoint ACL restoration mismatch')
+        record.unlink(missing_ok=True)
+        (self.state / 'grants.new').unlink(missing_ok=True)
+        self.state.rmdir()
+
+    def close(self):
+        try:
+            if self.state.exists():
+                self.restore()
+        finally:
+            os.close(self.lock)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--tools', required=True, type=Path)
+    parser.add_argument('--restore', action='store_true', required=True)
+    options = parser.parse_args()
+    AccessLease(options.tools).close()
