@@ -43,8 +43,8 @@ mkdir -p "${BUILD_DIR}" "${DIST_DIR}"
 TEMP_DIR=$(mktemp -d "${BUILD_DIR}/.rootfs.XXXXXX")
 mkdir -p "${TEMP_DIR}/rootfs"
 
-# Native ARM64 compilation retains Debian's complete test suites. Local
-# cross-host builds may supply artifacts from a verified native build instead.
+# Debian package builds skip upstream suites by default. Local cross-host
+# builds may supply artifacts from a verified native build instead.
 TRASH_PACKAGES_DIR=${ROCKNIX_TRASH_PACKAGES_DIR:-${TEMP_DIR}/trash-packages}
 if [ -z "${ROCKNIX_TRASH_PACKAGES_DIR:-}" ]; then
   docker buildx build --platform linux/arm64 --target artifact \

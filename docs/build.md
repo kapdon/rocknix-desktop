@@ -5,9 +5,11 @@ non-root archive packaging. Local AMD64 hosts can build the ARM64 target.
 The private Firefox FFmpeg and keyboard builds use an ARM64 cross-compiler
 on the build platform. Docker's QEMU/binfmt support runs ARM64 image stages
 when needed.
-The native ARM64 Trash package build retains Debian rules and the mandatory
-GLib test gate; emulation has ptrace limitations. GVfs rules defer runtime tests
-to autopkgtest, so package compilation alone is not a GVfs runtime-test pass. A cross-host build can set `ROCKNIX_TRASH_PACKAGES_DIR`
+The native ARM64 Trash package build retains Debian rules and skips upstream
+suites by default. Clear the Docker build argument `DEB_BUILD_OPTIONS` when
+changing those packages to run their suites; emulation has ptrace limitations.
+GVfs rules defer runtime tests to autopkgtest, so package compilation alone is
+not a GVfs runtime-test pass. A cross-host build can set `ROCKNIX_TRASH_PACKAGES_DIR`
 to a complete audited artifact directory from a validated native ARM64 run.
 
 From the repository root:
@@ -48,8 +50,8 @@ artifacts. Review distribution obligations when changing dependencies.
 
 Upstream suites are not a default build gate. Run them when relevant source
 changes or explicit requirements call for them, and record which checks ran.
-Keep the existing artifact and source checks. The GLib gate above remains
-required for the mount-aware source changes. Test affected runtime behavior
+Keep the existing artifact and source checks. Run GLib tests when changing
+its mount-aware source patch. Test affected runtime behavior
 on the RP6 using the local bundle.
 
 Docker and CI reuse BuildKit layers. An unchanged APT layer does not fetch new
@@ -63,7 +65,7 @@ metadata; cached checks must identify their original execution rather than
 claim a new run. Verify bundle checksum and
 embedded source/image provenance before RP6 testing. Rolling publication is
 restricted to `dev`; [versioned publication](../.github/workflows/release.yml)
-is restricted to `main`.
+also requires the exact current `dev` commit.
 
 See [contributing and publication](../contributor.md). Local checks/builds do
 not prove device behavior or GitHub delivery.

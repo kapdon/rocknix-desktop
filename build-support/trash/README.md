@@ -1,8 +1,9 @@
 # Mount-aware GLib/GVfs packages
 
 The canonical LXC build includes Debian-patched GLib/GVfs packages with narrow
-Linux mount-identity Trash changes. The package builder retains Debian patches
-and native ARM64 GLib tests; GVfs Debian rules defer runtime tests to
+Linux mount-identity Trash changes. The package builder retains Debian patches.
+GLib suites are opt-in when changing these packages; clear the Docker build
+argument `DEB_BUILD_OPTIONS` to run them. GVfs Debian rules defer runtime tests to
 autopkgtest. Package compilation alone does not prove those runtime tests.
 `patch-trash.py` applies exact-match transformations to the pinned source trees;
 `prepare-package.py` records them as a Debian quilt patch.
