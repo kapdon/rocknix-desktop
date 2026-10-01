@@ -1,0 +1,48 @@
+#!/usr/bin/python3
+"""Sandbox primitives for trusted LXC audio and network helpers only."""
+import ctypes
+import os
+
+PROBE_UID = 65534
+
+
+def debian_command(root, executable, *args):
+    lib = root / "usr/lib/aarch64-linux-gnu"
+    return [str(lib / "ld-linux-aarch64.so.1"), "--library-path", str(lib),
+            str(root / executable.lstrip("/")), *args]
+
+
+def sandbox_command(root, work, command):
+    uid = str(PROBE_UID)
+    runtime = f"/run/user/{uid}"
+    args = debian_command(root, "/usr/bin/bwrap") + [
+        "--unshare-user", "--uid", uid, "--gid", uid,
+        "--unshare-pid", "--unshare-ipc", "--unshare-uts",
+        "--die-with-parent", "--new-session", "--cap-drop", "ALL",
+        "--ro-bind", str(root), "/",
+        "--proc", "/proc", "--dev", "/dev",
+        "--tmpfs", "/tmp", "--tmpfs", "/run", "--tmpfs", "/sys",
+        "--tmpfs", "/home", "--tmpfs", "/storage",
+        "--ro-bind", str(root / "home/rocknix-default"), "/home/rocknix-default",
+        "--bind", str(work / "home"), "/home/rocknix",
+        "--bind", str(work / "runtime"), runtime,
+        "--ro-bind", str(work / "passwd"), "/etc/passwd",
+        "--ro-bind", str(work / "group"), "/etc/group",
+        "--ro-bind", "/etc/resolv.conf", "/etc/resolv.conf",
+        "--clearenv", "--setenv", "HOME", "/home/rocknix",
+        "--setenv", "USER", "rocknix", "--setenv", "LOGNAME", "rocknix",
+        "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin",
+        "--setenv", "LANG", "C.UTF-8", "--setenv", "XDG_RUNTIME_DIR", runtime,
+        "--chdir", "/home/rocknix",
+    ]
+    return args + ["--", "/usr/bin/dbus-run-session", "--", *command]
+
+
+def drop_privileges():
+    os.setgroups([])
+    os.setresgid(PROBE_UID, PROBE_UID, PROBE_UID)
+    os.setresuid(PROBE_UID, PROBE_UID, PROBE_UID)
+    # Also clear capabilities retained via an unusual caller configuration.
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(38, 1, 0, 0, 0) != 0:  # PR_SET_NO_NEW_PRIVS
+        raise OSError(ctypes.get_errno(), "PR_SET_NO_NEW_PRIVS")

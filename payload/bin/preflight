@@ -1,0 +1,110 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+source /etc/profile
+
+source "$(dirname -- "${BASH_SOURCE[0]}")/rocknix-desktop-paths"
+MODEL=$(tr -d '\000' </proc/device-tree/model 2>/dev/null || true)
+
+fail() {
+  printf 'Desktop Mode preflight failed: %s\n' "$*" >&2
+  exit 1
+}
+
+discover_sway_environment() {
+  local candidate
+
+  export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run/0-runtime-dir}"
+
+  if [ -z "${SWAYSOCK:-}" ] || [ ! -S "${SWAYSOCK}" ]; then
+    unset SWAYSOCK
+    for candidate in "${XDG_RUNTIME_DIR}"/sway-ipc.*.sock; do
+      if [ -S "${candidate}" ]; then
+        export SWAYSOCK="${candidate}"
+        break
+      fi
+    done
+  fi
+
+  if [ -z "${WAYLAND_DISPLAY:-}" ] || [ ! -S "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ]; then
+    unset WAYLAND_DISPLAY
+    for candidate in "${XDG_RUNTIME_DIR}"/wayland-*; do
+      if [ -S "${candidate}" ]; then
+        export WAYLAND_DISPLAY="${candidate##*/}"
+        break
+      fi
+    done
+  fi
+
+  [ -n "${SWAYSOCK:-}" ] || fail "cannot find the active Sway IPC socket"
+  [ -n "${WAYLAND_DISPLAY:-}" ] || fail "cannot find the active Wayland display"
+}
+
+[ "$(id -u)" = 0 ] || fail "must run as root"
+[ "$(uname -m)" = aarch64 ] || fail "expected aarch64, found $(uname -m)"
+python3 "${BASE}/bin/rocknix-device-profile" || fail 'device profile validation failed'
+if [ -e "$UPGRADE_GUARD" ] || [ -L "$UPGRADE_GUARD" ] ||
+   [ -e "$FRESH_INSTALL_GUARD" ] || [ -L "$FRESH_INSTALL_GUARD" ] ||
+   [ -e "$UNINSTALLED_GUARD" ] || [ -L "$UNINSTALLED_GUARD" ]; then
+  [ "${ROCKNIX_UPGRADE_CHECK:-0}" = 1 ] || fail 'upgrade in progress or recovery required'
+fi
+[ -f "${ROOTFS}/etc/rocknix-desktop-release" ] || fail "runtime marker is missing"
+grep -q '^RUNTIME_ARCH=aarch64$' "${ROOTFS}/etc/rocknix-desktop-release" || fail "runtime architecture marker is invalid"
+grep -q '^ROCKNIX_SWAY_RUNTIME=1$' "${ROOTFS}/etc/rocknix-desktop-release" || fail "runtime is not the Sway build"
+[ -x "${ROOTFS}/usr/bin/waybar" ] || fail "Waybar is missing"
+grep -q '^ROCKNIX_LXC_RUNTIME=1$' "${ROOTFS}/etc/rocknix-desktop-release" || fail "runtime is not the LXC build"
+[ -x "${HOST_TOOLS}/usr/bin/lxc-start" ] || fail "trusted LXC runtime is missing"
+[ -x "${HOST_TOOLS}/usr/bin/setfacl" ] || fail "trusted ACL utilities are missing"
+[ -x "${HOST_TOOLS}/usr/bin/xdg-dbus-proxy" ] || fail "trusted network proxy is missing"
+[ -x "${HOST_TOOLS}/usr/bin/nm-connection-editor" ] || fail "trusted network editor is missing"
+[ -x "${BASE}/bin/rocknix-network" ] || fail "network settings helper is missing"
+[ -x "${BASE}/bin/rocknix-lxc" ] || fail "LXC supervisor is missing"
+[ -x "${ROOTFS}/usr/bin/fuzzel" ] || fail "Fuzzel is missing"
+[ -x "${ROOTFS}/usr/bin/foot" ] || fail "foot is missing"
+[ -x "${ROOTFS}/usr/bin/thunar" ] || fail "Thunar is missing"
+[ -x "${ROOTFS}/usr/bin/firefox-esr" ] || fail "Firefox ESR is missing"
+[ -x "${ROOTFS}/usr/local/bin/rocknix-launcher" ] || fail "launcher wrapper is missing"
+[ -x "${ROOTFS}/usr/local/bin/rocknix-status" ] || fail "status helper is missing"
+[ -x "${ROOTFS}/usr/local/bin/rocknix-window-switcher" ] || fail "window switcher is missing"
+[ -x "${ROOTFS}/usr/local/bin/rocknix-sway-session" ] || fail "desktop session is missing"
+# The compositor already owns the display; expose only the resolved render node.
+[ -x /usr/bin/swaymsg ] || fail "host swaymsg is missing"
+[ -x /usr/bin/jq ] || fail "host jq is missing"
+[ -x /usr/bin/inputplumber ] || fail "host InputPlumber is missing"
+[ -x /usr/bin/wvkbd-mobintl ] || fail "host wvkbd-mobintl is missing"
+[ -f "${BASE}/input/desktop.yaml" ] || fail "desktop input profile is missing"
+[ -x "${BASE}/bin/rocknix-keyboard-toggle" ] || fail "keyboard toggle is missing"
+[ -x "${BASE}/bin/rocknix-close-window" ] || fail "window close helper is missing"
+[ -x "${BASE}/bin/rocknix-window-cycle" ] || fail "window cycle helper is missing"
+[ -x "${BASE}/bin/rocknix-window-policy" ] || fail "window policy helper is missing"
+[ -x /usr/bin/unshare ] || fail "host unshare is missing"
+[ -x /usr/bin/python3 ] || fail "host Python is missing"
+/usr/bin/python3 -c 'import os; assert hasattr(os, "unshare")' || fail "host Python lacks namespace support"
+systemctl is-active --quiet sway.service || fail "sway.service is not active"
+systemctl is-active --quiet essway.service || fail "start Desktop Mode from EmulationStation"
+discover_sway_environment
+swaymsg -r -t get_outputs | jq -e '
+  any(.[]; .active == true and .rect.width > .rect.height and
+      .rect.width >= 640 and .rect.height >= 360 and .scale > 0)
+' >/dev/null || fail "no usable active landscape output was found"
+if grep -Rqs -E '(^|[[:space:]])bind(sym|code).*(XF86Tools|F13|F14|F15)' /storage/.config/sway /etc/sway 2>/dev/null; then
+  fail "a Desktop Mode controller key already has a persistent Sway binding"
+fi
+command -V get_setting >/dev/null 2>&1 || fail "host get_setting helper is missing"
+command -V set_setting >/dev/null 2>&1 || fail "host set_setting helper is missing"
+/usr/bin/python3 - "${BASE}" "${ROOTFS}" "${HOME_SOURCE}" <<'PY' || fail "LXC ownership or trusted runtime validation failed"
+import grp, pwd, runpy, sys
+from pathlib import Path
+base = Path(sys.argv[1])
+api = runpy.run_path(str(base / 'bin/rocknix-lxc'))
+runtime = api['Runtime'](base / 'host-tools', Path(sys.argv[2]))
+api['DESKTOP']['trusted_directory'](Path(sys.argv[3]), 201000)
+assert not any(200000 <= entry.pw_uid < 265536 for entry in pwd.getpwall())
+assert not any(200000 <= entry.gr_gid < 265536 for entry in grp.getgrall())
+PY
+"${HOST_TOOLS}/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1" \
+  --library-path "${HOST_TOOLS}/usr/lib/aarch64-linux-gnu" \
+  "${HOST_TOOLS}/usr/bin/lxc-start" --version || fail "trusted LXC runtime cannot execute on host"
+
+printf 'Desktop Mode preflight passed.\n'
