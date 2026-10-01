@@ -6,6 +6,8 @@ recoverable error buffers are recycled without creating an invalid image;
 nonempty error frames and genuine end-of-stream handling are preserved.
 Iris source changes resume after their final capture buffer is consumed, before
 recycling an empty notification. Other drivers retain their event handling.
+Initial Iris H.264 capture waits for the parsed source notification so the driver
+allocates its buffers using the stream's actual requirements.
 
 `build.sh` cross-compiles the shared codec library using the unchanged Debian
 standard configuration, including its codecs and hardening. The stock version

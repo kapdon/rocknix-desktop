@@ -42,7 +42,8 @@ Build inputs are defined in [Dockerfile.rootfs](../Dockerfile.rootfs),
 [wvkbd](../build-support/wvkbd/README.md) and
 [Firefox FFmpeg](../build-support/ffmpeg/README.md).
 MPV uses a [patched stock FFmpeg codec library](../build-support/mpv-ffmpeg/README.md)
-to reset on seek, handle Iris source changes and recycle empty notifications.
+to reset on seek, start Iris capture after header parsing, handle source changes
+and recycle empty notifications.
 It retains Debian's standard codec
 configuration; the other FFmpeg libraries remain package-managed. Firefox selects a separate,
 minimal H.264/AAC library build only for its own process and children. Its

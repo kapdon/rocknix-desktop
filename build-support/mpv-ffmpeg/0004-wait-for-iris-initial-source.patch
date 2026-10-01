@@ -1,0 +1,236 @@
+Wait for the first Iris H.264 source-change event before initializing capture.
+Feed headers while capture is off, refresh the parsed visible dimensions, and
+finish capture setup before EOF/STOP with a bounded event wait. Preserve input
+on EAGAIN and report startup errors.
+
+--- a/libavcodec/v4l2_m2m_dec.c
++++ b/libavcodec/v4l2_m2m_dec.c
+@@ -23,9 +23,11 @@
+
+ #include <linux/videodev2.h>
+ #include <sys/ioctl.h>
++#include <poll.h>
+ #include "libavutil/pixfmt.h"
+ #include "libavutil/pixdesc.h"
+ #include "libavutil/opt.h"
++#include "libavutil/time.h"
+ #include "libavcodec/avcodec.h"
+ #include "codec_internal.h"
+ #include "libavcodec/decode.h"
+@@ -34,11 +36,69 @@
+ #include "v4l2_m2m.h"
+ #include "v4l2_fmt.h"
+
+-static int v4l2_try_start(AVCodecContext *avctx)
++/* A positive timeout waits only for headers after all input has been fed. */
++static int v4l2_wait_initial_source(V4L2m2mContext *s, int timeout)
++{
++    struct pollfd pfd = {
++        .fd = s->fd,
++        .events = POLLPRI | (timeout < 0 ? POLLOUT | POLLWRNORM : 0),
++    };
++    int64_t deadline = timeout > 0 ? av_gettime_relative() + timeout * 1000LL : 0;
++    int ret, wait;
++
++    while (!s->initial_source_seen) {
++        struct v4l2_event evt = { 0 };
++        wait = timeout;
++        if (deadline) {
++            int64_t remaining = deadline - av_gettime_relative();
++            if (remaining <= 0)
++                break;
++            wait = (remaining + 999) / 1000;
++        }
++        ret = poll(&pfd, 1, wait);
++        if (ret < 0) {
++            if (errno == EINTR)
++                continue;
++            return AVERROR(errno);
++        }
++        if (!ret) {
++            if (deadline)
++                break;
++            return AVERROR(EAGAIN);
++        }
++        /* A queued event can coexist with POLLERR before capture is ready. */
++        if (pfd.revents & POLLPRI) {
++            if (ioctl(s->fd, VIDIOC_DQEVENT, &evt) < 0) {
++                if (errno == EAGAIN)
++                    continue;
++                return AVERROR(errno);
++            }
++            if (evt.type == V4L2_EVENT_SOURCE_CHANGE &&
++                (evt.u.src_change.changes & V4L2_EVENT_SRC_CH_RESOLUTION)) {
++                s->initial_source_seen = 1;
++                return 0;
++            }
++            continue;
++        }
++        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
++            av_log(s->avctx, AV_LOG_ERROR, "Iris failed before initial source change\n");
++            return AVERROR(EIO);
++        }
++        if (pfd.revents & (POLLOUT | POLLWRNORM))
++            return AVERROR(EAGAIN);
++    }
++    if (s->initial_source_seen)
++        return 0;
++    av_log(s->avctx, AV_LOG_ERROR, "Timed out waiting for Iris stream headers\n");
++    return AVERROR(ETIMEDOUT);
++}
++
++static int v4l2_try_start(AVCodecContext *avctx, int timeout)
+ {
+     V4L2m2mContext *s = ((V4L2m2mPriv*)avctx->priv_data)->context;
+     V4L2Context *const capture = &s->capture;
+     V4L2Context *const output = &s->output;
++    const int iris_h264 = s->iris_driver && avctx->codec_id == AV_CODEC_ID_H264;
+     struct v4l2_selection selection = { 0 };
+     int ret;
+
+@@ -54,12 +114,19 @@
+     if (capture->streamon)
+         return 0;
+
++    if (iris_h264 && !s->initial_source_seen) {
++        ret = v4l2_wait_initial_source(s, timeout);
++        if (ret < 0)
++            return ret;
++    }
++
+     /* 2. get the capture format */
+     capture->format.type = capture->type;
+     ret = ioctl(s->fd, VIDIOC_G_FMT, &capture->format);
+     if (ret) {
++        int err = AVERROR(errno);
+         av_log(avctx, AV_LOG_WARNING, "VIDIOC_G_FMT ioctl\n");
+-        return ret;
++        return iris_h264 ? err : ret;
+     }
+
+     /* 2.1 update the AVCodecContext */
+@@ -70,13 +137,27 @@
+     selection.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+     selection.r.height = avctx->coded_height;
+     selection.r.width = avctx->coded_width;
+-    ret = ioctl(s->fd, VIDIOC_S_SELECTION, &selection);
++    if (iris_h264) {
++        /* Iris exposes visible dimensions separately from padded G_FMT sizes. */
++        selection.target = V4L2_SEL_TGT_COMPOSE;
++        ret = 0;
++    } else {
++        ret = ioctl(s->fd, VIDIOC_S_SELECTION, &selection);
++    }
+     if (!ret) {
+         ret = ioctl(s->fd, VIDIOC_G_SELECTION, &selection);
+         if (ret) {
++            int err = AVERROR(errno);
+             av_log(avctx, AV_LOG_WARNING, "VIDIOC_G_SELECTION ioctl\n");
++            if (iris_h264)
++                return err;
+         } else {
+             av_log(avctx, AV_LOG_DEBUG, "crop output %dx%d\n", selection.r.width, selection.r.height);
++            if (iris_h264) {
++                ret = ff_set_dimensions(avctx, selection.r.width, selection.r.height);
++                if (ret < 0)
++                    return ret;
++            }
+             /* update the size of the resulting frame */
+             capture->height = selection.r.height;
+             capture->width  = selection.r.width;
+@@ -88,7 +169,7 @@
+         ret = ff_v4l2_context_init(capture);
+         if (ret) {
+             av_log(avctx, AV_LOG_ERROR, "can't request capture buffers\n");
+-            return AVERROR(ENOMEM);
++            return iris_h264 ? ret : AVERROR(ENOMEM);
+         }
+     }
+
+@@ -115,6 +196,11 @@
+     sub.type = V4L2_EVENT_SOURCE_CHANGE;
+     ret = ioctl(s->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
+     if ( ret < 0) {
++        if (s->iris_driver && s->avctx->codec_id == AV_CODEC_ID_H264) {
++            ret = AVERROR(errno);
++            av_log(s->avctx, AV_LOG_ERROR, "Iris H.264 requires source-change events\n");
++            return ret;
++        }
+         if (output->height == 0 || output->width == 0) {
+             av_log(s->avctx, AV_LOG_ERROR,
+                 "the v4l2 driver does not support VIDIOC_SUBSCRIBE_EVENT\n"
+@@ -140,7 +226,7 @@
+     V4L2m2mPriv *priv = avctx->priv_data;
+     V4L2m2mContext *s;
+     V4L2Context *capture, *output;
+-    int ret;
++    int ret, iris_h264;
+
+     /* A seek closes the old queues; reopen before feeding another packet. */
+     if (!priv->context) {
+@@ -153,19 +239,36 @@
+     s = priv->context;
+     capture = &s->capture;
+     output = &s->output;
++    iris_h264 = s->iris_driver && avctx->codec_id == AV_CODEC_ID_H264;
+
+     if (!s->buf_pkt.size) {
+         ret = ff_decode_get_packet(avctx, &s->buf_pkt);
+         if (ret < 0) {
+-            if (ret == AVERROR(EAGAIN))
++            if (ret == AVERROR(EAGAIN)) {
++                if (iris_h264 && !capture->streamon) {
++                    if (!output->streamon)
++                        return ret;
++                    ret = v4l2_try_start(avctx, 0);
++                    if (ret < 0)
++                        return ret;
++                }
+                 return ff_v4l2_context_dequeue_frame(capture, frame, 0);
+-            else if (ret != AVERROR_EOF)
++            } else if (ret != AVERROR_EOF)
+                 return ret;
+         }
+     }
+
+     if (s->draining)
+         goto dequeue;
++
++    /* Complete initial capture setup before an empty packet issues STOP. */
++    if (iris_h264 && !capture->streamon && !s->buf_pkt.size) {
++        if (!output->streamon)
++            return AVERROR_EOF;
++        ret = v4l2_try_start(avctx, 5000);
++        if (ret < 0)
++            goto fail;
++    }
+
+     ret = ff_v4l2_context_enqueue_packet(output, &s->buf_pkt);
+     if (ret < 0 && ret != AVERROR(EAGAIN))
+@@ -176,10 +279,13 @@
+         av_packet_unref(&s->buf_pkt);
+
+     if (!s->draining) {
+-        ret = v4l2_try_start(avctx);
++        /* Keep feeding headers unless OUTPUT is full and must be recycled. */
++        ret = v4l2_try_start(avctx, ret == AVERROR(EAGAIN) ? -1 : 0);
+         if (ret) {
+-            /* cant recover */
+-            if (ret != AVERROR(ENOMEM))
++            if (iris_h264 && ret == AVERROR(EAGAIN))
++                return ret;
++            /* Preserve the existing fallback for other decoders. */
++            if (!iris_h264 && ret != AVERROR(ENOMEM))
+                 ret = 0;
+             goto fail;
+         }
+--- a/libavcodec/v4l2_m2m.h
++++ b/libavcodec/v4l2_m2m.h
+@@ -44,6 +44,7 @@
+     char devname[PATH_MAX];
+     int fd;
+     int iris_driver;
++    int initial_source_seen;
+
+     /* the codec context queues */
+     V4L2Context capture;
