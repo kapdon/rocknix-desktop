@@ -16,7 +16,8 @@ def safe(path):
         raise RuntimeError('unsafe fixture path')
 
 
-for scenario in ('complete', 'partial', 'linked-data', 'custom-unit', 'mounted', 'guard-link'):
+for scenario in ('complete', 'partial', 'missing-parent', 'linked-parent',
+                 'linked-data', 'custom-unit', 'mounted', 'guard-link'):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         project = root / 'project'
@@ -37,7 +38,13 @@ for scenario in ('complete', 'partial', 'linked-data', 'custom-unit', 'mounted',
         native.mkdir()
         unit = native / 'desktop.service'
         unit.write_bytes(b'known service')
-        targets = {unit: b'known service', native / 'missing-hook': b'hook'}
+        hook_parent = native / 'autostart'
+        hook_parent.mkdir()
+        targets = {unit: b'known service', hook_parent / 'missing-hook': b'hook'}
+        if scenario in ('missing-parent', 'linked-parent'):
+            hook_parent.rmdir()
+        if scenario == 'linked-parent':
+            hook_parent.symlink_to(shared, target_is_directory=True)
         if scenario == 'partial':
             unit.unlink()
         if scenario == 'linked-data':
@@ -51,7 +58,7 @@ for scenario in ('complete', 'partial', 'linked-data', 'custom-unit', 'mounted',
         def no_mounts(path):
             if scenario == 'mounted':
                 raise RuntimeError('live mount')
-        valid = scenario in ('complete', 'partial')
+        valid = scenario in ('complete', 'partial', 'missing-parent')
         try:
             replace(project, targets, safe, no_mounts)
             assert valid
