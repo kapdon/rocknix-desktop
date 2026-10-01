@@ -1,0 +1,189 @@
+#!/usr/bin/python3
+"""Apply only Desktop integration files inside the mapped Debian container.
+
+Never invoke this through the host rootfs loader. Debian packages and the user's
+home are deliberately outside the managed namespace. Local edits survive beside
+a .rocknix-new candidate. Reapplying after an interrupted update is safe.
+"""
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import stat
+import subprocess
+import tarfile
+import tempfile
+
+STATE = 'var/lib/rocknix-desktop/managed.json'
+IDENTITY = {'etc/rocknix-desktop-build-info', 'etc/rocknix-desktop-release'}
+CONFIG = {
+    'etc/apt/apt.conf.d/99rocknix-trash-policy',
+    'etc/gtk-3.0/settings.ini', 'etc/gtk-4.0/settings.ini', 'etc/mpv/mpv.conf',
+    'etc/xdg/foot/foot.ini', 'etc/xdg/fuzzel/fuzzel.ini',
+    'etc/xdg/waybar/config.jsonc', 'etc/xdg/waybar/style.css',
+    'etc/systemd/system/rocknix-desktop-session.service',
+    'etc/systemd/journald.conf.d/rocknix-container.conf',
+}
+
+
+def allowed(name):
+    path = PurePosixPath(name)
+    if str(path) != name or path.is_absolute() or '..' in path.parts:
+        return False
+    return (name in IDENTITY | CONFIG or
+            name in ('usr/local/bin/wvkbd-rocknix', 'usr/local/bin/FEX') or
+            (path.parent == PurePosixPath('usr/local/bin') and path.name.startswith('rocknix-')) or
+            (path.parent == PurePosixPath('usr/share/applications') and
+             (path.name.startswith('rocknix-') or path.name == 'nm-connection-editor.desktop')) or
+            any(name.startswith(prefix) for prefix in (
+                'usr/share/themes/ROCKNIX/', 'usr/local/share/wvkbd/',
+                'opt/ffmpeg-rpi-7.1.5/', 'opt/rocknix-fuzzel/', 'home/rocknix-default/')))
+
+
+def fingerprint(path):
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return None
+    if stat.S_ISLNK(info.st_mode):
+        return {'link': os.readlink(path)}
+    if not stat.S_ISREG(info.st_mode):
+        raise RuntimeError(f'not a managed regular file or symlink: {path}')
+    with path.open('rb') as stream:
+        digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+    return {'sha256': digest, 'mode': stat.S_IMODE(info.st_mode)}
+
+
+def destination(root, name):
+    """Never traverse a locally substituted parent symlink or mounted data."""
+    path = root / name
+    for parent in reversed(path.parents):
+        if parent == root or root in parent.parents:
+            if parent.is_symlink() or (parent.exists() and not parent.is_dir()):
+                raise RuntimeError(f'unsafe integration parent: {parent}')
+            if parent != root and parent.exists() and os.path.ismount(parent):
+                raise RuntimeError(f'mounted integration parent: {parent}')
+    return path
+
+
+def atomic(path, data, mode=0o644, link=None):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.rocknix-update-', dir=path.parent)
+    temporary = Path(temporary)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            if link is None:
+                stream.write(data)
+                os.fchmod(stream.fileno(), mode)
+                os.fsync(stream.fileno())
+        if link is not None:
+            temporary.unlink()
+            temporary.symlink_to(link)
+        temporary.replace(path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def apply(root, archive_path):
+    root = Path(root)
+    state = destination(root, STATE)
+    if state.is_symlink():
+        raise RuntimeError('managed state must not be a symlink')
+    previous = json.loads(state.read_text()) if state.exists() else {'files': {}}
+    old = previous['files']
+    if not all(allowed(name) for name in old):
+        raise RuntimeError('invalid previous integration manifest')
+    conflicts = []
+    with tarfile.open(archive_path, 'r:*') as archive:
+        members = archive.getmembers()
+        names = [member.name for member in members]
+        if len(set(names)) != len(names) or 'manifest.json' not in names:
+            raise RuntimeError('missing manifest or duplicate archive member')
+        meta = archive.getmember('manifest.json')
+        if not meta.isfile() or meta.size > 1024 * 1024:
+            raise RuntimeError('invalid integration manifest')
+        manifest = json.load(archive.extractfile(meta))
+        expected = manifest['files']
+        if manifest.get('format') != 1 or set(names) != {'manifest.json', *expected}:
+            raise RuntimeError('integration manifest/member mismatch')
+        # Check every member and destination before changing any installed file.
+        for name, spec in expected.items():
+            if not allowed(name):
+                raise RuntimeError(f'path outside Desktop integration: {name}')
+            member = archive.getmember(name)
+            if member.issym():
+                target = PurePosixPath(member.linkname)
+                if target.is_absolute() or '..' in target.parts:
+                    raise RuntimeError(f'unsafe integration symlink: {name}')
+                actual = {'link': member.linkname}
+            elif member.isfile() and not member.mode & 0o7000:
+                actual = {'sha256': hashlib.file_digest(archive.extractfile(member), 'sha256').hexdigest(),
+                          'mode': member.mode}
+            else:
+                raise RuntimeError(f'unsafe integration member: {name}')
+            if actual != spec:
+                raise RuntimeError(f'integration integrity mismatch: {name}')
+            path = destination(root, name)
+            destination(root, name + '.rocknix-new')
+            fingerprint(path)
+        for name in old:
+            fingerprint(destination(root, name))
+        for name, spec in expected.items():
+            path = destination(root, name)
+            current = fingerprint(path)
+            if current == spec:
+                continue
+            # On first adoption, preserve existing settings but replace old
+            # project binaries. Subsequent updates preserve edits to either.
+            edited = current is not None and (
+                (name in old and current != old[name]) or
+                (name not in old and name in CONFIG))
+            if edited and name not in IDENTITY:
+                path = destination(root, name + '.rocknix-new')
+                conflicts.append(name)
+            member = archive.getmember(name)
+            atomic(path, archive.extractfile(member).read() if member.isfile() else b'',
+                   mode=member.mode, link=member.linkname if member.issym() else None)
+        for name, spec in old.items():
+            if name not in expected:
+                path = destination(root, name)
+                if fingerprint(path) == spec:
+                    path.unlink()
+                elif path.exists() or path.is_symlink():
+                    conflicts.append(name)
+        atomic(state, (json.dumps(manifest, sort_keys=True) + '\n').encode())
+    return conflicts
+
+
+def require_container():
+    if os.geteuid() != 0:
+        raise RuntimeError('run with sudo inside the Desktop container')
+    for name in ('uid_map', 'gid_map'):
+        rows = [list(map(int, line.split())) for line in Path('/proc/self/' + name).read_text().splitlines()]
+        if rows != [[0, 200000, 65536]]:
+            raise RuntimeError('refusing to update outside the mapped Desktop container')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('archive', type=Path)
+    args = parser.parse_args()
+    require_container()
+    if subprocess.run(['systemctl', 'is-active', '--quiet',
+                       'rocknix-desktop-session.service']).returncode == 0:
+        raise RuntimeError('stop the Desktop user session before updating')
+    with open('/run/rocknix-container-update.lock', 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        conflicts = apply(Path('/'), args.archive)
+        subprocess.run(['systemctl', 'daemon-reload'], check=True)
+        subprocess.run(['systemctl', 'enable', 'rocknix-desktop-session.service'], check=True)
+        subprocess.run(['/usr/bin/python3', '/usr/local/bin/rocknix-default-password'], check=True)
+        subprocess.run(['/usr/bin/python3', '/usr/local/bin/rocknix-container-hostname'], check=True)
+        print(json.dumps({'preserved_local_edits': conflicts}))
