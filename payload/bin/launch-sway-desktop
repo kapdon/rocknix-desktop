@@ -318,3 +318,159 @@ cleanup() {
   printf '%s Sway Desktop Mode session ended with status %s\n' "$(date -Is)" "${rc}"
   exit "${rc}"
 }
+trap cleanup EXIT
+trap 'exit 143' TERM HUP
+trap 'exit 130' INT
+
+"${BASE}/bin/preflight"
+discover_sway_environment
+discover_output_metrics || { printf 'Cannot determine active output metrics\n' >&2; exit 1; }
+printf 'Desktop output: %s, %sx%s logical at scale %s, %sx%s physical pixels' \
+  "${OUTPUT_NAME}" "${LOGICAL_WIDTH}" "${LOGICAL_HEIGHT}" "${OUTPUT_SCALE}" \
+  "${OUTPUT_PIXEL_WIDTH}" "${OUTPUT_PIXEL_HEIGHT}"
+if [ "${DISPLAY_PPI}" -gt 0 ]; then
+  printf ', %s.%s-inch profile, ~%s ppi' \
+    "$((DISPLAY_DIAGONAL_TENTHS / 10))" "$((DISPLAY_DIAGONAL_TENTHS % 10))" "${DISPLAY_PPI}"
+fi
+printf '; panel %spx, keyboard %spx\n' "${BAR_HEIGHT}" "${KEYBOARD_HEIGHT}"
+
+PRIOR_WORKSPACE=$(swaymsg -r -t get_workspaces | jq -er '.[] | select(.focused).name')
+TOUCHKEYBOARD_ACTIVE=0
+if systemctl is-active --quiet touchkeyboard.service; then
+  TOUCHKEYBOARD_ACTIVE=1
+fi
+TOUCHKEYBOARD_MASK_OWNED=1
+case "$(systemctl is-enabled touchkeyboard.service 2>/dev/null || true)" in
+  masked|masked-runtime) TOUCHKEYBOARD_MASK_OWNED=0 ;;
+esac
+{
+  printf 'workspace=%s\n' "${PRIOR_WORKSPACE}"
+  printf 'touchkeyboard_active=%s\n' "${TOUCHKEYBOARD_ACTIVE}"
+  printf 'touchkeyboard_mask_owned=%s\n' "${TOUCHKEYBOARD_MASK_OWNED}"
+} >"${SESSION_STATE}.new"
+mv -f "${SESSION_STATE}.new" "${SESSION_STATE}"
+
+systemctl stop essway.service
+! systemctl is-active --quiet essway.service || { printf 'EmulationStation did not stop\n' >&2; exit 1; }
+systemctl is-active --quiet sway.service || { printf 'Sway stopped unexpectedly\n' >&2; exit 1; }
+
+if [ "${TOUCHKEYBOARD_MASK_OWNED}" = 1 ]; then
+  systemctl mask --runtime touchkeyboard.service
+fi
+systemctl stop touchkeyboard.service
+pkill -x wvkbd-mobintl 2>/dev/null || true
+
+"${BASE}/bin/configure-input"
+
+mkdir -p "${RUNTIME_DIR}"
+chmod 0755 "${RUNTIME_DIR}"
+python3 "${BASE}/bin/rocknix-display-settings" begin "${OUTPUT_NAME}"
+refresh_display_metrics
+python3 "${BASE}/bin/rocknix-display-settings" publish
+rm -f -- "${CONTROL_FIFO}" "${HOST_CONTROL_FIFO}" "${RUNTIME_DIR}/keyboard-visible"
+mkfifo -m 0600 "${CONTROL_FIFO}"
+mkfifo -m 0600 "${HOST_CONTROL_FIFO}"
+rm -f "${RUNTIME_DIR}/keyboard-control"
+mkfifo -m 0640 "${RUNTIME_DIR}/keyboard-control"
+chown 0:201000 "${RUNTIME_DIR}/keyboard-control"
+chown 0:201000 "${CONTROL_FIFO}" "${HOST_CONTROL_FIFO}"
+chmod 0660 "${CONTROL_FIFO}"
+chmod 0620 "${HOST_CONTROL_FIFO}"
+
+# The private keyboard now starts inside the non-root session. Controller
+# requests pass through a fixed-command FIFO, never a user-supplied host PID.
+
+BINDING_INSTALLED=1
+touch "${RUNTIME_DIR}/bindings-owned"
+swaymsg -- "bindsym XF86Tools exec ${BASE}/bin/rocknix-keyboard-toggle" >/dev/null
+swaymsg -- "bindsym F13 exec ${BASE}/bin/rocknix-keyboard-toggle" >/dev/null
+swaymsg -- "bindsym --no-repeat F14 exec env SWAYSOCK=${SWAYSOCK} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} ${BASE}/bin/rocknix-window-cycle" >/dev/null
+# Resolve a leaf window explicitly: Sway's focused-container criterion can also
+# match a parent. No-repeat prevents a held R3 from closing successive apps.
+swaymsg -- "bindsym --no-repeat F15 exec env SWAYSOCK=${SWAYSOCK} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} ${BASE}/bin/rocknix-close-window" >/dev/null
+# The host evdev XKB map translates KEY_F14/F15 to these multimedia symbols.
+# Keep the plain aliases for hosts that retain the function-key symbols.
+swaymsg -- "bindsym --no-repeat XF86Launch5 exec env SWAYSOCK=${SWAYSOCK} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} ${BASE}/bin/rocknix-window-cycle" >/dev/null
+swaymsg -- "bindsym --no-repeat XF86Launch6 exec env SWAYSOCK=${SWAYSOCK} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} ${BASE}/bin/rocknix-close-window" >/dev/null
+
+# Mark ownership before the first temporary workspace-style mutation. If the
+# service is interrupted below, ExecStopPost will still reload the host config.
+touch "${SWAY_STYLE_MARKER}"
+swaymsg 'focus_follows_mouse no' >/dev/null
+swaymsg -- "workspace ${DESKTOP_WORKSPACE}" >/dev/null
+# A surviving floating utility can receive focus on workspace entry. Layout
+# commands target that focused view, and Sway rejects them for floating views.
+# Do not reapply a layout the workspace already has.
+if ! swaymsg -r -t get_tree | jq -e --arg name "${DESKTOP_WORKSPACE}" \
+  'any(.. | objects; .type? == "workspace" and .name? == $name and .layout? == "tabbed")' >/dev/null; then
+  swaymsg 'layout tabbed' >/dev/null
+fi
+
+# Art Book Next uses a #444 selection band over #111 fields. Apply that same
+# hierarchy to Sway's tab strip, then reload the device config during cleanup.
+swaymsg 'gaps inner current set 0' >/dev/null
+swaymsg 'gaps outer current set 0' >/dev/null
+if ! swaymsg 'hide_edge_borders --i3 smart' >/dev/null 2>&1; then
+  swaymsg 'smart_borders on' >/dev/null
+fi
+swaymsg -- "font pango:sans-serif ${SWAY_TITLE_FONT_POINTS}" >/dev/null
+swaymsg -- "titlebar_padding ${SWAY_TITLE_HORIZONTAL_PADDING} ${SWAY_TITLE_VERTICAL_PADDING}" >/dev/null
+swaymsg 'client.focused #444444 #444444 #ffffff #444444 #444444' >/dev/null
+swaymsg 'client.focused_inactive #111111 #111111 #aaaaaa #111111 #111111' >/dev/null
+swaymsg 'client.unfocused #111111 #111111 #777777 #111111 #111111' >/dev/null
+swaymsg 'client.urgent #444444 #444444 #ffffff #444444 #444444' >/dev/null
+swaymsg 'client.placeholder #000000 #000000 #777777 #000000 #000000' >/dev/null
+swaymsg 'client.background #000000' >/dev/null
+
+host_control_loop &
+HOST_CONTROL_PID=$!
+window_count_loop &
+WINDOW_WATCH_PID=$!
+network_status_loop &
+NETWORK_WATCH_PID=$!
+
+TZ_VALUE=$(timedatectl show -p Timezone --value 2>/dev/null || true)
+TZ_VALUE=${TZ_VALUE:-UTC}
+DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}
+PULSE_SERVER=${PULSE_SERVER:-unix:${XDG_RUNTIME_DIR}/pulse/native}
+
+printf '%s Starting unprivileged LXC Desktop\n' "$(date -Is)"
+/usr/bin/env -i \
+  HOME=/home/rocknix \
+  USER=root \
+  LOGNAME=root \
+  SHELL=/bin/bash \
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  LANG=C.UTF-8 \
+  LC_ALL=C.UTF-8 \
+  TZ="${TZ_VALUE}" \
+  XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+  WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+  SWAYSOCK="${SWAYSOCK}" \
+  DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS}" \
+  DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket \
+  PULSE_SERVER="${PULSE_SERVER}" \
+  XDG_SESSION_TYPE=wayland \
+  XDG_CURRENT_DESKTOP=sway \
+  GDK_BACKEND=wayland \
+  QT_QPA_PLATFORM=wayland \
+  SDL_VIDEODRIVER=wayland \
+  MOZ_ENABLE_WAYLAND=1 \
+  ROCKNIX_OUTPUT_NAME="${OUTPUT_NAME}" \
+  ROCKNIX_LOGICAL_WIDTH="${LOGICAL_WIDTH}" \
+  ROCKNIX_LOGICAL_HEIGHT="${LOGICAL_HEIGHT}" \
+  ROCKNIX_OUTPUT_SCALE="${OUTPUT_SCALE}" \
+  ROCKNIX_BAR_HEIGHT="${BAR_HEIGHT}" \
+  ROCKNIX_BAR_FONT_SIZE="${BAR_FONT_SIZE}" \
+  ROCKNIX_STATUS_FONT_SIZE="${STATUS_FONT_SIZE}" \
+  ROCKNIX_BAR_PADDING="${BAR_PADDING}" \
+  ROCKNIX_KEYBOARD_HEIGHT="${KEYBOARD_HEIGHT}" \
+  ROCKNIX_KEYBOARD_FONT_SIZE="${KEYBOARD_FONT_SIZE}" \
+  ROCKNIX_DISPLAY_PPI="${DISPLAY_PPI}" \
+  ROCKNIX_LAUNCHER_FONT_SIZE="${LAUNCHER_FONT_SIZE}" \
+  ROCKNIX_LAUNCHER_LINE_HEIGHT="${LAUNCHER_LINE_HEIGHT}" \
+  ROCKNIX_LAUNCHER_HORIZONTAL_PAD="${LAUNCHER_HORIZONTAL_PAD}" \
+  ROCKNIX_LAUNCHER_VERTICAL_PAD="${LAUNCHER_VERTICAL_PAD}" \
+  MESA_LOADER_DRIVER_OVERRIDE=msm \
+  GALLIUM_DRIVER=freedreno \
+  "${BASE}/bin/rocknix-lxc" --tools "${BASE}/host-tools" --rootfs "${ROOTFS}" --desktop
