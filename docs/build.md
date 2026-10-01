@@ -42,7 +42,7 @@ Build inputs are defined in [Dockerfile.rootfs](../Dockerfile.rootfs),
 [wvkbd](../build-support/wvkbd/README.md) and
 [Firefox FFmpeg](../build-support/ffmpeg/README.md).
 MPV uses a [patched stock FFmpeg codec library](../build-support/mpv-ffmpeg/README.md)
-to reset the hardware decoder when seeking. It retains Debian's standard codec
+to reset on seek and discard empty error buffers. It retains Debian's standard codec
 configuration; the other FFmpeg libraries remain package-managed. Firefox selects a separate,
 minimal H.264/AAC library build only for its own process and children. Its
 source archive is checksum-pinned; the archive and build recipe ship with the

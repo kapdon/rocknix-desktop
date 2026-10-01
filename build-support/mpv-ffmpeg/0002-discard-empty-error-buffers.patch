@@ -1,0 +1,46 @@
+Recycle empty non-LAST error notifications instead of presenting invalid frames
+or ending a draining decode. Preserve nonempty error frames and genuine EOF.
+
+--- a/libavcodec/v4l2_context.c
++++ b/libavcodec/v4l2_context.c
+@@ -396,6 +396,40 @@
+             return NULL;
+         }
+ 
++        /* An empty recoverable error is not a decoded frame or end of stream. */
++        if (!V4L2_TYPE_IS_OUTPUT(ctx->type) &&
++            ctx->av_codec_id == AV_CODEC_ID_RAWVIDEO &&
++            (buf.flags & V4L2_BUF_FLAG_ERROR) && !(buf.flags & V4L2_BUF_FLAG_LAST)) {
++            int empty = !buf.bytesused;
++
++            if (V4L2_TYPE_IS_MULTIPLANAR(buf.type)) {
++                empty = buf.length > 0 && buf.length <= VIDEO_MAX_PLANES;
++                for (i = 0; empty && i < buf.length; i++)
++                    empty = !planes[i].bytesused;
++            }
++            if (empty) {
++                av_log(logger(ctx), AV_LOG_WARNING, "%s: discarding empty error buffer\n", ctx->name);
++                avbuf = &ctx->buffers[buf.index];
++                avbuf->status = V4L2BUF_AVAILABLE;
++                avbuf->buf = buf;
++                if (V4L2_TYPE_IS_MULTIPLANAR(ctx->type)) {
++                    memcpy(avbuf->planes, planes, sizeof(planes));
++                    avbuf->buf.m.planes = avbuf->planes;
++                }
++                ret = ff_v4l2_buffer_enqueue(avbuf);
++                if (ret < 0) {
++                    av_log(logger(ctx), AV_LOG_ERROR, "%s: requeue failed: %s\n",
++                           ctx->name, av_err2str(ret));
++                    ctx->done = 1;
++                    return NULL;
++                }
++                if (ctx->done || !timeout || (!ctx_to_m2mctx(ctx)->draining &&
++                                 (pfd.revents & (POLLOUT | POLLWRNORM))))
++                    return NULL;
++                goto start;
++            }
++        }
++
+         if (ctx_to_m2mctx(ctx)->draining && !V4L2_TYPE_IS_OUTPUT(ctx->type)) {
+             int bytesused = V4L2_TYPE_IS_MULTIPLANAR(buf.type) ?
+                             buf.m.planes[0].bytesused : buf.bytesused;

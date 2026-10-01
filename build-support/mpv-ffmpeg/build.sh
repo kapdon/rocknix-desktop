@@ -18,7 +18,9 @@ if [ "${1:-}" = prepare ]; then
   exit 0
 fi
 cd "${SOURCE}"
-patch --batch --fuzz=0 -p1 <"${SUPPORT}/0001-reset-decoder-on-seek.patch"
+for correction in "${SUPPORT}"/*.patch; do
+  patch --batch --fuzz=0 -p1 <"${correction}"
+done
 
 # Keep Debian's standard codecs, hardening and exported version-array ABI.
 # The explicit shared-library target omits static libraries, programs and docs.
@@ -35,7 +37,7 @@ ln -s libavcodec.so.61.19.101 "${PREFIX}/lib/libavcodec.so.61"
 mkdir -p "${PREFIX}/share/source" "${PREFIX}/share/licenses/ffmpeg"
 install -m0644 /tmp/ffmpeg_7.1.5.orig.tar.xz \
   /tmp/ffmpeg_7.1.5-0+deb13u1.debian.tar.xz \
-  "${SUPPORT}/0001-reset-decoder-on-seek.patch" "${SUPPORT}/build.sh" \
+  "${SUPPORT}"/*.patch "${SUPPORT}/build.sh" \
   "${PREFIX}/share/source/"
 for license in COPYING.GPLv2 COPYING.GPLv3 COPYING.LGPLv2.1 COPYING.LGPLv3; do
   install -m0644 "${license}" "${PREFIX}/share/licenses/ffmpeg/${license}"
