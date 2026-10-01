@@ -1,0 +1,101 @@
+#!/usr/bin/python3
+"""Touch/controller display menus; the host alone owns compositor access.
+
+Uses the incumbent Fuzzel menu and adaptive metrics. Scale 1.0 is the default;
+only connected outputs and their advertised modes are shown.
+"""
+import json
+import os
+from pathlib import Path
+import subprocess
+import time
+
+BRIDGE = Path('/run/rocknix-desktop')
+
+
+def state():
+    return json.loads((BRIDGE / 'display.json').read_text())
+
+
+def menu(prompt, choices, seconds=None):
+    labels = [label for label, _ in choices]
+    try:
+        result = subprocess.run(['/usr/local/bin/rocknix-launcher', 'display-menu', prompt],
+            input='\n'.join(labels) + '\n', text=True, capture_output=True, timeout=seconds)
+    except subprocess.TimeoutExpired:
+        return None
+    if result.returncode != 0:
+        return None
+    selected = result.stdout.rstrip('\n')
+    return next((value for label, value in choices if label == selected), None)
+
+
+def send(words):
+    data = ('display ' + ' '.join(words) + '\n').encode()
+    if len(data) > 480 or any('\n' in w or '\r' in w for w in words):
+        raise ValueError('invalid display request')
+    fd = os.open(BRIDGE / 'host-control', os.O_WRONLY | os.O_NONBLOCK)
+    try:
+        if os.write(fd, data) != len(data):
+            raise OSError('incomplete display request')
+    finally:
+        os.close(fd)
+
+
+def apply(words):
+    if state().get('pending'):
+        menu('Finish the current preview first', [('Back', 'back')])
+        return
+    send(words)
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        current = state()
+        if current.get('error'):
+            menu('Change rejected — choose another setting', [('Back', 'back')])
+            return
+        pending = current.get('pending')
+        if pending:
+            seconds = max(.1, pending['deadline'] - time.monotonic())
+            choice = menu('Keep changes? Reverts in 15s',
+                          [('Revert', 'revert'), ('Keep setting', 'keep')], seconds)
+            send([choice or 'revert', pending['token']])
+            return
+        time.sleep(.1)
+    menu('Display did not respond — try again', [('Back', 'back')])
+
+
+def main():
+    try:
+        outputs = state()['outputs']
+        if not outputs:
+            menu('No configurable display connected', [('Back', 'back')])
+            return
+        name = outputs[0]['name'] if len(outputs) == 1 else menu(
+            'Choose a display', [(o['name'], o['name']) for o in outputs])
+        if name is None: return
+        output = next(o for o in outputs if o['name'] == name)
+        action = menu(name, [('Scaling · ' + str(output['scale']) + '×', 'scale'),
+                             ('Resolution / refresh rate', 'mode'), ('Back', 'back')])
+        if action == 'scale':
+            choice = menu('1.0× is the default', [
+                (f'{scale:g}×' + (' · Default' if scale == 1 else '') +
+                 (' · Current' if scale == output['scale'] else ''), str(scale))
+                for scale in output['scales']])
+            if choice is not None: apply(['scale', name, choice])
+        elif action == 'mode':
+            choices = []
+            for m in output['modes']:
+                width, height = m['width'], m['height']
+                if output['transform'] in ('90', '270', 'flipped-90', 'flipped-270'):
+                    width, height = height, width
+                label = f"{width} × {height} · {m['refresh'] / 1000:g} Hz"
+                if m == output['mode']: label += ' · Current'
+                choices.append((label, [str(m[k]) for k in ('width', 'height', 'refresh')]))
+            choice = menu('Only modes reported by this display', choices)
+            if choice is not None: apply(['mode', name, *choice])
+    except (OSError, ValueError, KeyError, StopIteration):
+        menu('Display settings unavailable — reopen Settings', [('Back', 'back')])
+
+
+if __name__ == '__main__':
+    main()
