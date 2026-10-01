@@ -82,7 +82,7 @@ fi
 if bash install.sh --invalid >/dev/null 2>&1; then
   printf 'FAIL: unknown argument accepted\n' >&2; exit 1
 fi
-test "$VERSION" = development
+test "$VERSION" = latest
 test "$ASSET" = rocknix-desktop-rp6-arm64.tar.xz
 grep -q 'dist/rocknix-desktop-rp6-arm64.tar.xz' docs/build.md
 grep -q 'button: LeftStick' payload/input/desktop.yaml

@@ -18,7 +18,7 @@ root = Path(__file__).resolve().parents[1]
 bootstrap = 'curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash'
 fixture_version = 'v1.2.3'
 commands = {fixture_version: bootstrap + ' -s -- --release ' + fixture_version,
-            'development': bootstrap}
+            'development': bootstrap + ' -s -- --dev'}
 readme = (root / 'README.md').read_text().splitlines()
 assert bootstrap in readme, 'README bootstrap command changed'
 installer = (root / 'install.sh').read_text()
@@ -167,8 +167,6 @@ else:
         replies = list(zip(prompts, answers))
         command = commands[channel]
         if flags:
-            if channel == 'development':
-                command += ' -s --'
             command += ' ' + flags
         status, output = terminal(command, environment, replies)
         actions = (fixture / 'actions').read_text() if (fixture / 'actions').exists() else ''
@@ -219,7 +217,7 @@ for channel in commands:
         assert 'Proceed at your own risk?' not in output
         assert ('Installation will require confirmation.' in output) == untested
 
-source = subprocess.run(['bash', '-uc', 'source "$1"; test "$VERSION" = development',
+source = subprocess.run(['bash', '-uc', 'source "$1"; test "$VERSION" = latest',
                          '--', str(root / 'install.sh')], capture_output=True, text=True)
 assert source.returncode == 0 and not source.stdout and not source.stderr, source
 without_terminal = subprocess.run(['bash', '-c',

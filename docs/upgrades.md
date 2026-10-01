@@ -2,8 +2,10 @@
 
 ## Release selection
 
-The default installer selects the rolling development release. To use a
-versioned release, use the same `dev` installer with `--release TAG`.
+The default installer selects the latest published stable version. Add `--dev`
+for rolling development, or `--release TAG` for a specific version. These
+selection flags cannot be combined. The installer script is served from `dev`
+for every selection; the bundle comes from the selected release.
 See the [README installation commands](../README.md#install-or-update).
 
 The public workflow has three operations: Install, Update and Uninstall.
@@ -46,6 +48,7 @@ installation is identified as invalid, not mislabeled as absent.
   inspect availability, or establish installation health. It does not prompt;
   on eligible non-RP6 devices it reports that installation requires confirmation.
 - `--release TAG` selects the named published build.
+- `--dev` selects the rolling development build.
 
 Normal installation checks GPU/decoder identities before classifying
 or replacing Desktop data; `--check` does not run those checks. Device warning

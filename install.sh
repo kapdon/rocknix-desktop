@@ -2,7 +2,7 @@
 # Download the versioned desktop bundle; never write the ROCKNIX root image.
 set -Eeuo pipefail
 
-VERSION=development
+VERSION=latest
 REPOSITORY=kapdon/rocknix-desktop
 ASSET=rocknix-desktop-rp6-arm64.tar.xz
 BASE=/storage/rocknix-desktop/managed/host
@@ -155,21 +155,26 @@ record_release() {
 }
 
 main() {
-  local check=0 yes=0 requested=auto
+  local check=0 yes=0 requested=auto release_selected=0
+  VERSION=latest
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --help|-h)
-        printf 'Usage: bash install.sh [--release TAG] [--install | --update | --uninstall] [--check | --yes]\nDefault channel: development. Update preserves data; Install replaces Desktop apps and home. Uninstall removes integration and retains data without downloading a bundle.\n--yes accepts the operation (including deletion for Install), but never skips an untested-device confirmation.\nOther SM8550/QCS8550 installs require confirmation; other chipsets are currently out of scope.\n--check validates prerequisites without changes; with --uninstall it validates installed removal.\n'
+        printf 'Usage: bash install.sh [--dev | --release TAG] [--install | --update | --uninstall] [--check | --yes]\nDefault: latest published stable version. --dev selects rolling development; --release TAG selects a version. Update preserves data; Install replaces Desktop apps and home. Uninstall removes integration and retains data without downloading a bundle.\n--yes accepts the operation (including deletion for Install), but never skips an untested-device confirmation.\nOther SM8550/QCS8550 installs require confirmation; other chipsets are currently out of scope.\n--check validates prerequisites without changes; with --uninstall it validates installed removal.\n'
         return ;;
       --check) check=1; shift ;;
       --yes) yes=1; shift ;;
       --install|--update|--uninstall)
         [ "$requested" = auto ] || fail 'choose Install, Update or Uninstall'
         requested=${1#--}; shift ;;
+      --dev)
+        [ "$release_selected" = 0 ] || fail 'choose --dev or --release TAG'
+        release_selected=1; VERSION=development; shift ;;
       --release)
+        [ "$release_selected" = 0 ] || fail 'choose --dev or --release TAG'
         [ "$#" -ge 2 ] || fail 'missing release tag'
-        [[ "$2" = development || "$2" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || fail 'invalid release tag'
-        VERSION=$2
+        [[ "$2" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || fail 'invalid release tag'
+        release_selected=1; VERSION=$2
         shift 2 ;;
       *) fail "unknown option: $1" ;;
     esac
@@ -203,6 +208,15 @@ main() {
   STAGING=$(mktemp -d "$WORKSPACE/install.XXXXXX")
   trap 'rc=$?; if [ "$rc" = 0 ]; then rm -rf -- "$STAGING"; else
     printf "Installation stopped. Diagnostics/staging retained at %s\n" "$STAGING" >&2; fi' EXIT
+  if [ "$VERSION" = latest ]; then
+    curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
+      -H 'Accept: application/vnd.github+json' \
+      "https://api.github.com/repos/$REPOSITORY/releases/latest" -o "$STAGING/latest-release.json" ||
+      fail 'cannot determine the latest stable release'
+    VERSION=$(jq -er 'if .draft == false and .prerelease == false then .tag_name else error("not a stable release") end' \
+      "$STAGING/latest-release.json") || fail 'invalid latest release metadata'
+    [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'invalid latest release tag'
+  fi
   local url="https://github.com/$REPOSITORY/releases/download/$VERSION"
   curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
     "$url/latest.json" -o "$STAGING/latest.json"

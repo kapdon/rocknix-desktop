@@ -74,14 +74,14 @@ for answer, accepted in (('y\n', True), ('YES\n', True), ('n\n', False), ('\n', 
     assert '[y/N]' in result.stdout and 'only been hardware-tested' in result.stdout
 # Mock only the native preflight, not the public main flow: confirmation must
 # happen before acquiring a lock/downloading, even with --yes or a release tag.
-for release in ('development', 'v0.1.0'):
+for selection in (('--dev',), ('--release', 'v0.1.0')):
     result = subprocess.run(['bash', '-c', '''
 source ./install.sh
 read_confirmation() { read -r "$1"; }
 check_device() { EXPERIMENTAL_DEVICE=1; DEVICE_MODEL='Fixture handheld'; }
 acquire_install_lock() { echo 'UNEXPECTED LOCK'; exit 91; }
-main --release "$1" --yes
-''', 'fixture', release], input='n\n', text=True, capture_output=True)
+main "$@" --yes
+''', 'fixture', *selection], input='n\n', text=True, capture_output=True)
     assert result.returncode == 0 and 'Cancelled.' in result.stdout, result
     assert 'UNEXPECTED LOCK' not in result.stdout
 result = subprocess.run(['bash', '-c', '''

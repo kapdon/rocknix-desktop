@@ -113,8 +113,9 @@ version. The publisher requires the exact current remote `dev` commit.
 `vX.Y.Z` publishes a normal release; alpha,
 beta and RC tags publish pre-releases. The workflow makes the release public
 only after all installer assets are uploaded. Never move a versioned tag or replace its
-assets. Installation selects a channel/version explicitly; publication does not
-automatically update users' devices.
+assets. Installation defaults to the latest published stable version;
+`--dev` selects development and `--release TAG` pins a version. Publication
+does not automatically update users' devices.
 
 See [build requirements and cache behavior](docs/build.md).
 

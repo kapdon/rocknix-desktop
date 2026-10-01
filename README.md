@@ -65,12 +65,20 @@ on /storage**, and **10% main-device battery**. Charging does not bypass the thr
 curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash
 ```
 
-This command selects the latest published development build. To select a
-versioned release, use the same installer and add `--release TAG`, for example:
+This command selects the latest published stable version. To select a specific
+version, use the same installer and add `--release TAG`, for example:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash -s -- --release v0.1.0
 ```
+
+For the rolling development build, add `--dev`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash -s -- --dev
+```
+
+Choose either `--dev` or `--release TAG`; they cannot be combined.
 Available versions are on the
 [releases page](https://github.com/kapdon/rocknix-desktop/releases).
 
@@ -154,9 +162,8 @@ The five shared folders (Desktop, Steam, backup, games-internal, games-external)
 under `/storage` need separate backups. `/storage/Desktop` keeps its native name.
 See [storage reference](docs/storage.md).
 
-Exit Desktop before uninstalling, then use the installer for your selected
-release with `--uninstall`. For the development channel, run this in a root SSH
-session on the ROCKNIX device:
+Exit Desktop before uninstalling, then run the installer with `--uninstall`
+in a root SSH session on the ROCKNIX device:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash -s -- --uninstall

@@ -47,6 +47,10 @@ curl() {
   done
   printf '%s\n' "$url" >>"$scratch/downloads"
   case "$url" in
+    https://api.github.com/repos/kapdon/rocknix-desktop/releases/latest)
+      [ "${fixture_api_fail:-0}" != 1 ] || return 1
+      printf '{"tag_name":"%s","draft":false,"prerelease":false}\n' \
+        "${fixture_latest_tag:-v0.1.0}" >"$destination" ;;
     */latest.json) cp "$scratch/latest.json" "$destination" ;;
     */rocknix-desktop-rp6-arm64-"$candidate"*.tar.xz) cp "$scratch/payload.tar.xz" "$destination" ;;
     *) return 1 ;;
@@ -59,6 +63,32 @@ output=$(main --release v0.2.0-alpha.1)
 grep -q 'Already up to date' <<<"$output"
 test ! -e "$FLOW_LOG"
 test "$(wc -l <"$scratch/downloads")" = 2
+grep -Fxq 'https://github.com/kapdon/rocknix-desktop/releases/download/v0.2.0-alpha.1/latest.json' "$scratch/downloads"
+: >"$scratch/downloads"
+output=$(main)
+grep -q 'Already up to date' <<<"$output"
+test "$(wc -l <"$scratch/downloads")" = 3
+grep -Fxq 'https://api.github.com/repos/kapdon/rocknix-desktop/releases/latest' "$scratch/downloads"
+grep -Fxq 'https://github.com/kapdon/rocknix-desktop/releases/download/v0.1.0/latest.json' "$scratch/downloads"
+: >"$scratch/downloads"
+output=$(main --dev)
+grep -q 'Already up to date' <<<"$output"
+test "$(wc -l <"$scratch/downloads")" = 2
+grep -Fxq 'https://github.com/kapdon/rocknix-desktop/releases/download/development/latest.json' "$scratch/downloads"
+: >"$scratch/downloads"
+main --check >/dev/null
+test ! -s "$scratch/downloads"
+if (main --dev --release v0.1.0 --check) >/dev/null 2>&1; then exit 1; fi
+if (main --release v0.1.0 --dev --check) >/dev/null 2>&1; then exit 1; fi
+if (fixture_api_fail=1 main --yes) >"$scratch/bad-api" 2>&1; then exit 1; fi
+grep -q 'cannot determine the latest stable release' "$scratch/bad-api"
+test "$(wc -l <"$scratch/downloads")" = 1
+: >"$scratch/downloads"
+if (fixture_latest_tag=development main --yes) >"$scratch/bad-tag" 2>&1; then exit 1; fi
+grep -q 'invalid latest release tag' "$scratch/bad-tag"
+test "$(wc -l <"$scratch/downloads")" = 1
+test ! -e "$FLOW_LOG"
+printf 'PASS: latest stable lookup, explicit dev/version, conflicting selection and API refusal\n'
 output=$(main --release v0.2.0-alpha.1 --install --yes)
 test "$(cat "$FLOW_LOG")" = install
 rm "$FLOW_LOG"
@@ -101,7 +131,7 @@ printf '{"commit":"%s","sha256":"%064d"}\n' "$candidate" 0 >"$WORKSPACE/managed/
 jq --arg asset "rocknix-desktop-rp6-arm64-$candidate-r123a2.tar.xz" \
   '.asset = $asset' "$scratch/latest.json" >"$scratch/rebuild.json"
 mv "$scratch/rebuild.json" "$scratch/latest.json"
-output=$(main --yes)
+output=$(main --dev --yes)
 test "$(tail -n 1 "$FLOW_LOG")" = update
 grep -q -- '-r123a2.tar.xz' "$scratch/downloads"
 for asset in "../escape.tar.xz" "rocknix-desktop-rp6-arm64-$candidate-r123a2.tar.xz/extra"; do
@@ -109,7 +139,7 @@ for asset in "../escape.tar.xz" "rocknix-desktop-rp6-arm64-$candidate-r123a2.tar
   mv "$scratch/bad.json" "$scratch/latest.json"
   downloads_before=$(wc -l <"$scratch/downloads")
   actions_before=$(cat "$FLOW_LOG")
-  if (main --yes) >"$scratch/bad-result" 2>&1; then exit 1; fi
+  if (main --dev --yes) >"$scratch/bad-result" 2>&1; then exit 1; fi
   grep -q 'invalid build filename' "$scratch/bad-result"
   test "$(wc -l <"$scratch/downloads")" = "$((downloads_before + 1))"
   test "$(cat "$FLOW_LOG")" = "$actions_before"
