@@ -1,0 +1,123 @@
+#!/usr/bin/python3
+"""Disable Desktop integration without removing Debian, apps, home or host tools."""
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import runpy
+import stat
+import subprocess
+
+
+def fingerprint(path):
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        raise RuntimeError(f'unsafe integration file: {path}')
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def remove_integration(host, targets, api, check=False):
+    """Journal before removing exact recognized files; resume without backups."""
+    state = host / 'state'
+    marker = state / 'uninstalled.json'
+    api['safe_directory'](host)
+    for path in targets:
+        api['safe_directory'](path.parent)
+    previous = None
+    if os.path.lexists(marker):
+        fingerprint(marker)
+        api['safe_directory'](state)
+        previous = json.loads(marker.read_text())
+        if previous.get('format') != 1 or previous.get('phase') not in ('removing', 'removed') or \
+                set(previous.get('files', {})) != {str(path) for path in targets}:
+            raise RuntimeError('unrecognized uninstall journal')
+    if previous:
+        record = previous
+        for path in targets:
+            if os.path.lexists(path) and fingerprint(path) != record['files'][str(path)]:
+                raise RuntimeError(f'integration changed during uninstall: {path}')
+    else:
+        for path, expected in targets.items():
+            fingerprint(path)
+            content = path.read_bytes()
+            if expected is not None:
+                if content != expected:
+                    raise RuntimeError(f'customized integration requires review: {path}')
+            elif (f'ExecStart=/usr/bin/unshare --mount --propagation private -- {host}/bin/launch-sway-desktop'.encode() not in content.splitlines() or
+                  f'ExecStopPost={host}/bin/restore-emulationstation'.encode() not in content.splitlines()):
+                raise RuntimeError('unrecognized Desktop service')
+        record = {'format': 1, 'phase': 'removing',
+                  'files': {str(path): fingerprint(path) for path in targets}}
+    if check:
+        return
+    state.mkdir(exist_ok=True)
+    api['safe_directory'](state)
+    api['atomic'](marker, (json.dumps(record) + '\n').encode(), 0o600)
+    # The boot hook is first in targets so reboot cannot recreate the entry.
+    for path in targets:
+        if os.path.lexists(path):
+            if fingerprint(path) != record['files'][str(path)]:
+                raise RuntimeError(f'integration changed before removal: {path}')
+            path.unlink()
+            descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+    subprocess.run([str(host / 'bin/rocknix-tools-metadata'), '--remove'], check=True)
+    subprocess.run(['systemctl', 'daemon-reload'], check=True)
+    record['phase'] = 'removed'
+    api['atomic'](marker, (json.dumps(record) + '\n').encode(), 0o600)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--check', action='store_true')
+    mode.add_argument('--yes', action='store_true')
+    args = parser.parse_args()
+    if os.geteuid() != 0 or os.uname().machine != 'aarch64' or \
+            Path('/proc/self/uid_map').read_text().split() != ['0', '0', '4294967295']:
+        raise RuntimeError('requires native ARM64 ROCKNIX root')
+    # Uninstall must remain possible even if GPU/decoder hardware is unavailable.
+    runpy.run_path(str(Path(__file__).with_name('rocknix-device-profile')))['require_identity']()
+    if not re.search(r'^OS_NAME=[\"\']?ROCKNIX[\"\']?$', Path('/etc/os-release').read_text(), re.M):
+        raise RuntimeError('requires ROCKNIX')
+    directory = Path(__file__).resolve().parent
+    api = runpy.run_path(str(directory / 'rocknix-lxc-upgrade'))
+    api['safe_directory'](directory)
+    fd = os.open('/storage/.rocknix-desktop-install.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as lock:
+        info = os.fstat(lock.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022 or info.st_nlink != 1:
+            raise RuntimeError('unsafe shared installation lock')
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        api['configure_layout']()
+        values = api['configure_layout'].__globals__
+        host, data = values['BASE'], values['DATA']
+        if os.path.lexists(values['GUARD']):
+            raise RuntimeError('finish interrupted update before uninstall')
+        api['validate_existing_storage'](data)
+        if 'ROCKNIX_LXC_RUNTIME=1' not in (data / 'rootfs/etc/rocknix-desktop-release').read_text().splitlines():
+            raise RuntimeError('requires an installed LXC runtime')
+        api['idle']()
+        maintenance = runpy.run_path(str(directory / 'rocknix-desktop-maintenance'))
+        maintenance['require_idle']()
+        api['safe_directory'](host / 'integration')
+        for name in ('999-rocknix-desktop', 'Desktop Mode.sh'):
+            fingerprint(host / 'integration' / name)
+        targets = {
+            values['HOOK']: (host / 'integration/999-rocknix-desktop').read_bytes(),
+            values['ENTRY']: (host / 'integration/Desktop Mode.sh').read_bytes(),
+            values['UNIT']: None,
+        }
+        remove_integration(host, targets, api, check=args.check)
+        print('Uninstall checks passed.' if args.check else
+              f'Desktop integration removed. Debian, applications and home retained at {data}.')
+
+
+if __name__ == '__main__':
+    main()
