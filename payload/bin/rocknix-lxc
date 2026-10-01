@@ -289,3 +289,36 @@ lxc.seccomp.profile = {self.tools / 'usr/share/lxc/config/common.seccomp'}
                 path.rmdir()
         self.state.rmdir()
         self.owned = False
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--tools', required=True, type=Path)
+    parser.add_argument('--rootfs', required=True, type=Path)
+    parser.add_argument('--restore', action='store_true')
+    parser.add_argument('--desktop', action='store_true')
+    options = parser.parse_args()
+    # Guest root can damage its own tree. Recovery must not depend on Debian
+    # ownership, marker files or executables still being intact.
+    runtime = Runtime(options.tools, options.rootfs, recovery_only=options.restore)
+    if options.restore:
+        runtime.recover()
+        raise SystemExit(0)
+    def interrupted(signum, frame):
+        raise SystemExit(128 + signum)
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)
+    try:
+        display = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/0-runtime-dir')) / os.environ.get('WAYLAND_DISPLAY', 'wayland-1')
+        runtime.start(desktop={'home': options.rootfs.parent / 'home', 'wayland': display.resolve()}
+                      if options.desktop else None)
+        if options.desktop:
+            runtime.start_session(os.environ)
+        while runtime.child.poll() is None:
+            if runtime.network.child.poll() is not None:
+                raise RuntimeError('container network helper exited')
+            if runtime.desktop is not None and runtime.desktop.audio.child.poll() is not None:
+                raise RuntimeError('container audio helper exited')
+            time.sleep(.2)
+    finally:
+        runtime.close()
