@@ -1,0 +1,47 @@
+#!/usr/bin/python3
+"""Confirmed Install replacement of exact Desktop-owned paths, without backups.
+
+Internal installer helper. Caller holds the install lock, confirms Desktop is
+fully stopped and has already obtained explicit data-overwrite consent.
+"""
+import os
+from pathlib import Path
+import shutil
+import stat
+
+
+def replace(project, targets, safe_directory, no_mounts):
+    project = Path(project)
+    safe_directory(project)
+    no_mounts(project)
+    roots = [project / name for name in ('managed', 'data')]
+    guard = project / '.fresh-install.json'
+    # Validate the whole deletion plan before changing anything. Missing items
+    # are ordinary interrupted-install state; links and custom native files are
+    # not permission to follow/delete unrelated locations.
+    for path in roots:
+        if os.path.lexists(path):
+            safe_directory(path)
+            no_mounts(path)
+    if os.path.lexists(guard):
+        info = guard.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise RuntimeError('unsafe Desktop installation marker')
+    for path, expected in targets.items():
+        safe_directory(path.parent)
+        if os.path.lexists(path):
+            info = path.lstat()
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022
+                    or path.read_bytes() != expected):
+                raise RuntimeError(f'customized or unsafe native integration: {path}')
+    for path in targets:
+        path.unlink(missing_ok=True)
+    for path in roots:
+        if os.path.lexists(path):
+            shutil.rmtree(path)
+    guard.unlink(missing_ok=True)
+    fd = os.open(project, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
