@@ -33,7 +33,7 @@ if [ "$1" = api ]; then
     *)
       if [[ "$*" = *'--jq .assets' ]]; then
         asset=$(jq -r .asset "$PUBLISH_POINTER")
-        jq -n --arg asset "$asset" --arg other_family "${PUBLISH_OTHER_FAMILY:-sway}" '[
+        jq -n --arg asset "$asset" --arg other_family "${PUBLISH_OTHER_FAMILY:-desktop}" '[
           {id:1,name:"latest.json",state:"uploaded"},
           {id:2,name:$asset,state:"uploaded"},
           {id:3,name:($asset + ".sha256"),state:"uploaded"},

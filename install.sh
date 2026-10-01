@@ -212,7 +212,7 @@ main() {
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || fail 'invalid build commit'
   [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || fail 'invalid build checksum'
   ASSET=$(jq -er '.asset' "$STAGING/latest.json")
-  [[ "$ASSET" =~ ^rocknix-(desktop|sway)-rp6-arm64-${revision}(-r[0-9]+a[0-9]+)?\.tar\.xz$ ]] || fail 'invalid build filename'
+  [[ "$ASSET" =~ ^rocknix-desktop-rp6-arm64-${revision}(-r[0-9]+a[0-9]+)?\.tar\.xz$ ]] || fail 'invalid build filename'
   check_power
   printf 'Downloading ROCKNIX Desktop (Sway) %s (%s)\n' "$VERSION" "$revision"
   curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \

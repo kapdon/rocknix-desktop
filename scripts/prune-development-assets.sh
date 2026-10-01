@@ -17,7 +17,7 @@ jq -e --arg asset "$asset" --arg checksum "$asset.sha256" '
   ([.[] | select(.name == $asset or .name == $checksum or .name == "latest.json")
       | select(.state == "uploaded")] | length) == 3 and
   all(.[]; (.id | type) == "number" and .id > 0 and
-    (.name == "latest.json" or (.name | test("^rocknix-(desktop|sway)-rp6-arm64-[0-9a-f]{40}(-r[0-9]+a[0-9]+)?\\.tar\\.xz(\\.sha256)?$"))))
+    (.name == "latest.json" or (.name | test("^rocknix-desktop-rp6-arm64-[0-9a-f]{40}(-r[0-9]+a[0-9]+)?\\.tar\\.xz(\\.sha256)?$"))))
 ' "$scratch/assets.json" >/dev/null
 while IFS=$'\t' read -r id name; do
   printf 'Removing superseded dev asset: %s\n' "$name"

@@ -48,7 +48,7 @@ curl() {
   printf '%s\n' "$url" >>"$scratch/downloads"
   case "$url" in
     */latest.json) cp "$scratch/latest.json" "$destination" ;;
-    */rocknix-desktop-rp6-arm64-"$candidate"*.tar.xz|*/rocknix-sway-rp6-arm64-"$candidate"*.tar.xz) cp "$scratch/payload.tar.xz" "$destination" ;;
+    */rocknix-desktop-rp6-arm64-"$candidate"*.tar.xz) cp "$scratch/payload.tar.xz" "$destination" ;;
     *) return 1 ;;
   esac
 }
@@ -104,13 +104,6 @@ mv "$scratch/rebuild.json" "$scratch/latest.json"
 output=$(main --yes)
 test "$(tail -n 1 "$FLOW_LOG")" = update
 grep -q -- '-r123a2.tar.xz' "$scratch/downloads"
-# Published Sway-named assets use the same Desktop packaging contract.
-jq --arg asset "rocknix-sway-rp6-arm64-$candidate.tar.xz" \
-  '.asset = $asset' "$scratch/latest.json" >"$scratch/sway.json"
-mv "$scratch/sway.json" "$scratch/latest.json"
-output=$(main --update --yes)
-test "$(tail -n 1 "$FLOW_LOG")" = update
-grep -q "rocknix-sway-rp6-arm64-$candidate.tar.xz" "$scratch/downloads"
 for asset in "../escape.tar.xz" "rocknix-desktop-rp6-arm64-$candidate-r123a2.tar.xz/extra"; do
   jq --arg asset "$asset" '.asset = $asset' "$scratch/latest.json" >"$scratch/bad.json"
   mv "$scratch/bad.json" "$scratch/latest.json"
