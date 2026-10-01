@@ -1,0 +1,228 @@
+#!/usr/bin/python3
+"""Host-defined desktop mounts; no guest-configurable host paths or hooks."""
+import os
+from pathlib import Path
+import re
+import runpy
+import stat
+import subprocess
+import sys
+
+ACCESS = runpy.run_path(str(Path(__file__).with_name('rocknix-lxc-access')))
+AUDIO = runpy.run_path(str(Path(__file__).with_name('rocknix-audio')))
+PROFILE = runpy.run_path(str(Path(__file__).with_name('rocknix-device-profile')))
+SHARED = ('Desktop', 'Steam', 'backup', 'games-external', 'games-internal')
+FEX_ARCH = Path('/storage/.local/share/fex-emu/RootFS/ArchLinux')
+FEX_FILES = (('/usr/bin/FEX', 'fex-bin', 'bin/FEX'),
+             ('/usr/bin/FEXServer', 'fex-server', 'bin/FEXServer'),
+             ('/usr/lib/libfmt.so.12', 'fex-fmt', 'lib/libfmt.so.12'))
+STAGES = ('rootfs', 'home', 'control', 'wayland', 'pulse', 'render', 'decoder', 'fex-arch',
+          *(name for _, name, _ in FEX_FILES), *SHARED)
+
+
+def fex_host_file(source):
+    path = Path(source).resolve(strict=True)
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        raise RuntimeError('unsafe native FEX runtime file')
+    trusted_directory(path.parent, 0)
+    if path.parent.stat().st_mode & 0o022:
+        raise RuntimeError('unsafe native FEX runtime directory')
+    return path
+
+
+def fex_arch_source(path=FEX_ARCH):
+    """Optional host-managed x86 data, never host-executed guest code."""
+    if not os.path.lexists(path):
+        return None
+    info = path.lstat()
+    if info.st_uid not in (0, 1000) or info.st_mode & 0o022:
+        raise RuntimeError('unsafe host FEX RootFS ownership or permissions')
+    # ROCKNIX's unpacked image belongs to UID1000. Its ancestors must remain
+    # native-root-controlled; do not accept arbitrary user-selected paths.
+    trusted_directory(path, info.st_uid)
+    return path
+
+
+def fex_sources():
+    """Optional translation capability; unsafe sources still fail closed."""
+    arch = fex_arch_source()
+    if arch is None:
+        return None
+    try:
+        files = [(fex_host_file(source), name, destination)
+                 for source, name, destination in FEX_FILES]
+    except FileNotFoundError:
+        print('Native FEX runtime incomplete; x86 translation unavailable in this session.',
+              file=sys.stderr)
+        return None
+    return arch, files
+
+
+def trusted_directory(path, owner):
+    path = Path(path)
+    info = path.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != owner:
+        raise RuntimeError(f'unexpected directory ownership: {path}')
+    for parent in path.parents:
+        info = parent.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise RuntimeError(f'unsafe mount source ancestor: {parent}')
+    return path
+
+
+class DesktopMounts:
+    def __init__(self, tools, state, rootfs, home, bridge=Path('/run/rocknix-desktop'),
+                 wayland=Path('/run/0-runtime-dir/wayland-1'), shared=True):
+        self.tools, self.state = Path(tools), Path(state)
+        self.profile = PROFILE['resolve']()
+        self.rootfs = trusted_directory(rootfs, 200000)
+        self.home = trusted_directory(home, 201000)
+        self.bridge = trusted_directory(bridge, 0)
+        if self.bridge.stat().st_mode & 0o022:
+            raise RuntimeError('control bridge must not be writable by the desktop')
+        self.wayland = Path(wayland)
+        ACCESS['AccessLease'].validate(self.wayland)
+        self.shared = shared
+        self.directory = self.state / 'desktop-mounts'
+        self.bound = []
+        self.access = None
+        self.audio = None
+
+    def tool(self, name, *args):
+        lib = self.tools / 'usr/lib/aarch64-linux-gnu'
+        return [str(lib / 'ld-linux-aarch64.so.1'), '--library-path', str(lib),
+                str(self.tools / 'usr/bin' / name), *map(str, args)]
+
+    def bind(self, source, name, directory=False, idmap=False):
+        target = self.directory / name
+        if directory:
+            target.mkdir(mode=0o755)
+        else:
+            target.touch(mode=0o600)
+        if idmap:
+            command = self.tool('mount', '--bind', '-o', 'X-mount.idmap=b:0:201000:1', source, target)
+        else:
+            command = ['/usr/bin/mount', '--bind', str(source), str(target)]
+        subprocess.run(command, check=True)
+        self.bound.append(target)
+        return target
+
+    def prepare(self):
+        # Must precede every bind, including the writable rootfs staging bind.
+        os.unshare(os.CLONE_NEWNS)
+        subprocess.run(['/usr/bin/mount', '--make-rprivate', '/'], check=True)
+        self.directory.mkdir(mode=0o711)
+        root = self.bind(self.rootfs, 'rootfs', directory=True)
+        home = self.bind(self.home, 'home', directory=True)
+        control = self.bind(self.bridge, 'control', directory=True)
+        self.access = ACCESS['AccessLease'](self.tools, self.state / 'desktop-access')
+        self.audio = AUDIO['AudioBridge'](self.tools)
+        audio = self.bind(self.audio.start(), 'pulse')
+        entries = [f'lxc.mount.entry = {home} home/rocknix none bind,create=dir 0 0',
+                   f'lxc.mount.entry = {audio} run/rocknix-bridge/pulse none bind,ro,create=file 0 0',
+                   f'lxc.mount.entry = {control} run/rocknix-desktop none bind,ro,create=dir 0 0']
+        endpoints = [
+            (self.wayland, 'wayland', 'run/rocknix-bridge/wayland-1', False),
+            (Path(self.profile['render']), 'render', 'dev/dri/renderD128', True),
+        ]
+        if self.profile['decoder']:
+            endpoints.append((Path(self.profile['decoder']), 'decoder', 'dev/video0', True))
+        for source, name, destination, device in endpoints:
+            self.access.grant(source)
+            target = self.bind(source, name)
+            options = 'bind,create=file' + ('' if device else ',ro')
+            entries.append(f'lxc.mount.entry = {target} {destination} none {options} 0 0')
+            if device:
+                info = source.stat()
+                entries.append(f'lxc.cgroup.devices.allow = c {os.major(info.st_rdev)}:{os.minor(info.st_rdev)} rwm')
+        if self.shared:
+            for name in SHARED:
+                source = Path('/storage') / name
+                if not source.exists() and not source.is_symlink():
+                    continue
+                trusted_directory(source, 0)
+                target = self.bind(source, name, directory=True, idmap=True)
+                entries.append(f'lxc.mount.entry = {target} storage/{name} none bind,create=dir 0 0')
+        fex = fex_sources() if self.profile['native_fex'] else None
+        if fex is not None:
+            arch, files = fex
+            target = self.bind(arch, 'fex-arch', directory=True)
+            subprocess.run(['/usr/bin/mount', '-o', 'remount,bind,ro,nosuid,nodev', str(target)], check=True)
+            entries.append(f'lxc.mount.entry = {target} run/rocknix-fex/ArchLinux none bind,ro,nosuid,nodev,create=dir 0 0')
+            # RP6's verified native FEX dependency set. Never expose all of
+            # /usr/lib or substitute the host loader/libc into the guest.
+            for source, name, destination in files:
+                target = self.bind(source, name)
+                entries.append(f'lxc.mount.entry = {target} run/rocknix-fex/{destination} none bind,ro,nosuid,nodev,create=file 0 0')
+        return root, '\n'.join(entries) + '\n'
+
+    def close(self):
+        for target in reversed(self.bound):
+            subprocess.run(['/usr/bin/umount', str(target)], check=True)
+        self.bound.clear()
+        if self.audio is not None:
+            self.audio.close()
+            self.audio = None
+        if self.access is not None:
+            self.access.close()
+            self.access = None
+        self.recover(self.tools, self.state)
+
+    @staticmethod
+    def recover(tools, state):
+        state = Path(state)
+        AUDIO['AudioBridge'].recover()
+        access = state / 'desktop-access'
+        if access.exists():
+            ACCESS['AccessLease'](tools, access).close()
+        lock = state / 'desktop-access.lock'
+        if lock.exists():
+            info = lock.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600:
+                raise RuntimeError('unsafe desktop access lock')
+            lock.unlink()
+        directory = state / 'desktop-mounts'
+        if directory.exists():
+            mounts = {line.split()[4] for line in Path('/proc/self/mountinfo').read_text().splitlines()}
+            for path in directory.iterdir():
+                if path.name not in STAGES or str(path) in mounts:
+                    raise RuntimeError('unexpected or still-mounted desktop staging path')
+                info = path.lstat()
+                if info.st_uid != 0:
+                    raise RuntimeError('unexpected desktop staging owner')
+                if stat.S_ISDIR(info.st_mode):
+                    path.rmdir()
+                elif stat.S_ISREG(info.st_mode):
+                    path.unlink()
+                else:
+                    raise RuntimeError('unexpected desktop staging type')
+            directory.rmdir()
+
+
+def session_environment(values, profile=None):
+    """Only sizing/device UI values are imported from the host launcher."""
+    numeric = ('LOGICAL_WIDTH', 'LOGICAL_HEIGHT', 'BAR_HEIGHT', 'BAR_FONT_SIZE',
+               'STATUS_FONT_SIZE', 'BAR_PADDING', 'KEYBOARD_HEIGHT', 'KEYBOARD_FONT_SIZE',
+               'DISPLAY_PPI', 'LAUNCHER_FONT_SIZE', 'LAUNCHER_LINE_HEIGHT',
+               'LAUNCHER_HORIZONTAL_PAD', 'LAUNCHER_VERTICAL_PAD')
+    result = []
+    if profile is not None:
+        if (profile['mesa'], profile['gallium']) not in PROFILE['DRIVERS'].values():
+            raise RuntimeError('unrecognized host graphics profile')
+        result += ['MESA_LOADER_DRIVER_OVERRIDE=' + profile['mesa'],
+                   'GALLIUM_DRIVER=' + profile['gallium']]
+    for suffix in (*numeric, 'OUTPUT_NAME', 'OUTPUT_SCALE'):
+        key = 'ROCKNIX_' + suffix
+        if key not in values:
+            continue
+        value = values[key]
+        pattern = r'[0-9]{1,5}' if suffix in numeric else r'[A-Za-z0-9_.:-]{1,64}'
+        if not re.fullmatch(pattern, value):
+            raise RuntimeError(f'invalid session environment: {key}')
+        result.append(f'{key}={value}')
+    if 'TZ' in values:
+        if not re.fullmatch(r'[A-Za-z0-9_+/-]{1,64}', values['TZ']):
+            raise RuntimeError('invalid session timezone')
+        result.append('TZ=' + values['TZ'])
+    return '\n'.join(result) + '\n'
