@@ -1,0 +1,139 @@
+#!/usr/bin/python3
+"""LXC install classification; unsafe host paths are errors, not reinstall targets.
+
+The caller holds the installation lock and validates the project parent. A
+successful mapped-container probe is mandatory before classifying as healthy.
+This module never runs installed host code or mutates an installation.
+"""
+import os
+import argparse
+import contextlib
+import json
+from pathlib import Path
+import re
+import runpy
+import signal
+import stat
+import sys
+
+HOST_FILES = ('build-info', 'bin/rocknix-lxc', 'bin/rocknix-lxc-desktop',
+              'bin/rocknix-lxc-network', 'bin/rocknix-lxc-access',
+              'bin/launch-sway-desktop', 'bin/restore-emulationstation',
+              'bin/rocknix-desktop-paths', 'input/desktop.yaml',
+              'integration/999-rocknix-desktop', 'integration/Desktop Mode.sh')
+
+
+def trusted(path, directory):
+    info = path.lstat()
+    expected = stat.S_ISDIR if directory else stat.S_ISREG
+    if not expected(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        raise RuntimeError(f'unsafe Desktop host path: {path}')
+    return info
+
+
+def classify(project, probe):
+    project = Path(project)
+    if not os.path.lexists(project):
+        return {'status': 'absent', 'reason': 'Desktop is not installed', 'revision': None}
+    trusted(project, True)
+    present = any(os.path.lexists(project / name)
+                  for name in ('managed', 'data', '.fresh-install.json'))
+    if not present:
+        return {'status': 'absent', 'reason': 'Desktop is not installed', 'revision': None}
+    invalid = lambda reason: {'status': 'invalid', 'reason': reason, 'revision': None}
+    host = project / 'managed/host'
+    # Inspect every existing privileged ancestor before looking through it.
+    for relative in ('managed', 'managed/host', 'managed/host/state', 'data'):
+        path = project / relative
+        if not os.path.lexists(path):
+            return invalid(f'missing {relative}')
+        trusted(path, True)
+    for path in (project / '.fresh-install.json',
+                 host / 'state/upgrade-in-progress.json',
+                 host / 'state/uninstalled.json'):
+        if os.path.lexists(path):
+            trusted(path, False)
+            return invalid('installation is incomplete or uninstalled')
+    for name, owner in (('rootfs', 200000), ('home', 201000)):
+        path = project / 'data' / name
+        if not os.path.lexists(path):
+            return invalid(f'missing Desktop {name}')
+        info = path.lstat()
+        if not stat.S_ISDIR(info.st_mode):
+            raise RuntimeError(f'unsafe Desktop data path: {path}')
+        if (info.st_uid, info.st_gid) != (owner, owner):
+            return invalid(f'incorrect Desktop {name} ownership')
+    for name in ('bin', 'input', 'integration', 'host-tools'):
+        path = host / name
+        if not os.path.lexists(path):
+            return invalid(f'missing trusted {name}')
+        trusted(path, True)
+    for relative in HOST_FILES:
+        path = host / relative
+        if not os.path.lexists(path):
+            return invalid(f'missing {relative}')
+        info = trusted(path, False)
+        if not info.st_size or (relative.startswith('bin/') and not info.st_mode & 0o111):
+            return invalid(f'incomplete {relative}')
+    metadata = (host / 'build-info').read_text()
+    revisions = re.findall(r'^commit=([0-9a-f]{40})$', metadata, re.M)
+    if len(revisions) != 1 or 'architecture=arm64' not in metadata.splitlines():
+        return invalid('invalid build metadata')
+    # Boot/attach diagnostics use candidate-owned tools and mapped container
+    # credentials. Metadata and path presence alone must never enable Update.
+    reason = probe(project / 'data/rootfs')
+    if reason:
+        return invalid(str(reason))
+    return {'status': 'healthy', 'reason': 'container health checks passed',
+            'revision': revisions[0]}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--bundle', required=True, type=Path)
+    args = parser.parse_args()
+    if os.geteuid() != 0 or Path('/proc/self/uid_map').read_text().split() != ['0', '0', '4294967295']:
+        raise RuntimeError('requires native host root')
+    bundle = args.bundle.absolute()
+    project = Path('/storage/rocknix-desktop')
+    directory = Path(__file__).absolute().parent
+    api = runpy.run_path(str(directory / 'rocknix-lxc-upgrade'))
+    api['safe_directory'](bundle)
+    api['safe_directory'](project.parent)
+    runtime_api = runpy.run_path(str(directory / 'rocknix-lxc'))
+    state = Path('/run/rocknix-lxc-install-check')
+    if os.path.lexists(state):
+        # A killed check is cleaned up with trusted candidate tools, never by
+        # running code from the mutable guest or deleting live-owner state.
+        runtime_api['Runtime'](bundle / 'host-tools', project / 'data/rootfs',
+                               state, recovery_only=True).recover()
+    maintenance = runpy.run_path(str(directory / 'rocknix-desktop-maintenance'))
+    maintenance['require_idle']()
+    def probe(root):
+        runtime = runtime_api['Runtime'](bundle / 'host-tools', root,
+                                         state)
+        # A leftover runtime cannot be reclassified into permission to delete.
+        if os.path.lexists(runtime.state):
+            raise RuntimeError('installation health-check runtime still requires cleanup')
+        try:
+            with contextlib.redirect_stdout(sys.stderr):
+                runtime.start()
+                result = runtime.attach('/usr/bin/python3', '-', timeout=120,
+                    input=(bundle / 'payload/guest/check-container.py').read_text())
+            if result.returncode:
+                return 'container health failed: ' + (result.stdout + result.stderr).strip()
+        except (OSError, RuntimeError) as error:
+            return 'container health failed: ' + str(error)
+        finally:
+            # Failed cleanup is fatal, not permission for Install replacement.
+            runtime.close()
+        return None
+    print(json.dumps(classify(project, probe)))
+
+
+if __name__ == '__main__':
+    def interrupted(signum, frame):
+        raise SystemExit(128 + signum)
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)
+    main()
