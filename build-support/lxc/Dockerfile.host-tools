@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1
+# Separate trusted host-side tools. Never bind this tree into writable Debian.
+# Bundled independently from the container-admin-writable application rootfs.
+FROM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+ARG TARGETARCH
+RUN test "${TARGETARCH}" = arm64
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d \
+    && chmod 0755 /usr/sbin/policy-rc.d \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends lxc uidmap acl util-linux slirp4netns \
+       bubblewrap dbus xdg-dbus-proxy nm-connection-editor fonts-dejavu-core \
+       fonts-roboto adwaita-icon-theme pulseaudio pulseaudio-utils \
+    && mkdir -p /home/rocknix-default /storage \
+    && dpkg-query -W > /host-tools-packages.tsv \
+    && lxc-start --version > /host-tools-lxc-version \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# The isolated network editor cannot read container-admin-writable themes or
+# settings. Package the same source assets in its separate trusted runtime.
+COPY rootfs-overlay/etc/gtk-3.0/settings.ini /etc/gtk-3.0/settings.ini
+COPY rootfs-overlay/usr/share/themes/ROCKNIX/ /usr/share/themes/ROCKNIX/
