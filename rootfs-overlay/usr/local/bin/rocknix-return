@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -eu
+
+FIFO=/run/rocknix-desktop/control
+
+[ -p "${FIFO}" ] || exit 1
+# Repeated taps must not queue a second confirmation behind the first.
+exec 9>"${XDG_RUNTIME_DIR:-/run/rocknix-desktop}/return-confirm.lock"
+flock -n 9 || exit 0
+selection=$(/usr/local/bin/rocknix-launcher confirm-return) || exit 0
+[ "${selection}" = 'Exit Desktop — close desktop apps' ] || exit 0
+exec timeout 2 /bin/sh -c 'printf "return\n" >"$1"' rocknix-return "${FIFO}"
