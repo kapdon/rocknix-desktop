@@ -1,0 +1,26 @@
+#!/bin/bash
+
+source /etc/profile
+
+BASE=/storage/rocknix-desktop/managed/host
+
+pause_on_error() {
+  printf '\n%s\n' "$*" >&2
+  printf 'This window will close in 10 seconds.\n' >&2
+  sleep 10
+  exit 1
+}
+
+"${BASE}/bin/preflight" || pause_on_error "Desktop Mode is not ready."
+
+if systemctl is-active --quiet rocknix-desktop.service; then
+  pause_on_error "Desktop Mode is already running."
+fi
+
+systemctl reset-failed rocknix-desktop.service 2>/dev/null || true
+
+if command -v set_kill >/dev/null 2>&1; then
+  set_kill set "waybar fuzzel thunar firefox-esr"
+fi
+
+systemctl start --no-block rocknix-desktop.service || pause_on_error "Could not start Desktop Mode."

@@ -1,0 +1,13 @@
+#!/bin/sh
+
+SOURCE='/storage/rocknix-desktop/managed/host/integration/Desktop Mode.sh'
+TARGET='/storage/.config/modules/Desktop Mode.sh'
+TEMP="${TARGET}.new"
+
+[ -f "${SOURCE}" ] || exit 0
+mkdir -p /storage/.config/modules
+cp "${SOURCE}" "${TEMP}"
+chmod 0755 "${TEMP}"
+mv -f "${TEMP}" "${TARGET}"
+
+/storage/rocknix-desktop/managed/host/bin/rocknix-tools-metadata
