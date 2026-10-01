@@ -1,0 +1,14 @@
+#!/bin/sh
+
+set -eu
+
+CONTROL=/run/rocknix-desktop/keyboard-control
+VISIBLE_MARKER=/run/rocknix-desktop/keyboard-visible
+
+[ -p "${CONTROL}" ] || exit 1
+timeout 2 /bin/sh -c 'printf "toggle\n" >"$1"' rocknix-keyboard "${CONTROL}"
+if [ -e "${VISIBLE_MARKER}" ]; then
+  rm -f "${VISIBLE_MARKER}"
+else
+  : >"${VISIBLE_MARKER}"
+fi

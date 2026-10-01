@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=On-Screen Keyboard
+Comment=Show or hide the ROCKNIX Wayland keyboard
+Exec=/usr/local/bin/rocknix-keyboard-toggle
+Icon=input-keyboard
+Terminal=false
+Categories=Utility;Accessibility;

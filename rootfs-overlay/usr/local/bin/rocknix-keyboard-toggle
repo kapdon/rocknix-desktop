@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+[ -p /run/rocknix-desktop/host-control ] || exit 1
+exec timeout 2 /bin/sh -c 'printf "keyboard\n" >/run/rocknix-desktop/host-control'
