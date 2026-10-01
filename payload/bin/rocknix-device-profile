@@ -1,0 +1,97 @@
+#!/usr/bin/python3
+"""Host-owned device selection; experimental consent never supplies mount paths."""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import stat
+
+STATE = Path('/storage/rocknix-desktop/managed/host/state/device.json')
+RP6 = 'Retroid Pocket 6'
+# Phase one is deliberately the RP6's SoC family, not every Qualcomm or ARM64
+# device. The canonical ROCKNIX inventory groups QCS8550 devices under SM8550.
+UPSTREAM_REVISION = 'a55d58a1209b35e287dd55a3aad67a5543b467ce'
+DRIVERS = {'msm': ('msm', 'freedreno')}
+
+
+def identity():
+    model = Path('/proc/device-tree/model').read_bytes().rstrip(b'\0').decode('utf-8')
+    if not model or len(model) > 200 or any(ord(c) < 32 for c in model):
+        raise RuntimeError('missing or invalid device-tree model')
+    if os.uname().machine != 'aarch64':
+        raise RuntimeError('only ARM64 ROCKNIX is eligible')
+    release = Path('/etc/os-release').read_text()
+    if not re.search(r'^OS_NAME=[\"\']?ROCKNIX[\"\']?$', release, re.M):
+        raise RuntimeError('requires native ROCKNIX')
+    if not all(re.search(r'^' + key + r'=[\"\']?SM8550[\"\']?$', release, re.M)
+               for key in ('HW_DEVICE', 'DISTRO_DEVICE')):
+        raise RuntimeError('device currently out of scope; only ROCKNIX SM8550/QCS8550 devices are being tested')
+    return model
+
+
+def consent(model, path=STATE):
+    if not os.path.lexists(path):
+        return False
+    for parent in path.parents:
+        info = parent.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise RuntimeError('unsafe device consent ancestor')
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        raise RuntimeError('unsafe device consent record')
+    return json.loads(path.read_text()) == {'format': 1, 'model': model,
+                                           'architecture': 'aarch64', 'experimental': True}
+
+
+def require_identity(allow=False):
+    model = identity()
+    if model != RP6 and not (allow or consent(model)):
+        raise RuntimeError(f'{model}: untested device; run the installer and confirm its device warning')
+    return model
+
+
+def render_endpoint(path):
+    path = Path(path)
+    if path != Path('/dev/dri/renderD128'):
+        raise RuntimeError('not the SM8550 profile render endpoint')
+    info = path.lstat()
+    if info.st_uid != 0 or not stat.S_ISCHR(info.st_mode) or \
+            (os.major(info.st_rdev), os.minor(info.st_rdev)) != (226, 128):
+        raise RuntimeError('invalid host render device identity')
+    return info, 'msm'
+
+
+def resolve(allow=False):
+    model = require_identity(allow)
+    experimental = model != RP6
+    render = Path('/dev/dri/renderD128')
+    _, driver = render_endpoint(render)
+    decoder = Path('/dev/video0')
+    info = decoder.lstat()
+    if not stat.S_ISCHR(info.st_mode) or info.st_uid != 0 or \
+            (os.major(info.st_rdev), os.minor(info.st_rdev)) != (81, 0) or \
+            Path('/sys/class/video4linux/video0/name').read_text().strip() != 'qcom-iris-decoder':
+        raise RuntimeError('SM8550 hardware decoder identity mismatch; this device needs a verified profile')
+    mesa, gallium = DRIVERS[driver]
+    return {'model': model, 'architecture': 'aarch64', 'experimental': experimental,
+            'chipset': 'SM8550/QCS8550', 'inventory_revision': UPSTREAM_REVISION,
+            'render': str(render), 'driver': driver, 'mesa': mesa, 'gallium': gallium,
+            'decoder': str(decoder) if decoder else None,
+            'video': 'SM8550 hardware decoder; RP6 only is hardware-validated',
+            'native_fex': True}
+
+
+def save_consent(profile, atomic, path=STATE):
+    if profile['experimental']:
+        atomic(path, (json.dumps({'format': 1, 'model': profile['model'],
+                                 'architecture': 'aarch64', 'experimental': True}) + '\n').encode(), 0o600)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.parse_args()
+    try:
+        print(json.dumps(resolve(os.environ.get('ROCKNIX_UNTESTED_DEVICE_CONFIRMED') == '1'), indent=2))
+    except (OSError, ValueError, RuntimeError) as error:
+        parser.exit(1, f'Device profile check failed: {error}\n')
