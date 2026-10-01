@@ -1,0 +1,8 @@
+#!/bin/bash
+set -eu
+printf 'ROCKNIX Desktop Mode (Sway) — development build\n\n'
+if [ -r /etc/rocknix-desktop-build-info ]; then
+  cat /etc/rocknix-desktop-build-info
+else
+  printf 'Build metadata unavailable (older runtime).\n'
+fi
