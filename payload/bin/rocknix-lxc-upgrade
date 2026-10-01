@@ -179,3 +179,113 @@ def atomic(path, data, mode=0o644):
         temporary.unlink(missing_ok=True)
 
 
+def extract(bundle, expected, target):
+    """Extract trusted host components, never an incoming replacement rootfs."""
+    with bundle.open('rb') as stream:
+        if hashlib.file_digest(stream, 'sha256').hexdigest() != expected:
+            raise RuntimeError('bundle checksum mismatch')
+        stream.seek(0)
+        with tarfile.open(fileobj=stream, mode='r:xz') as archive:
+            selected = []
+            seen = set()
+            for member in archive.getmembers():
+                name = member.name.removeprefix('./').rstrip('/')
+                path = PurePosixPath(name)
+                if not name or name == '.':
+                    continue
+                if path.is_absolute() or '..' in path.parts or str(path) != name:
+                    raise RuntimeError('unsafe archive path')
+                if not (name in FILES or path.parts[0] in ('payload', 'host-tools')):
+                    continue
+                if name in seen or not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
+                    raise RuntimeError('duplicate or special host archive member')
+                seen.add(name)
+                member.name = name
+                selected.append(member)
+            links = {item.name for item in selected if item.issym() or item.islnk()}
+            regular = {item.name for item in selected if item.isfile()}
+            for member in selected:
+                if any(str(parent) in links for parent in PurePosixPath(member.name).parents):
+                    raise RuntimeError('archive attempts to write through a link')
+                if member.issym() and not member.name.startswith('host-tools/'):
+                    raise RuntimeError('host payload symlink is not allowed')
+                if member.islnk():
+                    link = member.linkname.removeprefix('./')
+                    if not link.startswith('host-tools/') or link not in regular or '..' in PurePosixPath(link).parts:
+                        raise RuntimeError('unsafe archive hardlink')
+                    member.linkname = link
+            # Absolute Debian symlinks are needed inside the independently
+            # sandboxed tools tree. No file may be extracted below a link.
+            check_staging_space(target, selected)
+            archive.extractall(target, members=selected, filter='fully_trusted')
+    safe_directory(target / 'payload')
+    safe_directory(target / 'host-tools')
+    if not (target / 'payload/bin/rocknix-desktop-paths').is_file():
+        raise RuntimeError('candidate is missing required Desktop paths')
+    metadata = (target / 'build-info').read_text()
+    revision = re.search(r'^commit=([0-9a-f]{40})$', metadata, re.M)
+    if not revision or 'architecture=arm64\n' not in metadata:
+        raise RuntimeError('invalid candidate provenance')
+    with tarfile.open(target / 'desktop-integration.tar.gz') as integration:
+        release = integration.extractfile('etc/rocknix-desktop-release').read().decode()
+        info = integration.extractfile('etc/rocknix-desktop-build-info').read().decode()
+        if 'ROCKNIX_LXC_RUNTIME=1\n' not in release or info != metadata:
+            raise RuntimeError('candidate is not a matching LXC integration build')
+    return revision[1]
+
+
+def remove_stage(path):
+    if path.parent != WORKSPACE or not path.name.startswith('upgrade-lxc.'):
+        raise RuntimeError('unrecognized update staging path')
+    safe_directory(path)
+    no_mounts(path)
+    shutil.rmtree(path)
+
+
+def prune_host_files(destination, names):
+    """Drop retired files only in a validated, project-managed payload directory."""
+    obsolete = [path for path in destination.iterdir() if path.name not in names]
+    for path in obsolete:
+        if path.is_symlink() or not path.is_file() or os.path.ismount(path):
+            raise RuntimeError('unexpected obsolete host payload member: ' + str(path))
+    for path in obsolete:
+        path.unlink()
+
+
+def install_host(candidate, preserve_candidate=False):
+    """Replace only the known host-managed files; never rootfs/home/logs."""
+    profile_api = runpy.run_path(str(candidate / 'payload/bin/rocknix-device-profile'))
+    profile = profile_api['resolve'](os.environ.get('ROCKNIX_UNTESTED_DEVICE_CONFIRMED') == '1')
+    tools = BASE / 'host-tools'
+    if tools.exists() or tools.is_symlink():
+        safe_directory(tools)
+        no_mounts(tools)
+        shutil.rmtree(tools)
+    if preserve_candidate:
+        shutil.copytree(candidate / 'host-tools', tools, symlinks=True)
+    else:
+        (candidate / 'host-tools').rename(tools)
+    for directory in ('bin', 'input', 'integration'):
+        destination = BASE / directory
+        destination.mkdir(exist_ok=True)
+        safe_directory(destination)
+        for source in (candidate / 'payload' / directory).iterdir():
+            if not source.is_file() or source.is_symlink():
+                raise RuntimeError('unexpected host payload member')
+            data = integration_bytes(source) if directory == 'integration' else source.read_bytes()
+            atomic(destination / source.name, data, 0o644 if directory == 'input' else 0o755)
+        prune_host_files(destination, {source.name for source in
+                                     (candidate / 'payload' / directory).iterdir()})
+    for name in ('README.md', 'uninstall.sh', 'upgrade.sh', 'upgrade-lxc.py', 'build-info'):
+        atomic(BASE / name, (candidate / name).read_bytes())
+    for source, destination, mode in (
+        (candidate / 'payload/systemd/rocknix-desktop.service', UNIT, 0o644),
+        (BASE / 'integration/999-rocknix-desktop', HOOK, 0o755),
+        (BASE / 'integration/Desktop Mode.sh', ENTRY, 0o755)):
+        atomic(destination, integration_bytes(source), mode)
+    subprocess.run(['systemctl', 'daemon-reload'], check=True)
+    profile_api['save_consent'](profile, atomic, BASE / 'state/device.json')
+    subprocess.run(['systemd-analyze', 'verify', str(UNIT)], check=True)
+    subprocess.run([str(BASE / 'bin/rocknix-tools-metadata')], check=True)
+
+
