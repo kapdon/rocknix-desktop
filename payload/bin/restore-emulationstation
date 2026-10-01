@@ -1,0 +1,134 @@
+#!/bin/bash
+
+set -u
+
+source /etc/profile
+source "$(dirname -- "${BASH_SOURCE[0]}")/rocknix-desktop-paths" || exit 1
+
+"${BASE}/bin/rocknix-network" --cleanup || \
+  printf 'WARNING: network helper cleanup failed\n' >&2
+
+# Root-owned state restores the temporary display grant even after SIGKILL.
+"${BASE}/bin/rocknix-lxc" \
+  --tools "${HOST_TOOLS}" \
+  --rootfs "${ROOTFS}" --restore || \
+  printf 'WARNING: LXC resource/access recovery failed\n' >&2
+
+# ExecStopPost runs after systemd has reaped the desktop cgroup, even when
+# the main process was killed before its EXIT trap finished (e.g. tee SIGPIPE).
+if [ -f /run/rocknix-desktop/sway-style-owned ] && systemctl is-active --quiet sway.service; then
+  swaymsg reload >/dev/null 2>&1 || true
+fi
+python3 "${BASE}/bin/rocknix-display-settings" restore || \
+  printf 'WARNING: original display-state restoration failed\n' >&2
+rm -f -- /run/rocknix-desktop/display.json /run/rocknix-desktop/display-metrics.json
+rm -f -- \
+  /run/rocknix-desktop/control \
+  /run/rocknix-desktop/host-control \
+  /run/rocknix-desktop/keyboard-control \
+  /run/rocknix-desktop/keyboard-visible \
+  /run/rocknix-desktop/sway-style-owned \
+  /run/rocknix-desktop/window-count \
+  /run/rocknix-desktop/window-count.new
+rm -f -- /run/rocknix-desktop/network-state /run/rocknix-desktop/network-state.new
+if [ -f /run/rocknix-desktop/bindings-owned ] && systemctl is-active --quiet sway.service; then
+  swaymsg 'unbindsym XF86Tools' >/dev/null 2>&1 || true
+  swaymsg 'unbindsym F13' >/dev/null 2>&1 || true
+  swaymsg 'unbindsym F14' >/dev/null 2>&1 || true
+  swaymsg 'unbindsym F15' >/dev/null 2>&1 || true
+  swaymsg 'unbindsym XF86Launch5' >/dev/null 2>&1 || true
+  swaymsg 'unbindsym XF86Launch6' >/dev/null 2>&1 || true
+fi
+rm -f -- /run/rocknix-desktop/bindings-owned
+rmdir /run/rocknix-desktop 2>/dev/null || true
+
+STATE_FILE=/run/rocknix-desktop-input-state
+SESSION_STATE=/run/rocknix-desktop-session-state
+ORIGINAL_PROFILE=""
+PRIOR_WORKSPACE=""
+TOUCHKEYBOARD_ACTIVE=0
+TOUCHKEYBOARD_MASK_OWNED=0
+INPUT_STATE_PRESENT=0
+SESSION_STATE_PRESENT=0
+declare -a ORIGINAL_TARGETS=()
+
+if [ -f "${STATE_FILE}" ]; then
+  INPUT_STATE_PRESENT=1
+  while IFS='=' read -r key value; do
+    case "${key}" in
+      profile) ORIGINAL_PROFILE=${value} ;;
+      target) ORIGINAL_TARGETS+=("${value}") ;;
+    esac
+  done <"${STATE_FILE}"
+fi
+
+if [ -f "${SESSION_STATE}" ]; then
+  SESSION_STATE_PRESENT=1
+  while IFS='=' read -r key value; do
+    case "${key}" in
+      workspace) PRIOR_WORKSPACE=${value} ;;
+      touchkeyboard_active) TOUCHKEYBOARD_ACTIVE=${value} ;;
+      touchkeyboard_mask_owned) TOUCHKEYBOARD_MASK_OWNED=${value} ;;
+    esac
+  done <"${SESSION_STATE}"
+fi
+
+if [ "${INPUT_STATE_PRESENT}" = 1 ] && \
+    [ -n "${ORIGINAL_PROFILE}" ] && [ -f "${ORIGINAL_PROFILE}" ] && \
+    [ "${#ORIGINAL_TARGETS[@]}" -gt 0 ] && \
+    command -v inputplumber >/dev/null 2>&1 && \
+    inputplumber devices list >/dev/null 2>&1; then
+  inputplumber device 0 profile load "${ORIGINAL_PROFILE}" >/dev/null 2>&1 || true
+  inputplumber device 0 targets set "${ORIGINAL_TARGETS[@]}" >/dev/null 2>&1 || true
+fi
+
+if [ "${TOUCHKEYBOARD_MASK_OWNED}" = 1 ] && \
+    [ "$(readlink /run/systemd/system/touchkeyboard.service 2>/dev/null)" = /dev/null ]; then
+  systemctl unmask --runtime touchkeyboard.service || \
+    printf 'WARNING: native keyboard runtime unmask failed\n' >&2
+fi
+
+STATE=$(systemctl is-system-running 2>/dev/null || true)
+case "${STATE}" in
+  stopping|offline)
+    exit 0
+    ;;
+esac
+
+ensure_active() {
+  local unit=$1 label=$2
+
+  # A synchronous start of sway.service from this unit's ExecStopPost can wait
+  # on the very stop job running this hook. Avoid that transaction deadlock,
+  # and do not enqueue a redundant job when the compositor stayed active.
+  if ! systemctl is-active --quiet "${unit}"; then
+    systemctl start --no-block "${unit}"
+  fi
+  for _ in {1..100}; do
+    systemctl is-active --quiet "${unit}" && return 0
+    sleep 0.1
+  done
+  printf '%s did not recover\n' "${label}" >&2
+  return 1
+}
+
+ensure_active sway.service Sway
+ensure_active essway.service EmulationStation
+
+if [ "${SESSION_STATE_PRESENT}" = 1 ]; then
+  if [ "${TOUCHKEYBOARD_ACTIVE}" = 1 ]; then
+    systemctl start touchkeyboard.service
+  else
+    systemctl stop touchkeyboard.service
+  fi
+fi
+
+if [ -n "${PRIOR_WORKSPACE}" ]; then
+  swaymsg -- "workspace ${PRIOR_WORKSPACE}" >/dev/null 2>&1 || true
+fi
+if command -v set_kill >/dev/null 2>&1; then
+  set_kill set "emulationstation" >/dev/null 2>&1 || true
+fi
+
+rm -f "${STATE_FILE}" "${SESSION_STATE}"
+printf 'EmulationStation and desktop input state restored.\n'

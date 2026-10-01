@@ -1,0 +1,56 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+source "$(dirname -- "${BASH_SOURCE[0]}")/rocknix-desktop-paths"
+STATE_FILE=/run/rocknix-desktop-input-state
+PROFILE="${BASE}/input/desktop.yaml"
+TOUCHSCREEN='0:0:generic_ft5x06_(8d)'
+declare -a ORIGINAL_TARGETS=()
+
+ORIGINAL_PROFILE=$(
+  inputplumber device 0 profile path |
+    sed -n "s/^Current profile path: '\(.*\)'$/\1/p"
+)
+
+while IFS= read -r target; do
+  [ -n "${target}" ] && ORIGINAL_TARGETS+=("${target}")
+done < <(
+  inputplumber device 0 targets list |
+    awk -F '│' '
+      {
+        value = $2
+        gsub(/[[:space:]]/, "", value)
+        if (value ~ /^(null|dbus|deck|deck-uhid|ds5|ds5-edge|hori-steam|8bitdo-u2|keyboard|mouse|gamepad|touchpad|touchscreen|xb360|xbox-elite|xbox-series|unified-gamepad|debug)$/) {
+          print value
+        }
+      }
+    '
+)
+
+[ -n "${ORIGINAL_PROFILE}" ] || {
+  printf 'Cannot determine the active InputPlumber profile\n' >&2
+  exit 1
+}
+[ "${#ORIGINAL_TARGETS[@]}" -gt 0 ] || {
+  printf 'Cannot determine the active InputPlumber targets\n' >&2
+  exit 1
+}
+[ -f "${PROFILE}" ] || {
+  printf 'Desktop input profile is missing: %s\n' "${PROFILE}" >&2
+  exit 1
+}
+
+{
+  printf 'profile=%s\n' "${ORIGINAL_PROFILE}"
+  for target in "${ORIGINAL_TARGETS[@]}"; do
+    printf 'target=%s\n' "${target}"
+  done
+} >"${STATE_FILE}.new"
+mv -f "${STATE_FILE}.new" "${STATE_FILE}"
+
+inputplumber device 0 targets set ds5 keyboard mouse
+inputplumber device 0 profile load "${PROFILE}"
+swaymsg input "${TOUCHSCREEN}" map_to_output DSI-1
+
+printf 'Desktop input enabled: right stick pointer, L2 left click, R2 right click\n'
