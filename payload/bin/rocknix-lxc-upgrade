@@ -289,3 +289,132 @@ def install_host(candidate, preserve_candidate=False):
     subprocess.run([str(BASE / 'bin/rocknix-tools-metadata')], check=True)
 
 
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--bundle', type=Path, required=True)
+    parser.add_argument('--sha256', required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--check', action='store_true')
+    mode.add_argument('--yes', action='store_true')
+    args = parser.parse_args()
+    if os.geteuid() != 0 or os.uname().machine != 'aarch64':
+        raise RuntimeError('requires ARM64 ROCKNIX host root')
+    runpy.run_path(str(helper_path('rocknix-device-profile')))['require_identity'](
+        os.environ.get('ROCKNIX_UNTESTED_DEVICE_CONFIRMED') == '1')
+    if not re.search(r'^OS_NAME=[\"\']?ROCKNIX[\"\']?$', Path('/etc/os-release').read_text(), re.M):
+        raise RuntimeError('requires ROCKNIX')
+    if not re.fullmatch('[0-9a-f]{64}', args.sha256):
+        raise RuntimeError('provide the trusted build checksum')
+    runpy.run_path(str(helper_path('rocknix-install-power')))['require_power']()
+    if any(200000 <= item.pw_uid < 265536 for item in pwd.getpwall()) or \
+            any(200000 <= item.gr_gid < 265536 for item in grp.getgrall()):
+        raise RuntimeError('container identity range conflicts with native accounts')
+    fd = os.open('/storage/.rocknix-desktop-install.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as lock:
+        info = os.fstat(lock.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022 or info.st_nlink != 1:
+            raise RuntimeError('unsafe shared installation lock')
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        configure_layout()
+        idle()
+        validate_existing_storage(DATA)
+        retained = retained_marker(BASE)
+        if 'ROCKNIX_LXC_RUNTIME=1\n' not in (ROOTFS / 'etc/rocknix-desktop-release').read_text():
+            raise RuntimeError('installed Desktop LXC runtime marker is invalid')
+        guard = GUARD
+        previous = None
+        if guard.exists() or guard.is_symlink():
+            if guard.is_symlink() or guard.stat().st_uid != 0:
+                raise RuntimeError('unsafe update journal')
+            previous = json.loads(guard.read_text())
+            if previous.get('format') != 1 or previous.get('sha256') != args.sha256:
+                raise RuntimeError('resume the interrupted update with its original bundle/checksum')
+        candidate = Path(tempfile.mkdtemp(prefix='upgrade-lxc.', dir=WORKSPACE))
+        keep = False
+        runtime = None
+        try:
+            revision = extract(args.bundle, args.sha256, candidate)
+            packages = candidate / 'payload/guest/trash-packages.tar'
+            package_updater = candidate / 'payload/guest/update-trash-packages.py'
+            if not packages.is_file() or not package_updater.is_file():
+                raise RuntimeError('candidate lacks the required guest package update payload')
+            api = runpy.run_path(str(candidate / 'payload/bin/rocknix-lxc'))
+            if STATE.exists():
+                if not previous or args.check:
+                    raise RuntimeError('unfinished maintenance container requires update resume')
+                old = Path(previous['work'])
+                if old.parent != WORKSPACE or not old.name.startswith('upgrade-lxc.'):
+                    raise RuntimeError('unrecognized previous staging path')
+                safe_directory(old)
+                tools = old / 'host-tools' if (old / 'host-tools').exists() else BASE / 'host-tools'
+                api['Runtime'](tools, ROOTFS, STATE, recovery_only=True).recover()
+            print(f'Candidate: {revision}; rootfs, apps and home will stay in place.', flush=True)
+            if args.check:
+                return
+            record = {'format': 1, 'sha256': args.sha256, 'commit': revision,
+                      'work': str(candidate), 'phase': 'maintenance'}
+            atomic(guard, (json.dumps(record) + '\n').encode(), 0o600)
+            keep = True
+            if previous and Path(previous['work']) != candidate:
+                remove_stage(Path(previous['work']))
+            runtime = api['Runtime'](candidate / 'host-tools', ROOTFS, STATE)
+            runtime.start()
+            result = runtime.attach('/usr/bin/python3', '-', timeout=120,
+                input=(candidate / 'payload/guest/check-container.py').read_text())
+            if result.returncode:
+                raise RuntimeError('installed container is invalid: ' + result.stdout + result.stderr)
+            print(result.stdout, flush=True)
+            result = runtime.attach('/bin/bash', '-s', '--', '--retained', timeout=300,
+                input=(candidate / 'payload/guest/bootstrap-container.sh').read_text())
+            if result.returncode:
+                raise RuntimeError('container bootstrap failed: ' + result.stdout + result.stderr)
+            with packages.open('rb') as stream:
+                subprocess.run(runtime.command('lxc-attach', '-P', runtime.configs, '-n', runtime.name,
+                    '--clear-env', '--', '/bin/sh', '-ec', 'cat > /run/desktop-packages.tar'),
+                    stdin=stream, check=True, timeout=120)
+            result = runtime.attach('/usr/bin/unshare', '--net', '/usr/bin/python3', '-',
+                                    '/run/desktop-packages.tar', input=package_updater.read_text(), timeout=300)
+            if result.returncode:
+                raise RuntimeError('container package update failed: ' + result.stdout + result.stderr)
+            print(result.stdout, flush=True)
+            with (candidate / 'desktop-integration.tar.gz').open('rb') as stream:
+                subprocess.run(runtime.command('lxc-attach', '-P', runtime.configs, '-n', runtime.name,
+                    '--clear-env', '--', '/bin/sh', '-ec', 'cat > /run/desktop-integration.tar.gz'),
+                    stdin=stream, check=True, timeout=120)
+            updater = candidate / 'payload/guest/rocknix-container-update'
+            result = runtime.attach('/usr/bin/python3', '-', '/run/desktop-integration.tar.gz',
+                                    input=updater.read_text(), timeout=180)
+            if result.returncode:
+                raise RuntimeError('container integration update failed: ' + result.stdout + result.stderr)
+            print(result.stdout, flush=True)
+            conflicts = json.loads(result.stdout)['preserved_local_edits']
+            if any(name.startswith('etc/systemd/') for name in conflicts):
+                raise RuntimeError('resolve preserved systemd configuration before activation: ' + ', '.join(conflicts))
+            runtime.close()
+            runtime = None
+            record['phase'] = 'installing-host'
+            atomic(guard, (json.dumps(record) + '\n').encode(), 0o600)
+            install_host(candidate)
+            subprocess.run([str(BASE / 'bin/preflight')], check=True,
+                           env={**os.environ, 'ROCKNIX_UPGRADE_CHECK': '1'})
+            if retained is not None:
+                retained.unlink()
+            guard.unlink()
+            os.sync()
+            keep = False
+            print('LXC update complete. Apps and home retained; open Tools > Desktop Mode.', flush=True)
+        finally:
+            if runtime is not None:
+                runtime.close()
+            if not keep:
+                remove_stage(candidate)
+            else:
+                print(f'Update guarded; rerun with the same bundle to resume. Candidate staging: {candidate}', flush=True)
+
+
+if __name__ == '__main__':
+    def interrupted(signum, frame):
+        raise SystemExit(128 + signum)
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)
+    main()
