@@ -1,0 +1,3 @@
+#!/bin/sh
+# Do not export LD_LIBRARY_PATH: launched apps must use their own libraries.
+exec /opt/rocknix-fuzzel/bin/fuzzel "$@"

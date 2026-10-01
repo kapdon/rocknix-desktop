@@ -1,0 +1,150 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+if [ -f /usr/local/bin/rocknix-display-metrics ]; then
+  source /usr/local/bin/rocknix-display-metrics
+  load_display_metrics
+fi
+
+mode=${1:-apps}
+logical_width=${ROCKNIX_LOGICAL_WIDTH:-1280}
+logical_height=${ROCKNIX_LOGICAL_HEIGHT:-720}
+bar_height=${ROCKNIX_BAR_HEIGHT:-48}
+keyboard_height=${ROCKNIX_KEYBOARD_HEIGHT:-252}
+output_name=${ROCKNIX_OUTPUT_NAME:-}
+font_size=${ROCKNIX_LAUNCHER_FONT_SIZE:-0}
+line_height=${ROCKNIX_LAUNCHER_LINE_HEIGHT:-0}
+horizontal_pad=${ROCKNIX_LAUNCHER_HORIZONTAL_PAD:-0}
+vertical_pad=${ROCKNIX_LAUNCHER_VERTICAL_PAD:-0}
+
+for value in \
+  logical_width logical_height bar_height keyboard_height \
+  font_size line_height horizontal_pad vertical_pad; do
+  [[ ${!value} =~ ^[0-9]+$ ]] || exit 1
+done
+
+if [ "${font_size}" -gt 0 ] && [ "${line_height}" -gt 0 ] && \
+  [ "${horizontal_pad}" -gt 0 ] && [ "${vertical_pad}" -gt 0 ]; then
+  :
+elif [ "${logical_height}" -le 540 ]; then
+  font_size=16
+  line_height=38
+  horizontal_pad=12
+  vertical_pad=10
+elif [ "${logical_height}" -le 800 ]; then
+  font_size=18
+  line_height=42
+  horizontal_pad=14
+  vertical_pad=12
+else
+  font_size=20
+  line_height=48
+  horizontal_pad=16
+  vertical_pad=14
+fi
+
+if [ "${logical_width}" -le 900 ]; then
+  menu_width=34
+elif [ "${logical_width}" -le 1280 ]; then
+  menu_width=40
+else
+  menu_width=48
+fi
+
+# Reserve room for the keyboard even while it is hidden. The launcher then
+# remains usable when L3 reveals wvkbd after the launcher is already open.
+inner_pad=6
+# Reserve the search row, both outer pads and the prompt/list gap as well as
+# breathing room. Drop result rows on short outputs instead of forcing four
+# rows beyond the space left by the keyboard.
+available_height=$((logical_height - bar_height - keyboard_height - 48 - 2 * vertical_pad - inner_pad))
+line_count=$((available_height / line_height - 1))
+[ "${line_count}" -ge 1 ] || line_count=1
+[ "${line_count}" -le 8 ] || line_count=8
+settings_lines=$((line_count < 4 ? line_count : 4))
+confirmation_lines=$((line_count < 2 ? line_count : 2))
+
+# With dpi-aware=no, Fuzzel points render at 96/72 pixels times output scale;
+# explicit px bypasses output scaling. Convert the logical row budget to points
+# so scaled outputs retain the same logical touch target, including fractions.
+line_height_points=$(printf '%d.%02d' "$((line_height * 3 / 4))" "$((line_height * 3 % 4 * 25))")
+
+cache_dir=${XDG_CACHE_HOME:-${HOME}/.cache}
+cache=${cache_dir}/rocknix-fuzzel
+mkdir -p "${cache_dir}"
+if [ ! -e "${cache}" ]; then
+  cache_new=${cache}.new.$$
+  umask 077
+  {
+    # Seed the initial favorites row.
+    printf '%s\n' \
+      'rocknix-firefox.desktop|3' \
+      'thunar.desktop|2' \
+      'foot.desktop|1'
+  } >"${cache_new}"
+  mv -f "${cache_new}" "${cache}"
+fi
+
+fuzzel_args=(
+  rocknix-fuzzel
+  --config=/etc/xdg/fuzzel/fuzzel.ini
+  --font="Roboto:size=${font_size}"
+  --width="${menu_width}"
+  --horizontal-pad="${horizontal_pad}"
+  --vertical-pad="${vertical_pad}"
+  --inner-pad="${inner_pad}"
+  --line-height="${line_height_points}"
+  # The rotated RP6 DSI panel reports anisotropic physical dimensions. Fuzzel
+  # 1.12 derives ~406 DPI in auto mode and clips 30pt glyphs out of these
+  # already physically calibrated rows, so keep Fuzzel's own DPI scaling off.
+  --dpi-aware=no
+)
+if [ -n "${output_name}" ]; then
+  fuzzel_args+=(--output="${output_name}")
+fi
+
+case "${mode}" in
+  display-menu)
+    exec "${fuzzel_args[@]}" --cache=/dev/null --dmenu --no-sort \
+      --lines="${line_count}" --prompt='DISPLAY  ' --placeholder="${2:-Choose a setting}"
+    ;;
+  apps)
+    exec "${fuzzel_args[@]}" --cache="${cache}" --lines="${line_count}"
+    ;;
+  confirm-return)
+    # Unsorted dmenu input keeps the safe action selected on every opening.
+    printf '%s\n' \
+      'Cancel — stay in Desktop Mode' \
+      'Exit Desktop — close desktop apps' |
+      "${fuzzel_args[@]}" --cache=/dev/null --dmenu --no-sort --lines="${confirmation_lines}" \
+        --prompt='EXIT?  ' --placeholder='Save your work before returning to ROCKNIX'
+    ;;
+  settings)
+    selection=$(
+      printf '%s\n' \
+        'Audio settings' \
+        'Network settings' \
+        'Display settings' \
+        'Toggle tabbed / split layout' |
+        "${fuzzel_args[@]}" \
+          --cache=/dev/null \
+          --dmenu \
+          --lines="${settings_lines}" \
+          --prompt='SETTINGS  ' \
+          --placeholder='Choose a setting'
+    ) || exit 0
+    case "${selection}" in
+      'Audio settings') pavucontrol >/dev/null 2>&1 & ;;
+      'Network settings')
+        /usr/local/bin/rocknix-network-settings >/dev/null 2>&1 &
+        ;;
+      'Display settings') /usr/local/bin/rocknix-display-menu ;;
+      'Toggle tabbed / split layout') /usr/local/bin/rocknix-window-switcher layout ;;
+    esac
+    ;;
+  *)
+    printf 'Unknown launcher mode: %s\n' "${mode}" >&2
+    exit 2
+    ;;
+esac
