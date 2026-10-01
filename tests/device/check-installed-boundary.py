@@ -53,16 +53,22 @@ for identity in (200000, 201000):
 
 runtime = runpy.run_path(str(base / 'bin/rocknix-lxc'))['Runtime'](
     base / 'host-tools', Path('/storage/rocknix-desktop/data/rootfs'))
+desktop = runpy.run_path(str(base / 'bin/rocknix-lxc-desktop'))
+shares = []
+for name in desktop['SHARED']:
+    source = Path('/storage') / name
+    if source.exists() or source.is_symlink():
+        desktop['trusted_directory'](source, 0)
+        shares.append(str(source))
 guest = r'''
-import errno,json,os
+import errno,json,os,sys
 from pathlib import Path
 assert os.getuid()==0
 for name in ('uid_map','gid_map'):
     assert Path('/proc/self/'+name).read_text().split()==['0','200000','65536']
 mounts={line.split()[4]:set(line.split()[5].split(','))
         for line in Path('/proc/self/mountinfo').read_text().splitlines()}
-shares={'/storage/'+name for name in
-        ('Desktop','Steam','backup','games-external','games-internal')}
+shares=set(json.loads(sys.argv[1]))
 assert {name for name in mounts if name.startswith('/storage/')}==shares
 assert '/storage' not in mounts
 for name in ('/storage/scripts','/storage/rocknix-desktop','/dev/sda19',
@@ -85,7 +91,7 @@ for name in ('/run/rocknix-fex/bin/FEX','/run/rocknix-fex/bin/FEXServer',
 print(json.dumps({'guest_root_maps_to':200000,'shared_mounts':sorted(shares),
                   'host_runtime_write_open_denied':True,'broad_host_paths_absent':True}))
 '''
-result = runtime.attach('/usr/bin/python3', '-', input=guest)
+result = runtime.attach('/usr/bin/python3', '-', json.dumps(shares), input=guest)
 print(result.stdout, result.stderr, flush=True)
 assert result.returncode == 0
 # This object only attached to the existing Desktop: never close its runtime.
