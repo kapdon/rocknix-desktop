@@ -77,7 +77,8 @@ See [keyboard build details](../build-support/wvkbd/README.md) and
 Mesa Freedreno/Turnip provide native Wayland OpenGL/Vulkan. MPV prefers Qualcomm
 Iris H.264 decoding. Its [codec library](../build-support/mpv-ffmpeg/README.md)
 preserves Debian's standard codec configuration and resets the hardware decoder
-when seeking; empty recoverable error buffers are discarded. Other FFmpeg
+when seeking. Iris source-change notifications resume decoding after their final
+capture buffer; empty notifications are recycled. Other FFmpeg
 libraries remain package-managed.
 
 Firefox uses a separate minimal pinned FFmpeg build and a profile selecting

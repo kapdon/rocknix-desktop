@@ -1,0 +1,107 @@
+Resume Iris after consuming its source-change LAST marker, not when the
+notification first arrives. Preserve nonempty frames and explicit-drain EOF;
+other drivers retain their existing event handling. Return restart/requeue
+errors to the decoder caller.
+
+--- a/libavcodec/v4l2_context.c
++++ b/libavcodec/v4l2_context.c
+@@ -188,7 +188,10 @@
+     }
+
+     if (evt.type == V4L2_EVENT_EOS) {
+-        ctx->done = 1;
++        /* Iris also sends EOS for its implicit source-change drain. */
++        if (!s->iris_driver || s->draining ||
++            s->capture.av_codec_id != AV_CODEC_ID_RAWVIDEO)
++            ctx->done = 1;
+         return 0;
+     }
+
+@@ -206,7 +209,10 @@
+         s->capture.width = v4l2_get_width(&cap_fmt);
+         s->capture.sample_aspect_ratio = v4l2_get_sar(&s->capture);
+     } else {
+-        v4l2_start_decode(ctx);
++        /* Iris must consume its LAST marker before restarting capture. */
++        if (!s->iris_driver || s->draining ||
++            s->capture.av_codec_id != AV_CODEC_ID_RAWVIDEO)
++            v4l2_start_decode(ctx);
+         return 0;
+     }
+
+@@ -396,10 +402,11 @@
+             return NULL;
+         }
+
+-        /* An empty recoverable error is not a decoded frame or end of stream. */
+         if (!V4L2_TYPE_IS_OUTPUT(ctx->type) &&
+-            ctx->av_codec_id == AV_CODEC_ID_RAWVIDEO &&
+-            (buf.flags & V4L2_BUF_FLAG_ERROR) && !(buf.flags & V4L2_BUF_FLAG_LAST)) {
++            ctx->av_codec_id == AV_CODEC_ID_RAWVIDEO) {
++            int source_change = ctx_to_m2mctx(ctx)->iris_driver &&
++                                !ctx_to_m2mctx(ctx)->draining &&
++                                (buf.flags & V4L2_BUF_FLAG_LAST);
+             int empty = !buf.bytesused;
+
+             if (V4L2_TYPE_IS_MULTIPLANAR(buf.type)) {
+@@ -407,8 +414,19 @@
+                 for (i = 0; empty && i < buf.length; i++)
+                     empty = !planes[i].bytesused;
+             }
+-            if (empty) {
+-                av_log(logger(ctx), AV_LOG_WARNING, "%s: discarding empty error buffer\n", ctx->name);
++            /* START clears Iris/VB2's LAST gate before this buffer is recycled. */
++            if (source_change) {
++                ret = v4l2_start_decode(ctx);
++                if (ret < 0) {
++                    av_log(logger(ctx), AV_LOG_ERROR, "%s: restart failed: %s\n",
++                           ctx->name, av_err2str(ret));
++                    ctx->done = ret;
++                    return NULL;
++                }
++            }
++            if (empty && (source_change || ((buf.flags & V4L2_BUF_FLAG_ERROR) &&
++                                           !(buf.flags & V4L2_BUF_FLAG_LAST)))) {
++                av_log(logger(ctx), AV_LOG_DEBUG, "%s: recycling empty decoder notification\n", ctx->name);
+                 avbuf = &ctx->buffers[buf.index];
+                 avbuf->status = V4L2BUF_AVAILABLE;
+                 avbuf->buf = buf;
+@@ -420,7 +438,7 @@
+                 if (ret < 0) {
+                     av_log(logger(ctx), AV_LOG_ERROR, "%s: requeue failed: %s\n",
+                            ctx->name, av_err2str(ret));
+-                    ctx->done = 1;
++                    ctx->done = ret;
+                     return NULL;
+                 }
+                 if (ctx->done || !timeout || (!ctx_to_m2mctx(ctx)->draining &&
+@@ -670,7 +688,7 @@
+     avbuf = v4l2_dequeue_v4l2buf(ctx, timeout);
+     if (!avbuf) {
+         if (ctx->done)
+-            return AVERROR_EOF;
++            return ctx->done < 0 ? ctx->done : AVERROR_EOF;
+
+         return AVERROR(EAGAIN);
+     }
+--- a/libavcodec/v4l2_m2m.c
++++ b/libavcodec/v4l2_m2m.c
+@@ -83,6 +83,8 @@
+                      v4l2_mplane_video(&cap) ? "mplane" :
+                      v4l2_splane_video(&cap) ? "splane" : "unknown");
+
++    s->iris_driver = !strcmp((const char *)cap.driver, "iris_driver");
++
+     if (v4l2_mplane_video(&cap)) {
+         s->capture.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+         s->output.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+--- a/libavcodec/v4l2_m2m.h
++++ b/libavcodec/v4l2_m2m.h
+@@ -43,6 +43,7 @@
+ typedef struct V4L2m2mContext {
+     char devname[PATH_MAX];
+     int fd;
++    int iris_driver;
+
+     /* the codec context queues */
+     V4L2Context capture;
