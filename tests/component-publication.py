@@ -79,6 +79,11 @@ with tempfile.TemporaryDirectory() as temporary:
         assert len(pointers) == 1
         uploads = [i for i, e in enumerate(events) if e[0] == 'upload']
         assert len(uploads) == 2 * len(C['ROLES']) + 2 and max(uploads) < pointers[0]
+        events.clear()
+        P['publish'](manifest, work, 'owner/repo', components_only=True)
+        assert len(events) == 2 * len(C['ROLES'])
+        assert all(e[0] == 'upload' and e[1].startswith('components-v1-') for e in events)
+        print('PASS: hosted benchmark publishes reusable components without advancing a release')
         events.clear(); FakePublisher.fail = True
         rejects(P['publish'], manifest, work, 'owner/repo')
         assert not any(e[:3] == ('gh', 'release', 'upload') for e in events)

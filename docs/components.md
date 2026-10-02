@@ -98,6 +98,14 @@ write-once. The publisher checks remote sizes/digests, skips uploaded components
 and refuses shards approaching the release asset limit. No garbage collector or
 rolling legacy pruner deletes component assets.
 
+For a branch benchmark, dispatch `development.yml` with `benchmark=true`. This
+runs the same build and component publication stages, using
+`publish-components.py --components-only`; it does not upload a rolling manifest,
+advance `latest.json`, or change the development tag or release notes. Run once to
+populate the native artifact store, then repeat to measure warm reuse. A source
+change on the benchmark branch can measure selective invalidation. Timings and
+the candidate manifest are saved as workflow artifacts.
+
 Upload and verify all components, then an immutable release manifest and hashed
 installer helper, before advancing `latest.json`. Publication is serialized by
 the development workflow. GitHub's clobber operation is not atomic: the installer
