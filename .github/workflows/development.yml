@@ -1,6 +1,11 @@
 name: Development components
 on:
   workflow_dispatch:
+    inputs:
+      benchmark:
+        description: 'Test this branch and publish reusable components without updating the development release'
+        type: boolean
+        default: false
 permissions:
   contents: write
 concurrency:
@@ -8,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.ref == 'refs/heads/dev'
+    if: github.ref == 'refs/heads/dev' || inputs.benchmark
     runs-on: ubuntu-24.04-arm
     env:
       GH_TOKEN: ${{ github.token }}
@@ -37,7 +42,11 @@ jobs:
             }
       - name: Build only missing components
         run: python3 scripts/build-components.py --repository "$GITHUB_REPOSITORY"
+      - name: Publish benchmark components without advancing development
+        if: inputs.benchmark
+        run: python3 scripts/publish-components.py --repository "$GITHUB_REPOSITORY" --components-only
       - name: Publish immutable components and rolling manifest
+        if: ${{ !inputs.benchmark }}
         run: python3 scripts/publish-components.py --repository "$GITHUB_REPOSITORY"
       - name: Record component timings
         if: always()
@@ -47,4 +56,5 @@ jobs:
           path: |
             dist/components/plan.json
             dist/components/timings.json
+            dist/components/release.json
           if-no-files-found: ignore

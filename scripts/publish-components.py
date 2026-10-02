@@ -58,7 +58,7 @@ class Publisher:
         return True
 
 
-def publish(manifest, store, repository):
+def publish(manifest, store, repository, components_only=False):
     value = C['release'](json.loads(manifest.read_text()))
     revision = subprocess.check_output(['git', '-C', PROJECT, 'rev-parse', 'HEAD'], text=True).strip()
     if value['commit'] != revision or value.get('local_override') or subprocess.check_output(
@@ -77,6 +77,9 @@ def publish(manifest, store, repository):
             binding = scratch / f"{role}-{spec['input_key']}.json"
             binding.write_bytes(C['encoded'](spec))
             publisher.upload(spec['store_tag'], binding.name, C['digest'](binding), binding.stat().st_size, binding)
+        if components_only:
+            print('Component artifacts verified; development release unchanged.')
+            return
         sha = C['digest'](manifest)
         name = f'rocknix-desktop-components-{revision}-{sha}.json'
         candidate = scratch / name; shutil.copyfile(manifest, candidate)
@@ -111,5 +114,7 @@ if __name__ == '__main__':
     parser.add_argument('--manifest', type=Path, default=PROJECT / 'dist/components/release.json')
     parser.add_argument('--store', type=Path, default=PROJECT / 'build/component-store')
     parser.add_argument('--repository', default='kapdon/rocknix-desktop')
+    parser.add_argument('--components-only', action='store_true',
+                        help='publish reusable artifacts without changing any channel pointer or tag')
     args = parser.parse_args()
-    publish(args.manifest, args.store, args.repository)
+    publish(args.manifest, args.store, args.repository, args.components_only)
