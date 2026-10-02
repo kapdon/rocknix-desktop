@@ -258,6 +258,10 @@ def payload_tar(role, work, raw=None, trash=None):
             with tarfile.open(raw) as source:
                 for original in source:
                     item = copy.copy(original)
+                    # Exported Unicode names may carry PAX path/linkpath keys.
+                    # Regenerate those keys after adding the component prefix.
+                    item.pax_headers = {key: value for key, value in original.pax_headers.items()
+                                        if key not in ('path', 'linkpath')}
                     name = item.name.removeprefix('./').rstrip('/')
                     if not name or name == '.' or name == '.dockerenv' or name == 'provenance.json':
                         continue
@@ -321,7 +325,13 @@ def check_payload(role, path):
         'keyboard': ['rootfs/usr/local/bin/wvkbd-rocknix'],
     }
     with tarfile.open(path) as archive:
-        members = {item.name: item for item in archive}
+        rows = archive.getmembers()
+        members = {item.name: item for item in rows}
+        if len(members) != len(rows):
+            raise RuntimeError('duplicate component producer path')
+        for name, item in members.items():
+            if not C['safe_name'](name) or (not item.isdir() and not C['owns'](role, name)):
+                raise RuntimeError('component producer path outside role: ' + name)
         for name in required.get(role, []):
             item = members.get(name)
             if not item or not item.mode & 0o111 or not (item.isfile() or item.islnk() or item.issym()):

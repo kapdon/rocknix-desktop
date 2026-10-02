@@ -82,6 +82,7 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
                     put(archive, 'usr/bin/' + name)
                 put(archive, 'var/lib/service/data', mode=0o640, uid=101, gid=102)
                 put(archive, 'etc/shadow', b'account-data', mode=0o640)
+                put(archive, 'etc/ssl/certs/cert-ñ.pem', b'unicode certificate', mode=0o644)
                 put(archive, 'bin', link='usr/bin')
             elif role == 'host-runtime':
                 for name in 'lxc-start lxc-stop lxc-info lxc-attach slirp4netns mount setfacl getfacl bwrap dbus-run-session xdg-dbus-proxy nm-connection-editor'.split():
@@ -155,6 +156,7 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
     selected = lambda profile: {r: allfiles[r] for r in C['PROFILES'][profile]}
     C['assemble'](new, selected('install'), work / 'install', 'install')
     assembled = work / 'install'
+    assert (assembled / 'rootfs/etc/ssl/certs/cert-ñ.pem').read_bytes() == b'unicode certificate'
     assert (assembled / 'rootfs/usr/bin/sudo').stat().st_mode & 0o7777 == 0o4755
     assert (assembled / 'rootfs/var/lib/service/data').stat().st_uid == 101
     assert (assembled / 'rootfs/var/lib/service/data').stat().st_gid == 102
