@@ -130,8 +130,12 @@ metadata-only resolution, preserved ownership/setuid/symlinks, full union retent
 and fail-before-extraction corruption/path checks. Existing installer/update tests
 continue to cover the legacy format and transaction safeguards.
 
-Use real local component builds and repeated warm/config-change runs to measure
-build time. Fixture timings are correctness evidence, not GitHub performance
+After a real local build, run `python3 scripts/benchmark-components.py` for three
+warm and three CSS-change trials using the real cached artifacts. It edits a
+disposable source copy, rejects any Docker invocation, and records compression
+input sizes in `dist/component-benchmark/results.json`. Use a constrained Ubuntu
+container for runner-like packaging measurements; retain the component store
+and the same native-package override environment used for the initial build. Fixture timings are correctness evidence, not GitHub performance
 claims. Native ARM64 GitHub timing and RP6 fresh-install, retained-update and
 interruption acceptance remain separate gates before calling this production
 validated. No hosted build or hardware operation is part of local source testing.

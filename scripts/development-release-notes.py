@@ -26,7 +26,7 @@ def notes(revision, built_at):
     if len(commits) != pages[0]["total_commits"]:
         raise RuntimeError("Incomplete development comparison")
     lines = [f"Commit: `{revision}`", f"Built: {built_at}", "",
-             "Rolling dev pre-release. Only the latest successful build is kept.", "",
+             "Rolling dev pre-release. The installer selects the latest successful build.", "",
              f"## Changes since {tag}", "",
              "Compared with the latest stable release, not the previous development build.", ""]
     for commit in commits:
