@@ -52,6 +52,15 @@ jobs:
           outputs: type=cacheonly
           cache-from: type=gha,scope=rocknix-desktop-arm64
           cache-to: type=gha,scope=rocknix-desktop-arm64,mode=max
+      - name: Cache trusted ARM64 host tools
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build-support/lxc/Dockerfile.host-tools
+          platforms: linux/arm64
+          outputs: type=cacheonly
+          cache-from: type=gha,scope=rocknix-host-tools-arm64
+          cache-to: type=gha,scope=rocknix-host-tools-arm64,mode=max
       - name: Build ARM64 runtime
         env:
           ROCKNIX_TRASH_PACKAGES_DIR: ${{ github.workspace }}/build/trash-packages

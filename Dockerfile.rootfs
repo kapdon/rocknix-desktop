@@ -130,6 +130,28 @@ RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
     && rm -rf /var/lib/apt/lists/* \
     && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-desktop-packages.tsv
 
+# Keep dependency installation independent of Desktop overlay changes.
+RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
+    && chmod 0755 /usr/sbin/policy-rc.d \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends sudo python3 python3-gi gir1.2-gtk-3.0 systemd systemd-sysv \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY build-support/trash/check-packages.py build-support/trash/install-image.py /tmp/trash-tools/
+# A named context supplied by build-rootfs.sh / the ARM64 release workflow.
+# Python is present and no later APT step replaces the tested package family.
+# Never overwrite libraries with a private prefix.
+RUN --network=none --mount=from=trash-packages,target=/tmp/trash-packages,ro \
+    python3 /tmp/trash-tools/check-packages.py /tmp/trash-packages \
+    && python3 /tmp/trash-tools/install-image.py /tmp/trash-packages \
+    && mkdir -p /usr/local/share/rocknix-desktop/trash-source \
+    && cp /tmp/trash-packages/*.dsc /tmp/trash-packages/*.tar.* \
+       /tmp/trash-packages/*.buildinfo /tmp/trash-packages/*.changes \
+       /usr/local/share/rocknix-desktop/trash-source/ \
+    && rm -r /tmp/trash-tools \
+    && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-desktop-packages.tsv
+
 COPY rootfs-overlay/ /
 COPY --from=fuzzel-artifacts /opt/rocknix-fuzzel/ /opt/rocknix-fuzzel/
 COPY --from=keyboard-builder /tmp/wvkbd/wvkbd-mobintl /usr/local/bin/wvkbd-rocknix
@@ -179,9 +201,7 @@ RUN chmod 0755 \
 # Writable system-container runtime. Native ROCKNIX does not run any executable
 # from this tree with host-root privileges; LXC uses separate trusted host tools.
 FROM desktop-apps AS lxc-desktop
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends sudo python3 python3-gi gir1.2-gtk-3.0 systemd systemd-sysv \
-    && chmod 0755 /usr/local/bin/rocknix-container-update /usr/local/bin/rocknix-default-password \
+RUN chmod 0755 /usr/local/bin/rocknix-container-update /usr/local/bin/rocknix-default-password \
     && useradd --create-home --uid 1000 --shell /bin/bash --groups sudo rocknix \
     && passwd --lock root \
     && /usr/local/bin/rocknix-default-password \
@@ -199,17 +219,4 @@ RUN apt-get update \
     && rm -f /etc/machine-id /var/lib/dbus/machine-id \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
-    && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-desktop-packages.tsv
-COPY build-support/trash/check-packages.py build-support/trash/install-image.py /tmp/trash-tools/
-# A named context supplied by build-rootfs.sh / the ARM64 release workflow.
-# Install after bootstrap so Python is present and no later APT step replaces
-# the tested package family. Never overwrite libraries with a private prefix.
-RUN --network=none --mount=from=trash-packages,target=/tmp/trash-packages,ro \
-    python3 /tmp/trash-tools/check-packages.py /tmp/trash-packages \
-    && python3 /tmp/trash-tools/install-image.py /tmp/trash-packages \
-    && mkdir -p /usr/local/share/rocknix-desktop/trash-source \
-    && cp /tmp/trash-packages/*.dsc /tmp/trash-packages/*.tar.* \
-       /tmp/trash-packages/*.buildinfo /tmp/trash-packages/*.changes \
-       /usr/local/share/rocknix-desktop/trash-source/ \
-    && rm -r /tmp/trash-tools \
     && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-desktop-packages.tsv
