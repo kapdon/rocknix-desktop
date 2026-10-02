@@ -96,10 +96,7 @@ chown 0:0 "${TEMP_DIR}/build-info" "${TEMP_DIR}/rootfs/etc/rocknix-desktop-build
 python3 "${PROJECT_DIR}/scripts/package-integration.py" \
   "${TEMP_DIR}/rootfs" "${TEMP_DIR}/desktop-integration.tar.gz"
 # Export the install/update contract; exclude build scratch and artifacts.
-# XZ's default serial preset dominates otherwise warm builds. Keep the same
-# tar contract and lossless XZ format, using all available cores at preset 3.
-printf 'Compressing release bundle (xz -T0 -3)\n'
-tar --numeric-owner --use-compress-program='xz -T0 -3' -cf "${OUTPUT}" -C "${TEMP_DIR}" \
+tar --numeric-owner -cJf "${OUTPUT}" -C "${TEMP_DIR}" \
   ./rootfs ./host-tools ./payload ./install-device.sh ./install.sh ./README.md \
   ./uninstall.sh ./upgrade.sh ./upgrade-lxc.py ./build-info \
   ./desktop-integration.tar.gz

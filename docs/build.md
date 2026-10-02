@@ -65,12 +65,6 @@ precedes the overlay, so changing a launcher or theme reuses the APT and audited
 Trash package layers. Changing dependency recipes, patches or package artifacts
 invalidates their dependent layers as usual.
 
-The final tar archive uses lossless XZ with automatic threading and preset 3.
-This trades a somewhat larger download for faster packaging while retaining
-numeric ownership, special modes, source/license files and fresh commit/image
-provenance. Every build still exports and checks the images and packages before
-creating a new bundle; a cached image is not a cached release archive.
-
 An unchanged APT layer does not fetch new
 security packages. Refresh dependencies deliberately with a fresh builder or
 no-cache build using the same inputs, then validate locally and on hardware.
