@@ -72,11 +72,20 @@ with tempfile.TemporaryDirectory() as temporary:
     state = P['publish'].__globals__
     def output(args, **kwargs):
         return '' if '--porcelain' in args else 'a' * 40
+    def generate_notes(args, **kwargs):
+        events.append(('notes',))
+        assert '--repository' in args and args[args.index('--repository') + 1] == 'owner/repo'
+        assert '--changelog' in args
+        Path(args[args.index('--changelog') + 1]).write_text('changelog fixture')
+        kwargs['stdout'].write('notes fixture')
+        return SimpleNamespace(returncode=0)
     with patch.dict(state, Publisher=FakePublisher), patch.dict(P['B'], input_keys=lambda: ({r: 'b' * 64 for r in C['ROLES']}, {})), \
-         patch.object(state['subprocess'], 'check_output', output), patch.object(state['subprocess'], 'run', lambda *a, **k: SimpleNamespace(returncode=0)):
+         patch.object(state['subprocess'], 'check_output', output), patch.object(state['subprocess'], 'run', generate_notes):
         P['publish'](manifest, work, 'owner/repo')
         pointers = [i for i, e in enumerate(events) if e[:4] == ('gh', 'release', 'upload', 'development')]
         assert len(pointers) == 1
+        assert events[0] == ('notes',)
+        assert (manifest.parent / 'CHANGELOG.md').read_text() == 'changelog fixture'
         uploads = [i for i, e in enumerate(events) if e[0] == 'upload']
         assert len(uploads) == 2 * len(C['ROLES']) + 2 and max(uploads) < pointers[0]
         events.clear()
@@ -84,6 +93,13 @@ with tempfile.TemporaryDirectory() as temporary:
         assert len(events) == 2 * len(C['ROLES'])
         assert all(e[0] == 'upload' and e[1].startswith('components-v1-') for e in events)
         print('PASS: hosted benchmark publishes reusable components without advancing a release')
+        events.clear()
+        def failed_notes(*args, **kwargs):
+            raise RuntimeError('release comparison unavailable')
+        with patch.object(state['subprocess'], 'run', failed_notes):
+            rejects(P['publish'], manifest, work, 'owner/repo')
+        assert not events
+        print('PASS: changelog generation failure prevents all publication mutations')
         events.clear(); FakePublisher.fail = True
         rejects(P['publish'], manifest, work, 'owner/repo')
         assert not any(e[:3] == ('gh', 'release', 'upload') for e in events)
