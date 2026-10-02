@@ -133,6 +133,8 @@ rollback. The full fresh-install archive is no longer a routine CI output.
 
 See [the local validation report](components-validation.md) for real component
 assembly checks and repeated measurements against the full-package baseline.
+The [GitHub benchmark](components-github-benchmark.md) records the native cold
+build, warm baseline and exact Apps/Settings toggle-fix replay.
 
 `fakeroot -- python3 tests/components.py` exercises real packing, composition and
 updater application with small producer fixtures. It checks dependency invalidation,
@@ -147,8 +149,9 @@ disposable source copy, rejects any Docker invocation, and records compression
 input sizes in `dist/component-benchmark/results.json`. Use a constrained Ubuntu
 container for runner-like packaging measurements; retain the component store
 and the same native-package override environment used for the initial build. Fixture timings are correctness evidence, not GitHub performance
-claims. Native ARM64 GitHub timing and RP6 fresh-install, retained-update and
+claims. Native ARM64 branch build timing and component publication have been measured.
+Development-channel promotion and RP6 fresh-install, retained-update and
 interruption acceptance remain separate gates before calling this production
-validated. No hosted build or hardware operation is part of local source testing.
+validated. No hardware operation is part of source or build-performance testing.
 
 Implementation references: [BuildKit GHA cache authentication](https://docs.docker.com/build/cache/backends/gha/) and [GitHub release asset digests](https://docs.github.com/en/rest/releases/assets).

@@ -102,6 +102,8 @@ complete non-base set; changed-only device transfer and installed-component
 receipts are not implemented. Existing retained-rootfs, package transaction,
 local-edit and recovery behavior remains the update mechanism.
 
-Native ARM64 hosted timing, real publication, RP6 fresh install, retained update
-and interruption recovery remain acceptance work before merging for production
-use. No hardware validation is claimed by these local checks.
+Native ARM64 hosted timing and component publication were subsequently checked
+in the [GitHub benchmark](components-github-benchmark.md). Development-channel
+promotion, RP6 fresh install, retained update and interruption recovery remain
+acceptance work before production use. No hardware validation is claimed by
+these local checks.
