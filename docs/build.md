@@ -63,13 +63,14 @@ separate ARM64 caches for Trash packages, Fuzzel, the runtime and trusted host
 tools. The packaging build uses the same builder. Runtime package installation
 and compiled dependencies live in `desktop-dependencies`, before the final
 overlay stage. Changing a launcher, theme or adding overlay files reuses APT,
-audited Trash packages, Fuzzel, keyboard and both codec dependency layers. Changing dependency recipes, patches or package artifacts
-invalidates their dependent layers as usual.
+audited Trash packages, Fuzzel, keyboard and both codec dependency layers.
+Changing dependency recipes, patches or package artifacts invalidates their
+dependent layers as usual.
 
 Fuzzel's toolchain, protocol generation and Pixman build are separate stages.
 Changing its artifact checker or distributed recipe only rebuilds provenance
 and validation; changing Fuzzel sources reuses protocol/Pixman builds. The
-keyboard compiler copies only the consumed patches and customization script;
+keyboard compiler copies only the consumed patches, customizer and symbols;
 its support documentation is still distributed without triggering compilation.
 Trash package versions are scoped after its toolchain stage and parallelism
 is scoped to package compilation. Changing those arguments does not reinstall
