@@ -91,3 +91,10 @@ also requires the exact current `dev` commit.
 
 See [contributing and publication](../contributor.md). Local checks/builds do
 not prove device behavior or GitHub delivery.
+
+Remote-cache preparation loads the runtime and host-tools images into Docker.
+A metadata-only cache hit can otherwise leave layers remote and unavailable to
+later build calls that have no cache importer. Trash installation consumes a
+stage containing only audited packages, source artifacts, checksums and build
+logs; per-run exporter provenance remains in the original artifact directory
+and does not invalidate installation. Archive compression settings are unchanged.

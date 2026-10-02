@@ -62,6 +62,13 @@ RUN mkdir /tmp/wvkbd \
        make -j4 CC=aarch64-linux-gnu-gcc wvkbd-mobintl \
     && aarch64-linux-gnu-strip wvkbd-mobintl
 
+# Local artifact exports add per-run provenance.json beside the package payload.
+# Select the stable audited files so attestations do not invalidate installation.
+# Keep the original export (including provenance) available to the build caller.
+FROM scratch AS trash-package-inputs
+COPY --from=trash-packages /SHA256SUMS /*.deb /*.udeb /*.dsc /*.tar.* /*.buildinfo /*.changes /
+COPY --from=trash-packages /build-logs/ /build-logs/
+
 FROM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS desktop-dependencies
 
 ARG TARGETARCH
@@ -143,7 +150,7 @@ COPY build-support/trash/check-packages.py build-support/trash/install-image.py 
 # A named context supplied by build-rootfs.sh / the ARM64 release workflow.
 # Python is present and no later APT step replaces the tested package family.
 # Never overwrite libraries with a private prefix.
-RUN --network=none --mount=from=trash-packages,target=/tmp/trash-packages,ro \
+RUN --network=none --mount=from=trash-package-inputs,target=/tmp/trash-packages,ro \
     python3 /tmp/trash-tools/check-packages.py /tmp/trash-packages \
     && python3 /tmp/trash-tools/install-image.py /tmp/trash-packages \
     && mkdir -p /usr/local/share/rocknix-desktop/trash-source \
