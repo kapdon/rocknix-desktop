@@ -79,6 +79,10 @@ fakeroot -- python3 payload/bin/rocknix-components \
   --profile install --output dist/component-install
 ```
 
+Fakeroot ownership exists only for that session. Inspect or archive the result
+inside the same fakeroot session; do not deploy its loose directory as a
+metadata-preserving copy. The device installer assembles as actual host root.
+
 The same command with `--profile update` omits the Debian base and includes the
 existing audited package transaction. Assembly verifies every artifact and the
 combined path/link graph before extraction. Corruption, path overlap, unsafe

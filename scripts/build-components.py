@@ -122,12 +122,15 @@ def input_keys(root=None):
             data['trash_packages'] = keys['trash-packages']
             # Ownership policy, not configuration contents, determines what the
             # base must omit. New files in an existing namespace remain cheap.
-            updater = ast.parse((root / 'rootfs-overlay/usr/local/bin/rocknix-container-update').read_text())
+            policy_source = (root / 'rootfs-overlay/usr/local/bin/rocknix-container-update').read_text()
+            updater = ast.parse(policy_source)
             policy = [node for node in updater.body if
                       isinstance(node, ast.FunctionDef) and node.name == 'allowed' or
                       isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and
                           t.id in ('CONFIG', 'IDENTITY') for t in node.targets)]
-            data['managed_namespace'] = ast.dump(ast.Module(body=policy, type_ignores=[]))
+            # AST dump formatting differs across Python 3.12/3.14. Source
+            # segments keep keys portable between developer and CI machines.
+            data['managed_namespace'] = [ast.get_source_segment(policy_source, node) for node in policy]
         keys[role] = hashlib.sha256(C['encoded'](data)).hexdigest()
         inputs[role] = data
     return keys, inputs
