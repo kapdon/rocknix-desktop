@@ -145,6 +145,7 @@ bash tests/persistence.sh
 bash tests/upgrade.sh
 bash tests/release-selection.sh
 bash tests/release-publication.sh
+python3 tests/development-changelog.py
 bash tests/installer-flow.sh
 python3 tests/installer-command.py
 python3 tests/session-lifecycle.py

@@ -48,6 +48,9 @@ jobs:
       - name: Publish immutable components and rolling manifest
         if: ${{ !inputs.benchmark }}
         run: python3 scripts/publish-components.py --repository "$GITHUB_REPOSITORY"
+      - name: Record the published changelog on dev
+        if: ${{ !inputs.benchmark }}
+        run: python3 scripts/record-development-changelog.py --repository "$GITHUB_REPOSITORY" --revision "$GITHUB_SHA"
       - name: Record component timings
         if: always()
         uses: actions/upload-artifact@v4
@@ -57,4 +60,6 @@ jobs:
             dist/components/plan.json
             dist/components/timings.json
             dist/components/release.json
+            dist/components/development-notes.md
+            dist/components/CHANGELOG.md
           if-no-files-found: ignore

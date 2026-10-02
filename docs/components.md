@@ -101,7 +101,7 @@ rolling legacy pruner deletes component assets.
 For a branch benchmark, dispatch `development.yml` with `benchmark=true`. This
 runs the same build and component publication stages, using
 `publish-components.py --components-only`; it does not upload a rolling manifest,
-advance `latest.json`, or change the development tag or release notes. Run once to
+advance `latest.json`, or change the development tag, release notes or changelog. Run once to
 populate the native artifact store, then repeat to measure warm reuse. A source
 change on the benchmark branch can measure selective invalidation. Timings and
 the candidate manifest are saved as workflow artifacts.
@@ -112,6 +112,20 @@ the development workflow. GitHub's clobber operation is not atomic: the installe
 retries the brief missing-pointer window; prior immutable manifests remain
 available for recovery. A failed partial upload cannot change the old pointer.
 Manual publishers must obey the same single-writer rule.
+
+After a successful development publication, Actions records the same cumulative
+release notes in [CHANGELOG.md](../CHANGELOG.md), comparing the published source
+commit with the latest stable release. The generated section replaces the previous
+development snapshot; stable entries are preserved and Git history retains older
+snapshots. The workflow saves both Markdown files with its timing artifacts.
+
+A separate `docs: record development changelog [skip ci]` commit changes only that
+file on `dev`. The release manifest and notes continue to identify the source
+commit actually built. These bot commits are omitted from future change lists,
+and changelog files are outside component inputs, so recording or refreshing notes
+does not rebuild components. Publication failure or benchmark mode leaves the
+changelog untouched. The update preserves unrelated concurrent commits and fails
+if someone edits the changelog during the build; it never force-pushes `dev`.
 
 The installer initially stages the non-base profile, using candidate-owned host
 tools for installation classification. It downloads the base only for Install.

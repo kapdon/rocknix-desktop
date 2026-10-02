@@ -70,6 +70,15 @@ def publish(manifest, store, repository, components_only=False):
     publisher = Publisher(repository, revision)
     with tempfile.TemporaryDirectory(prefix='component-publication-') as scratch:
         scratch = Path(scratch)
+        # Generate one snapshot before publication. The workflow records it on
+        # dev only after the release pointer, notes and tag have all succeeded.
+        notes = manifest.parent / 'development-notes.md'
+        if not components_only:
+            with notes.open('w') as stream:
+                subprocess.run(['python3', PROJECT / 'scripts/development-release-notes.py',
+                                revision, value['built_at'], '--repository', repository,
+                                '--changelog', manifest.parent / 'CHANGELOG.md'],
+                               check=True, stdout=stream)
         # Failure anywhere in these immutable uploads leaves the old pointer.
         for role, spec in value['components'].items():
             publisher.upload(spec['store_tag'], spec['asset'], spec['sha256'], spec['size'],
@@ -88,10 +97,6 @@ def publish(manifest, store, repository, components_only=False):
         helper_sha = C['digest'](helper_source)
         helper = scratch / f'rocknix-components-{helper_sha}.py'; shutil.copyfile(helper_source, helper)
         publisher.upload('development', helper.name, helper_sha, helper.stat().st_size, helper)
-        notes = scratch / 'notes.md'
-        with notes.open('w') as stream:
-            subprocess.run(['python3', PROJECT / 'scripts/development-release-notes.py', revision, value['built_at']],
-                           check=True, stdout=stream)
         pointer = {'format': 2, 'commit': revision, 'asset': name, 'sha256': sha,
                    'size': candidate.stat().st_size, 'built_at': value['built_at'],
                    'released_at': publisher.assets('development')[name]['updated_at'],

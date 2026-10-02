@@ -85,11 +85,13 @@ security packages. Refresh dependencies deliberately with a fresh builder or
 no-cache build using the same inputs, then validate locally and on hardware.
 A cache miss performs a full build; cache availability is not a requirement.
 
-The manually dispatched [Development bundle workflow](../.github/workflows/development.yml)
-builds the release bundle. Preserve the bundle/checksum, build logs and source
-metadata; cached checks must identify their original execution rather than
-claim a new run. Verify bundle checksum and
-embedded source/image provenance before RP6 testing. Rolling publication is
+The manually dispatched [Development components workflow](../.github/workflows/development.yml)
+publishes reusable components and a rolling manifest. Each successful publication
+updates the release notes and records the same changes since the latest stable
+release in [CHANGELOG.md](../CHANGELOG.md). Benchmark runs publish only reusable
+artifacts. Preserve the manifest, build logs and source metadata; cached checks
+must identify their original execution rather than claim a new run. Verify
+artifact checksums and source/image provenance before RP6 testing. Rolling publication is
 restricted to `dev`; [versioned publication](../.github/workflows/release.yml)
 also requires the exact current `dev` commit.
 
