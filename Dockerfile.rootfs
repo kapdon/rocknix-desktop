@@ -50,7 +50,8 @@ RUN test "${TARGETARCH}" = "arm64" \
        libpango1.0-dev:arm64 libwayland-bin pkg-config python3 patch ca-certificates
 ADD --checksum=sha256:e3f82302367cdacf7a0c59d6d1bb4f5140083da1b3083da7c835dab0c250034c \
     https://github.com/jjsullivan5196/wvkbd/archive/refs/tags/v0.17.tar.gz /tmp/wvkbd.tar.gz
-COPY build-support/wvkbd/ /tmp/wvkbd-custom/
+COPY build-support/wvkbd/002-output.patch build-support/wvkbd/003-no-popup.patch \
+     build-support/wvkbd/customize.py /tmp/wvkbd-custom/
 RUN mkdir /tmp/wvkbd \
     && tar -xzf /tmp/wvkbd.tar.gz --strip-components=1 -C /tmp/wvkbd \
     && cd /tmp/wvkbd \
@@ -61,7 +62,7 @@ RUN mkdir /tmp/wvkbd \
        make -j4 CC=aarch64-linux-gnu-gcc wvkbd-mobintl \
     && aarch64-linux-gnu-strip wvkbd-mobintl
 
-FROM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS desktop-apps
+FROM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS desktop-dependencies
 
 ARG TARGETARCH
 
@@ -152,7 +153,6 @@ RUN --network=none --mount=from=trash-packages,target=/tmp/trash-packages,ro \
     && rm -r /tmp/trash-tools \
     && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-desktop-packages.tsv
 
-COPY rootfs-overlay/ /
 COPY --from=fuzzel-artifacts /opt/rocknix-fuzzel/ /opt/rocknix-fuzzel/
 COPY --from=keyboard-builder /tmp/wvkbd/wvkbd-mobintl /usr/local/bin/wvkbd-rocknix
 COPY --from=keyboard-builder /tmp/wvkbd/LICENSE /usr/local/share/wvkbd/LICENSE
@@ -164,6 +164,11 @@ COPY --from=mpv-ffmpeg-builder /opt/rocknix-mpv/ /opt/rocknix-mpv/
 # script beside our privately rebuilt LGPL libraries, not only an upstream URL.
 COPY --from=ffmpeg-rpi-builder /tmp/ffmpeg-rpi.tar.gz /opt/ffmpeg-rpi-7.1.5/share/source/ffmpeg-rpi.tar.gz
 COPY --from=ffmpeg-rpi-builder /usr/local/bin/build-firefox-ffmpeg /opt/ffmpeg-rpi-7.1.5/share/source/build.sh
+
+# Configuration and project files change frequently; keep them after all
+# package installation and compiled dependency/source distribution layers.
+FROM desktop-dependencies AS desktop-apps
+COPY rootfs-overlay/ /
 
 RUN chmod 0755 \
       /usr/sbin/policy-rc.d \
