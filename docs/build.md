@@ -58,7 +58,20 @@ Keep the existing artifact and source checks. Run GLib tests when changing
 its mount-aware source patch. Test affected runtime behavior
 on the RP6 using the local bundle.
 
-Docker and CI reuse BuildKit layers. An unchanged APT layer does not fetch new
+Docker and CI reuse BuildKit layers. Both publication workflows restore/export
+separate ARM64 caches for Trash packages, Fuzzel, the runtime and trusted host
+tools. The packaging build uses the same builder. Runtime package installation
+precedes the overlay, so changing a launcher or theme reuses the APT and audited
+Trash package layers. Changing dependency recipes, patches or package artifacts
+invalidates their dependent layers as usual.
+
+The final tar archive uses lossless XZ with automatic threading and preset 3.
+This trades a somewhat larger download for faster packaging while retaining
+numeric ownership, special modes, source/license files and fresh commit/image
+provenance. Every build still exports and checks the images and packages before
+creating a new bundle; a cached image is not a cached release archive.
+
+An unchanged APT layer does not fetch new
 security packages. Refresh dependencies deliberately with a fresh builder or
 no-cache build using the same inputs, then validate locally and on hardware.
 A cache miss performs a full build; cache availability is not a requirement.
