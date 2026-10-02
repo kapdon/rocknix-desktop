@@ -4,6 +4,9 @@ A handheld-first Sway desktop with native Wayland apps in a Debian 13 ARM64
 LXC container. Open **Tools → Desktop Mode**; **Exit Desktop** closes apps and
 returns to ROCKNIX. Save your work before exiting.
 
+> **Disclaimer:** ROCKNIX Desktop is an independent project and is not affiliated
+> with, endorsed by, or maintained by the [ROCKNIX project](https://rocknix.org/).
+
 ## Desktop preview
 
 Actual screens captured on the Retroid Pocket 6.
