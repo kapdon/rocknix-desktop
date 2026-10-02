@@ -28,7 +28,8 @@ misses; they are not the release artifact store.
 Changing Waybar CSS rebuilds only guest integration. A GTK theme edit rebuilds
 guest integration and host theme. Changing an MPV patch rebuilds MPV media.
 Changing the Trash family rebuilds its transaction payload and fresh-install
-base. Changing the packaging format/validator rebuilds components conservatively.
+base. A base-only bootstrap change consumes the cached package transaction instead
+of rebuilding the native packages. Changing the packaging format/validator rebuilds components conservatively.
 
 Keys contain source bytes, modes, links, selected Docker stages, build architecture
 where applicable, and the explicit dependency lock. Commit IDs, clocks and

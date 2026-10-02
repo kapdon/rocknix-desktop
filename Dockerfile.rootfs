@@ -64,10 +64,10 @@ RUN mkdir /tmp/wvkbd \
 
 # Local artifact exports add per-run provenance.json beside the package payload.
 # Select the stable audited files so attestations do not invalidate installation.
-# Keep the original export (including provenance) available to the build caller.
+# Keep full build logs/udebs/checksums/provenance in the original build export.
+# Only installed packages and distributed sources belong in this input layer.
 FROM scratch AS trash-package-inputs
-COPY --from=trash-packages /SHA256SUMS /*.deb /*.udeb /*.dsc /*.tar.* /*.buildinfo /*.changes /
-COPY --from=trash-packages /build-logs/ /build-logs/
+COPY --from=trash-packages /*.deb /*.dsc /*.tar.* /*.buildinfo /*.changes /
 
 FROM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS desktop-dependencies
 

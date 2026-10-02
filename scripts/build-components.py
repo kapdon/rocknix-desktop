@@ -90,7 +90,7 @@ def input_keys(root=None):
         'mpv-media': ['build-support/mpv-ffmpeg'],
         'keyboard': ['build-support/wvkbd'],
         'fuzzel': ['build-support/fuzzel'],
-        'trash-packages': ['build-support/trash', 'scripts/package-trash.py'],
+        'trash-packages': ['build-support/trash', 'scripts/package-trash.py', 'payload/guest/update-trash-packages.py'],
         'guest-integration': ['rootfs-overlay'],
         'host-integration': ['payload', 'install.sh', 'install-device.sh', 'uninstall.sh',
                              'upgrade.sh', 'README.md', 'rootfs-overlay/usr/local/bin/rocknix-container-update'],
@@ -390,6 +390,11 @@ def prepare_trash(work):
         directory = work / 'trash'; directory.mkdir()
         with tarfile.open(raw) as archive:
             archive.extractall(directory, filter='data')
+    audit_trash(directory)
+    return directory
+
+
+def audit_trash(directory):
     auditor = os.environ.get('ROCKNIX_PACKAGE_AUDITOR_IMAGE')
     if auditor:
         if not re.fullmatch('sha256:[0-9a-f]{64}', auditor):
@@ -400,6 +405,22 @@ def prepare_trash(work):
              auditor, '/usr/bin/python3', '/audit/check-packages.py', '/packages'])
     else:
         run([sys.executable, PROJECT / 'build-support/trash/check-packages.py', directory])
+
+
+
+def cached_trash(store, spec, work):
+    payload = work / 'packages.tar'
+    with tarfile.open(store.blob(spec), 'r:xz') as archive:
+        members = archive.getmembers()
+        if (len(members) != 1 or members[0].name != 'payload/guest/trash-packages.tar' or
+                not members[0].isfile() or members[0].size > 256 * 1024**2):
+            raise RuntimeError('invalid cached package transaction')
+        with payload.open('wb') as stream:
+            shutil.copyfileobj(archive.extractfile(members[0]), stream)
+    directory = work / 'packages'; directory.mkdir()
+    unpacker = runpy.run_path(str(PROJECT / 'payload/guest/update-trash-packages.py'))
+    unpacker['unpack'](payload, directory)
+    audit_trash(directory)
     return directory
 
 
@@ -429,7 +450,10 @@ def build(store, output, plan_only=False):
             begin = time.monotonic(); work = scratch / role; work.mkdir()
             if role in ('trash-packages', 'guest-base') and trash is None:
                 trash_work = scratch / 'trash-inputs'; trash_work.mkdir()
-                trash = prepare_trash(trash_work)
+                if role == 'guest-base' and specs['trash-packages'] is not None:
+                    trash = cached_trash(store, specs['trash-packages'], trash_work)
+                else:
+                    trash = prepare_trash(trash_work)
             raw = docker_export(role, work, trash if role == 'guest-base' else None) if role in DOCKER and role != 'trash-packages' else None
             payload = payload_tar(role, work, raw, trash)
             check_payload(role, payload)

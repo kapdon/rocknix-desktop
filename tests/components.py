@@ -109,7 +109,7 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
         return original_run(args, **kwargs)
 
     state = B['build'].__globals__
-    with patch.dict(state, PROJECT=source, docker_export=export, prepare_trash=lambda _: packages, run=run):
+    with patch.dict(state, PROJECT=source, docker_export=export, prepare_trash=lambda _: packages, audit_trash=lambda _: None, run=run):
         store = B['Store'](work / 'store')
         value = B['build'](store, work / 'cold')
         cold_calls = list(calls); calls.clear()
@@ -123,6 +123,16 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
         assert not json.loads((work / 'changed/plan.json').read_text())['needs_docker']
         assert all(new['components'][r] == value['components'][r] for r in C['ROLES'] if r != 'guest-integration')
         print('PASS: real orchestrator warm build calls no producer; CSS build runs one small xz, zero Docker calls')
+        calls.clear()
+        bootstrap = source / 'build-support/components/bootstrap-base.sh'
+        old_bootstrap = bootstrap.read_bytes(); bootstrap.write_bytes(old_bootstrap + b'\n# new bootstrap\n')
+        with patch.dict(state, prepare_trash=lambda _: (_ for _ in ()).throw(AssertionError('rebuilt cached Trash'))):
+            rebuilt = B['build'](store, work / 'bootstrap-change')
+        assert [r for program, r in calls if program == 'docker'] == ['guest-base']
+        assert rebuilt['components']['trash-packages'] == new['components']['trash-packages']
+        bootstrap.write_bytes(old_bootstrap)
+        print('PASS: base-only change reuses the verified package transaction without rebuilding Trash')
+
 
         # A fresh runner resolves references using only small descriptor downloads.
         remote_cache = work / 'remote-cache'; remote_cache.mkdir()
