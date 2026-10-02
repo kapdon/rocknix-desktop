@@ -158,4 +158,6 @@ python3 tests/tools-metadata.py
 python3 tests/keyboard-layout.py
 python3 tests/helper-sandbox.py
 python3 tests/package-rootfs.py
+fakeroot -- python3 tests/components.py
+python3 tests/component-publication.py
 python3 tests/network-helper.py

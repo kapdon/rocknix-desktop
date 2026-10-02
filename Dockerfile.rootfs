@@ -160,6 +160,7 @@ RUN --network=none --mount=from=trash-package-inputs,target=/tmp/trash-packages,
     && rm -r /tmp/trash-tools \
     && dpkg-query -W -f='${binary:Package}\t${Version}\n' | sort >/etc/rocknix-desktop-packages.tsv
 
+FROM desktop-dependencies AS desktop-compiled
 COPY --from=fuzzel-artifacts /opt/rocknix-fuzzel/ /opt/rocknix-fuzzel/
 COPY --from=keyboard-builder /tmp/wvkbd/wvkbd-mobintl /usr/local/bin/wvkbd-rocknix
 COPY --from=keyboard-builder /tmp/wvkbd/LICENSE /usr/local/share/wvkbd/LICENSE
@@ -174,7 +175,29 @@ COPY --from=ffmpeg-rpi-builder /usr/local/bin/build-firefox-ffmpeg /opt/ffmpeg-r
 
 # Configuration and project files change frequently; keep them after all
 # package installation and compiled dependency/source distribution layers.
-FROM desktop-dependencies AS desktop-apps
+# Independently exported release components; ordinary config builds never load
+# these targets when the immutable compressed artifacts already exist.
+FROM desktop-dependencies AS guest-base
+COPY rootfs-overlay/usr/local/bin/rocknix-default-password /tmp/rocknix-default-password
+COPY rootfs-overlay/etc/systemd/system/rocknix-desktop-session.service /etc/systemd/system/rocknix-desktop-session.service
+COPY build-support/components/bootstrap-base.sh /tmp/bootstrap-base.sh
+RUN sh /tmp/bootstrap-base.sh && rm /tmp/bootstrap-base.sh
+
+FROM scratch AS firefox-component
+COPY --from=ffmpeg-rpi-builder /opt/ffmpeg-rpi-7.1.5/ /opt/ffmpeg-rpi-7.1.5/
+COPY --from=ffmpeg-rpi-builder /tmp/ffmpeg-rpi.tar.gz /opt/ffmpeg-rpi-7.1.5/share/source/ffmpeg-rpi.tar.gz
+COPY --from=ffmpeg-rpi-builder /usr/local/bin/build-firefox-ffmpeg /opt/ffmpeg-rpi-7.1.5/share/source/build.sh
+
+FROM scratch AS mpv-component
+COPY --from=mpv-ffmpeg-builder /opt/rocknix-mpv/ /opt/rocknix-mpv/
+
+FROM scratch AS keyboard-component
+COPY --from=keyboard-builder /tmp/wvkbd/wvkbd-mobintl /usr/local/bin/wvkbd-rocknix
+COPY --from=keyboard-builder /tmp/wvkbd/LICENSE /usr/local/share/wvkbd/LICENSE
+COPY --from=keyboard-builder /tmp/wvkbd.tar.gz /usr/local/share/wvkbd/source.tar.gz
+COPY build-support/wvkbd/ /usr/local/share/wvkbd/custom/
+
+FROM desktop-compiled AS desktop-apps
 COPY rootfs-overlay/ /
 
 RUN chmod 0755 \

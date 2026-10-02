@@ -1,5 +1,9 @@
 # Building ROCKNIX Desktop
 
+Development CI uses the [component build path](components.md), resolving reusable
+compressed artifacts before Docker setup. The commands below also retain the
+explicit monolithic/offline builder used by stable releases.
+
 Build from a clean, committed checkout with Docker Buildx and `fakeroot` for
 non-root archive packaging. Local AMD64 hosts can build the ARM64 target.
 The private Firefox FFmpeg and keyboard builds use an ARM64 cross-compiler
@@ -58,10 +62,10 @@ Keep the existing artifact and source checks. Run GLib tests when changing
 its mount-aware source patch. Test affected runtime behavior
 on the RP6 using the local bundle.
 
-Docker and CI reuse BuildKit layers. Both publication workflows restore/export
+The offline/stable builder also reuses BuildKit layers. The stable workflow restores/exports
 separate ARM64 caches for Trash packages, Fuzzel, the runtime and trusted host
 tools. The packaging build uses the same builder. Runtime package installation
-and compiled dependencies live in `desktop-dependencies`, before the final
+and compiled dependencies live before the final
 overlay stage. Changing a launcher, theme or adding overlay files reuses APT,
 audited Trash packages, Fuzzel, keyboard and both codec dependency layers.
 Changing dependency recipes, patches or package artifacts invalidates their
