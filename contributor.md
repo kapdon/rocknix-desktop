@@ -95,7 +95,9 @@ synthetic tests. Pushes run checks but do not publish a bundle.
 
 Dev publication is **latest-only**: the `development`
 pre-release retains the current bundle, its checksum and `latest.json`; release
-notes identify source commit and build time. Dev assets may be replaced or
+notes identify source commit, build time and all commits ahead of the latest
+stable GitHub release. The comparison is regenerated on every development
+publication, so no previous-development baseline needs tracking. Dev assets may be replaced or
 removed on the next successful publication. Record installed provenance from
 `build-info` / `rocknix-version`; use a versioned release when a fixed public
 snapshot is needed. Update the pointer only after the bundle/checksum upload

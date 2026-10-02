@@ -13,6 +13,8 @@ bundle=dist/rocknix-desktop-rp6-arm64.tar.xz
 tar -xOf "$bundle" ./build-info | grep -Fx "commit=$revision"
 built_at=$(tar -xOf "$bundle" ./build-info | sed -n 's/^built=//p')
 [[ "$built_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || exit 1
+# Generate notes before publication so API errors cannot leave incomplete notes.
+python3 scripts/development-release-notes.py "$revision" "$built_at" >dist/development-notes.md
 cp "$bundle" "dist/$asset"
 checksum=$(sha256sum "dist/$asset")
 checksum=${checksum%% *}
@@ -44,5 +46,5 @@ tag_object=$(gh api "repos/$repo/git/tags" --method POST \
 [[ "$tag_object" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid rolling tag object' >&2; exit 1; }
 gh api "repos/$repo/git/refs/tags/development" --method PATCH \
   -f sha="$tag_object" -F force=true >/dev/null
-gh release edit development --repo "$repo" --prerelease --latest=false --notes \
-  "$(printf 'Commit: `%s`\nBuilt: %s\n\nRolling dev pre-release. Only the latest successful build is kept.' "$revision" "$built_at")"
+gh release edit development --repo "$repo" --prerelease --latest=false \
+  --notes-file dist/development-notes.md

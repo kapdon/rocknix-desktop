@@ -6,7 +6,7 @@ scratch=$(mktemp -d)
 trap 'rm -rf -- "$scratch"' EXIT
 mkdir -p "$scratch/repo/scripts" "$scratch/repo/dist" "$scratch/bin"
 cp scripts/publish-release.sh "$scratch/repo/scripts/"
-cp scripts/publish-development.sh "$scratch/repo/scripts/"
+cp scripts/publish-development.sh scripts/development-release-notes.py "$scratch/repo/scripts/"
 cp scripts/prune-development-assets.sh "$scratch/repo/scripts/"
 printf 'dist/\n' >"$scratch/repo/.gitignore"
 git init -q --initial-branch=dev "$scratch/repo"
@@ -27,6 +27,12 @@ set -Eeuo pipefail
 printf '%s\n' "$*" >>"$PUBLISH_LOG"
 if [ "$1" = api ]; then
   case "$2" in
+    */releases/latest)
+      [ "${PUBLISH_FAIL_NOTES:-0}" != 1 ] || exit 1
+      printf '{"tag_name":"v0.1.0"}\n' ;;
+    */compare/*)
+      jq -n '[{total_commits:2,commits:[{sha:"2222222222222222222222222222222222222222",html_url:"https://example.invalid/one",commit:{message:"fix: first change"}}]},
+              {total_commits:2,commits:[{sha:"3333333333333333333333333333333333333333",html_url:"https://example.invalid/two",commit:{message:"fix: second change"}}]}]' ;;
     */git/tags) printf '1111111111111111111111111111111111111111\n' ;;
     */git/refs/*) ;;
     */releases/assets/*) ;;
@@ -83,6 +89,10 @@ for attempt in 1 2; do
     "$scratch/repo/dist/latest.json" >/dev/null
   test -f "$scratch/repo/dist/rocknix-desktop-rp6-arm64-$revision-r123a$attempt.tar.xz"
 done
+grep -qF "compare/v0.1.0...$revision?per_page=100 --paginate --slurp" "$PUBLISH_LOG"
+grep -qF 'fix: first change' "$scratch/repo/dist/development-notes.md"
+grep -qF 'fix: second change' "$scratch/repo/dist/development-notes.md"
+grep -qF -- '--notes-file dist/development-notes.md' "$PUBLISH_LOG"
 grep -q '/releases/assets/4 --method DELETE' "$PUBLISH_LOG"
 grep -q '/releases/assets/5 --method DELETE' "$PUBLISH_LOG"
 if grep -Eq '/releases/assets/[123] --method DELETE' "$PUBLISH_LOG"; then exit 1; fi
@@ -90,6 +100,10 @@ awk '/release upload development dist\/latest.json/ {ready=1} /--method DELETE/ 
 jq -e '.built_at == "2026-09-30T11:00:00Z"' "$scratch/repo/dist/latest.json" >/dev/null
 grep -q 'git/refs/tags/development --method PATCH' "$PUBLISH_LOG"
 grep -q '^release edit development .*--prerelease --latest=false' "$PUBLISH_LOG"
+# Release lookup failure must stop before any publication mutation.
+: >"$PUBLISH_LOG"
+if PUBLISH_FAIL_NOTES=1 bash "$scratch/repo/scripts/publish-development.sh" >/dev/null 2>&1; then exit 1; fi
+if grep -Eq '^release (upload|edit|create)|--method (POST|PATCH|DELETE)' "$PUBLISH_LOG"; then exit 1; fi
 # Unknown asset families refuse the entire inventory before any deletion.
 : >"$PUBLISH_LOG"
 if PUBLISH_OTHER_FAMILY=unexpected bash "$scratch/repo/scripts/prune-development-assets.sh" \
