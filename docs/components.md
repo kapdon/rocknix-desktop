@@ -123,6 +123,9 @@ rollback. The full fresh-install archive is no longer a routine CI output.
 
 ## Validation and remaining acceptance
 
+See [the local validation report](components-validation.md) for real component
+assembly checks and repeated measurements against the full-package baseline.
+
 `fakeroot -- python3 tests/components.py` exercises real packing, composition and
 updater application with small producer fixtures. It checks dependency invalidation,
 zero producers on a warm run, one small compression on a CSS change, fresh-runner

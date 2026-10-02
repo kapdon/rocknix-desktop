@@ -50,7 +50,8 @@ def measure(store_path, output, samples):
         for name in SOURCES:
             original = PROJECT / name
             if original.is_dir():
-                shutil.copytree(original, source / name, ignore=shutil.ignore_patterns('__pycache__'))
+                shutil.copytree(original, source / name, symlinks=True,
+                                ignore=shutil.ignore_patterns('__pycache__'))
             else:
                 shutil.copy2(original, source / name)
         # Only the disposable source copy receives CSS edits. Read commit
