@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """Resolve immutable artifacts before Docker; build and compress only misses."""
 import argparse
+import ast
 import copy
 from datetime import datetime, timezone
 import hashlib
@@ -119,6 +120,14 @@ def input_keys(root=None):
                 if p.name != 'provenance.json'])
         if role == 'guest-base':
             data['trash_packages'] = keys['trash-packages']
+            # Ownership policy, not configuration contents, determines what the
+            # base must omit. New files in an existing namespace remain cheap.
+            updater = ast.parse((root / 'rootfs-overlay/usr/local/bin/rocknix-container-update').read_text())
+            policy = [node for node in updater.body if
+                      isinstance(node, ast.FunctionDef) and node.name == 'allowed' or
+                      isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and
+                          t.id in ('CONFIG', 'IDENTITY') for t in node.targets)]
+            data['managed_namespace'] = ast.dump(ast.Module(body=policy, type_ignores=[]))
         keys[role] = hashlib.sha256(C['encoded'](data)).hexdigest()
         inputs[role] = data
     return keys, inputs
@@ -252,6 +261,7 @@ def add_tree(archive, source, prefix, exclude=()):
 
 def payload_tar(role, work, raw=None, trash=None):
     result = work / 'payload.tar'
+    guest = runpy.run_path(str(PROJECT / 'rootfs-overlay/usr/local/bin/rocknix-container-update'))
     with tarfile.open(result, 'w') as archive:
         if raw:
             prefix = 'host-tools/' if role == 'host-runtime' else 'rootfs/'
@@ -265,7 +275,11 @@ def payload_tar(role, work, raw=None, trash=None):
                     name = item.name.removeprefix('./').rstrip('/')
                     if not name or name == '.' or name == '.dockerenv' or name == 'provenance.json':
                         continue
+                    if role == 'host-runtime' and not item.isdir() and C['owns']('host-theme', 'host-tools/' + name):
+                        continue
                     if role == 'guest-base':
+                        if not item.isdir() and guest['allowed'](name):
+                            continue
                         if name in ('etc/resolv.conf', 'etc/hosts', 'etc/hostname',
                                     'etc/systemd/system/rocknix-desktop-session.service'):
                             continue

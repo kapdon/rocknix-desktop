@@ -82,6 +82,7 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
                     put(archive, 'usr/bin/' + name)
                 put(archive, 'var/lib/service/data', mode=0o640, uid=101, gid=102)
                 put(archive, 'etc/shadow', b'account-data', mode=0o640)
+                put(archive, 'etc/xdg/foot/foot.ini', b'Debian default, owned by integration', mode=0o644)
                 put(archive, 'etc/ssl/certs/cert-ñ.pem', b'unicode certificate', mode=0o644)
                 put(archive, 'bin', link='usr/bin')
             elif role == 'host-runtime':
@@ -90,6 +91,7 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
                 for name in ('storage', 'home/rocknix-default'):
                     item = tarfile.TarInfo(name); item.type = tarfile.DIRTYPE; item.mode = 0o755; archive.addfile(item)
                 put(archive, 'usr/bin/newuidmap', mode=0o4755)
+                put(archive, 'etc/gtk-3.0/settings.ini', b'base theme, owned by host-theme', mode=0o644)
             elif role == 'keyboard':
                 put(archive, 'usr/local/bin/wvkbd-rocknix')
             else:
