@@ -30,9 +30,16 @@ library or changes to the installed ROCKNIX scripts are required.
   silent alternate launcher. Keep mode captures Steam's own exit status and
   restarts the nested session on its update/restart code 42 within the same scope.
   Normal exits, compositor failures without a client restart request, and stop
-  signals end the session.
+  signals end the session. Keep starts Steam without `-silent`;
+  **Apps → Steam games → Show Steam** requests its main window again
+  after the game exits or the client has been hidden. This reuses the current native client, including
+  its display and shared-memory namespace. It is available only for Keep mode.
 - `rocknix-desktop-games.service` supervises Desktop transitions, the available
-  memory guard. Steam and its children live in the native scope, not the
+  memory guard. Each launch receives a private tmpfs at `/dev/shm`, inherited
+  by the native scope. Steam IPC and FEX statistics therefore share the session
+  lifetime: stopping the scope releases that mount after its final process exits,
+  including forced recovery. Host and LXC shared-memory objects are untouched.
+  Steam and its children live in the native scope, not the
   supervisor service. Desktop owns the always-available one-tap controller
   override. Until tapped, automatic focus detection recognizes the native Steam
   scope and Gamescope Wayland clients in the mapped LXC. After a tap, the choice
@@ -155,4 +162,10 @@ still require integration validation.
 Check the host game service journal and the guest Gamescope session logs when a
 launch fails or leaves a cleanup warning. Steam and Proton can fail when shared
 memory is exhausted; investigate live owners before removing files. Desktop does
-not automatically delete native Steam shared-memory files.
+not delete pre-existing host shared-memory files. Older leaked objects survive
+until their original mount is cleared (for example by a reboot). New Desktop
+Steam sessions use their own tmpfs; inspecting only the host `/dev/shm` does not
+measure a running session. Inspect `/proc/<steam-pid>/root/dev/shm` and the host
+game-service journal instead. The existing host available-memory guard still
+covers those pages. This does not change native Gaming Mode launches or clean
+up FEX processes launched outside the Desktop Steam session.

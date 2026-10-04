@@ -52,14 +52,28 @@ while :; do
     --xwayland-count 2 -- \
     /bin/bash -c '
       status_file=$1
-      shift
+      control_fifo=$2
+      shift 2
+      steam=$1
+      # Requests are read in the same namespace and display as this client.
+      (
+        exec 3<> "$control_fifo"
+        while read -r command <&3; do
+          if [[ $command == show ]]; then
+            timeout 10 "$steam" steam://open/main || true
+          fi
+        done
+      ) &
+      control_pid=$!
       status=0
       "$@" || status=$?
+      kill "$control_pid" 2>/dev/null || true
+      wait "$control_pid" 2>/dev/null || true
       printf "%s\n" "$status" > "$status_file"
       exit "$status"
-    ' _ "$steam_status_dir/status" \
+    ' _ "$steam_status_dir/status" /run/rocknix-desktop-games/steam-control \
     /storage/.local/share/Steam/steamrtarm64/steam \
-    -deckard -steamos3 -nobigpicture -noshaders -silent "steam://rungameid/$1" || gamescope_status=$?
+    -deckard -steamos3 -nobigpicture -noshaders "steam://rungameid/$1" || gamescope_status=$?
   if [[ -f "$steam_status_dir/status" ]]; then
     read -r steam_status < "$steam_status_dir/status"
     [[ $steam_status != 42 ]] || continue

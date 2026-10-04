@@ -70,8 +70,17 @@ def main():
             raise OSError('setting was not saved')
         return
     if current.get('busy'):
-        if menu('A gamescope session is running', [('Back', None), ('Stop game and Steam', 'stop')]) == 'stop':
-            send('stop')
+        choices = [('Back', None)]
+        if current.get('session_mode') == 'keep':
+            choices.append(('Show Steam', 'show'))
+        choices.append(('Stop game and Steam', 'stop'))
+        selected = menu('A Steam session is running', choices)
+        if selected:
+            send(selected)
+            time.sleep(.3)
+            error = state().get('error')
+            if error:
+                menu(error, [('Back', None)])
         return
     selected = menu('ROCKNIX Steam games', [(g['name'], g['id']) for g in current['games']] + [('Back', None)])
     if selected is None:
