@@ -32,6 +32,8 @@ Release **v0.2.0**.
 - **Apps and Settings toggles:** Tap either button again to close its open menu.
 - **Better cache reuse:** Preserve Trash packages and remote Docker layers, and
   include the keyboard layout in its compiler inputs.
+- **Versioned release publication:** Verify draft uploads by release ID and let CI
+  replace an interrupted draft before publishing; existing releases remain immutable.
 - **Recorded release history:** Successful development builds automatically
   record all changes since the latest stable release in this changelog; release
   pages show curated highlights and link to the full history.
@@ -46,7 +48,7 @@ Release **v0.2.0**.
 
 <!-- development-changelog:start -->
 
-<!-- development-revision: 88c6d728cbb57d7d4f822c08563faf71b352aefb -->
+<!-- development-revision: e99f751a8c48e03d598974709612cb7177704bd2 -->
 
 ## Changes since v0.1.0
 
@@ -131,7 +133,8 @@ Release **v0.2.0**.
 - build: publish only the complete tarball and checksum \[skip ci\] ([1035cd5](https://github.com/kapdon/rocknix-desktop/commit/1035cd5115b935941b5ba504b6ae3a8a32ecc8c7))
 - docs: describe the two-file release installation flow \[skip ci\] ([a29f201](https://github.com/kapdon/rocknix-desktop/commit/a29f2018607ecead9dc258bfae73413c4b9231cd))
 - release: prepare v0.2.0 documentation and release notes \[skip ci\] ([88c6d72](https://github.com/kapdon/rocknix-desktop/commit/88c6d728cbb57d7d4f822c08563faf71b352aefb))
+- docs: describe lasting desktop features in README \[skip ci\] ([e99f751](https://github.com/kapdon/rocknix-desktop/commit/e99f751a8c48e03d598974709612cb7177704bd2))
 
-[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.1.0...88c6d728cbb57d7d4f822c08563faf71b352aefb)
+[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.1.0...e99f751a8c48e03d598974709612cb7177704bd2)
 
 <!-- development-changelog:end -->

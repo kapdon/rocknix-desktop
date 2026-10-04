@@ -20,6 +20,8 @@ with tempfile.TemporaryDirectory() as temporary:
     collision = False
     remote_mismatch = False
     fail_pointer = False
+    previous = None
+    wrong_draft = False
     def output(args, **kwargs):
         if 'rev-parse' in args:
             return 'a' * 40
@@ -27,7 +29,14 @@ with tempfile.TemporaryDirectory() as temporary:
             return ('b' if remote_mismatch else 'a') * 40 + '\trefs/heads/dev'
         if '--tags' in args:
             return 'existing' if collision else ''
+        if args[:3] == ('gh', 'release', 'view'):
+            return json.dumps({'databaseId': 123, 'isDraft': True,
+                               'targetCommitish': ('b' if wrong_draft else 'a') * 40})
         assert args[:2] == ('gh', 'api')
+        if '--paginate' in args:
+            return json.dumps([[{'tag_name': 'unrelated', 'draft': True}], [previous] if previous else []])
+        # Draft assets must be looked up by release ID, never by unpublished tag.
+        assert args[2] == 'repos/owner/repo/releases/123'
         return json.dumps({'assets': [{'name': name, 'size': len(data), 'state': 'uploaded',
             'digest': 'sha256:' + ('0' * 64 if fail_pointer else hashlib.sha256(data).hexdigest())}
             for name, data in [('bundle.tar', b'bundle'), ('bundle.tar.sha256', b'checksum')]]})
@@ -61,7 +70,17 @@ with tempfile.TemporaryDirectory() as temporary:
             assert '--draft=false' in edit and edit[1:3] == ['release', 'edit']
             assert ('--prerelease' in create) == ('-' in tag)
             assert ('--latest=false' in edit) == ('-' in tag)
-        for case in ('tag', 'remote', 'pointer', 'syntax'):
+        previous = {'tag_name': 'v0.2.0', 'draft': True}
+        calls.clear()
+        P['publish']('v0.2.0', manifest, work, 'owner/repo')
+        assert calls[0] == ['dependencies']
+        assert calls[1][1:5] == ['release', 'delete', 'v0.2.0', '--yes']
+        assert calls[2][1:3] == ['release', 'create']
+        assert calls[3][1:3] == ['release', 'edit']
+        previous = None
+        for case in ('tag', 'remote', 'pointer', 'syntax', 'published', 'draft-source'):
+            previous = {'tag_name': 'v0.2.0', 'draft': False} if case == 'published' else None
+            wrong_draft = case == 'draft-source'
             calls.clear()
             collision, remote_mismatch, fail_pointer = case == 'tag', case == 'remote', case == 'pointer'
             try:
@@ -70,6 +89,6 @@ with tempfile.TemporaryDirectory() as temporary:
             except RuntimeError:
                 pass
             assert not any('--draft=false' in call for call in calls)
-            if case != 'pointer':
+            if case not in ('pointer', 'draft-source'):
                 assert not calls
-print('PASS: versioned component publication order, source/tag guards and pointer failure isolation')
+print('PASS: versioned component publication order, source/tag guards, draft-only retry and upload failure isolation')

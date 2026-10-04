@@ -25,6 +25,13 @@ def publish(tag, manifest, store, repository):
         raise RuntimeError('release source must match remote dev')
     if output('git', '-C', str(PROJECT), 'ls-remote', '--tags', 'origin', 'refs/tags/' + tag):
         raise RuntimeError('version tag already exists')
+    # The by-tag REST endpoint excludes drafts. List releases with the CI token
+    # so an interrupted publication can replace only its unpublished draft.
+    pages = json.loads(output('gh', 'api', '--paginate', '--slurp',
+                              f'repos/{repository}/releases?per_page=100'))
+    previous = next((item for page in pages for item in page if item['tag_name'] == tag), None)
+    if previous and not previous['draft']:
+        raise RuntimeError('version release already published')
     # This validates clean/exact source without publishing intermediate artifacts.
     # It never advances the development pointer or tag.
     P['publish'](manifest, store, repository, components_only=True)
@@ -40,9 +47,16 @@ def publish(tag, manifest, store, repository):
                          + f'\nInstall with `--release {tag}`.\n')
         prerelease = '-' in tag
         flags = ['--prerelease'] if prerelease else []
+        if previous:
+            gh('release', 'delete', tag, '--yes')
         gh('release', 'create', tag, bundle, checksum, '--target', revision,
            '--draft', *flags, '--title', 'ROCKNIX Desktop ' + tag, '--notes-file', notes)
-        assets = json.loads(output('gh', 'api', f'repos/{repository}/releases/tags/{tag}'))['assets']
+        draft = json.loads(output('gh', 'release', 'view', tag, '--repo', repository,
+                                  '--json', 'databaseId,isDraft,targetCommitish'))
+        if not draft['isDraft'] or draft['targetCommitish'] != revision:
+            raise RuntimeError('release draft does not match source')
+        assets = json.loads(output('gh', 'api',
+                            f'repos/{repository}/releases/{draft["databaseId"]}'))['assets']
         for artifact in (bundle, checksum):
             item = next((a for a in assets if a['name'] == artifact.name), None)
             if (not item or item['state'] != 'uploaded' or item['size'] != artifact.stat().st_size
