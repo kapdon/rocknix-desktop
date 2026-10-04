@@ -26,7 +26,7 @@ def record(repository, revision, snapshot, original):
         raise RuntimeError('revision must be a full commit SHA')
     before, section, after = N['changelog_section'](snapshot)
     old_before, _, old_after = N['changelog_section'](original)
-    if (before, after) != (old_before, old_after) or f'Commit: `{revision}`\n' not in section:
+    if (before, after) != (old_before, old_after) or f'<!-- development-revision: {revision} -->\n' not in section:
         raise RuntimeError('changelog does not match the published revision or checked-in history')
     current = api(repository, 'contents/CHANGELOG.md?ref=dev')
     if current.get('encoding') != 'base64':

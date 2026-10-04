@@ -52,20 +52,25 @@ print('PASS: paginated changes since latest stable, Markdown escaping, bot-only 
 original = (PROJECT / 'CHANGELOG.md').read_text()
 snapshot = N['render_changelog'](original, notes)
 before, section, after = N['changelog_section'](snapshot)
-assert section == '\n\n## Development\n\n' + notes.rstrip() + '\n\n'
+assert section == '\n\n' + notes.rstrip() + '\n\n'
+assert snapshot.count('\n## ') == 2
+for unwanted in ['## Development', 'Committed development changes', 'Rolling dev pre-release', 'Built:', 'Commit:', 'Backfill audited']:
+    assert unwanted not in snapshot
 assert (before, after) == (N['changelog_section'](original)[0], N['changelog_section'](original)[2])
-assert 'v0.1.0' in after
+assert not after.strip()
+assert N['render_changelog'](snapshot, notes) == snapshot
 for invalid in ['missing markers', original + N['CHANGELOG_START'],
                 N['CHANGELOG_END'] + N['CHANGELOG_START']]:
     rejects(N['render_changelog'], invalid, notes)
-print('PASS: full commit history and stable changelog entries retained')
+print('PASS: exactly two visible sections and repeatable change-list replacement')
 
 # The release page uses curated highlights, while the generated file retains
 # every commit. An updated stable baseline must not reuse stale highlights.
 fixture = (N['CHANGELOG_START'] + '\nold history\n' + N['CHANGELOG_END'])
 curated = '## Highlights since v0.1.0\n\n- Faster builds.\n- Menu toggles.\n\n' + fixture
 summary = N['release_summary'](notes, curated, 'owner/repo')
-assert summary.startswith(f'Commit: `{REVISION}`\nBuilt: {BUILT}\n')
+assert summary.startswith('## Highlights since v0.1.0\n')
+assert REVISION not in summary and BUILT not in summary
 assert '- Faster builds.' in summary and '- Menu toggles.' in summary
 assert '[Full changelog](https://github.com/owner/repo/blob/dev/CHANGELOG.md)' in summary
 assert 'fix: retain caches' not in summary and 'Full comparison' not in summary

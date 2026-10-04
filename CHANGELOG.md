@@ -1,29 +1,17 @@
 # Changelog
 
-The generated Development section records the latest successful development
-build, with all changes since the latest stable release. GitHub Actions updates
-that section and the rolling development release together. The curated highlights
-also cover committed development work; the dated backfill below distinguishes
-changes beyond the recorded build from published artifacts. Release notes use
-these highlights and link here for the full history. Earlier build snapshots
-remain in this file's Git history. Automated changelog commits are omitted from
-the change list.
-
 ## Highlights since v0.1.0
 
 - **Guest Gamescope cleanup:** Contain each launch in an unprivileged service,
   clear detached Wine helpers on exit or compositor loss, and keep the shared
-  FEX server outside individual game lifetimes. RP6 preview checks passed;
-  the upstream compositor abort and final bundle acceptance remain separate.
-
+  FEX server outside individual game lifetimes.
 - **Gamescope app picker:** Keep “Launch with Gamescope” first in the initial
   Apps list, reuse installed app entries and display settings, and show a gamepad
   icon for both it and Steam games.
 - **Gamescope display fitting:** Default nested games to the current Sway
   content area, with an option to use the full monitor resolution and a shared launcher for
   LXC X11/Wine games. Keep the game resolution stable while Gamescope scales
-  window changes. Native DRM launching remains unchanged. RP6 probes and the
-  user's PD2 Gamescope launch passed; broader input/gameplay acceptance remains.
+  window changes. Native DRM launching remains unchanged.
 - **Component replacement:** Replace the system container on update while preserving
   home data and metadata; installed system packages and password changes reset.
   Legacy-export migration and interrupted replacement were tested on RP6.
@@ -49,59 +37,11 @@ the change list.
   configuration through managed component updates. This does not fix native
   Steam's separate Browse dialog.
 
-## Committed development changes through `c128035` — 2026-10-03
+<!-- development-changelog:start -->
 
-Backfill audited against `origin/dev` at
-`c128035dc786f2dbec8b4c6a7131f1025017936e`. These changes are committed but are
-not included in the recorded development build `3a32508` below. The rolling
-release still identified that build when checked on 2026-10-03; this backfill
-does not record a new build or publication. Coverage is the Git ancestry range
-`3a32508..c128035`, including work merged from the Steam branch and `[skip ci]`
-commits. Dates below are the commits' author dates. The automated changelog
-record and merge-only bookkeeping are omitted.
-
-### 2026-10-03
-
-- Reuse ROCKNIX's native `steam-bigpicture.scope` for Steam sessions, supervise
-  Desktop transitions separately, and retain recovery state when cleanup fails.
-  Document the compatibility choice to run native Steam as host root, the trust
-  implications of shared writable game files, and remaining external-launch race
-  limits. ([9c9ea88](https://github.com/kapdon/rocknix-desktop/commit/9c9ea88ac0d33f78b9e8fd8ca24886e3f84a34f6))
-- Restart Keep mode on Steam's update/restart exit code 42 while allowing normal
-  exits, compositor failures and stop signals to end the session. Guard standalone
-  installation before downloads and across lock acquisition; resolve maintenance
-  guards from the copied updater's trusted helper directory. Regression evidence
-  for these changes is local fixtures, not new device qualification. ([c128035](https://github.com/kapdon/rocknix-desktop/commit/c128035dc786f2dbec8b4c6a7131f1025017936e))
-
-### 2026-10-02
-
-- Add native Steam game launching with persistent Close Desktop / Keep Desktop
-  settings, stop/recovery handling and an available-memory guard. Close mode uses
-  ROCKNIX's installed `runemu.sh` and DRM launcher; Keep mode uses nested Wayland
-  Gamescope. Read installed game entries from ROCKNIX's `.desktop` shortcuts.
-  ([728ed03](https://github.com/kapdon/rocknix-desktop/commit/728ed0311b6a62241bf547db583c8403da72b2c2), [b74f905](https://github.com/kapdon/rocknix-desktop/commit/b74f9055aad1f6a4bccc406547484eb3958de5ae), [916a9c5](https://github.com/kapdon/rocknix-desktop/commit/916a9c55ffb8e9981d11f065b15d7077e4394e39))
-- Switch Keep-mode InputPlumber profiles with Steam window focus, expose a touch
-  override for Desktop or game controls, and restore Desktop controls on recovery.
-  ([3344a25](https://github.com/kapdon/rocknix-desktop/commit/3344a25d6766aa028107ce83f70aebec80c54fcb))
-- Apply a common SDR presentation baseline with the optional Gamescope WSI bypass
-  disabled in both Steam launch modes; document HDR/timing exclusions and possible
-  performance differences. ([c42f9c9](https://github.com/kapdon/rocknix-desktop/commit/c42f9c9bd161707b30e0d63f0c35188d64e472a6))
-- Add `xdg-desktop-portal` and its GTK backend for LXC Desktop file choosers, and
-  include the portal configuration in managed component updates. Native Steam's
-  separate Browse-dialog limitation remains. ([5a1f6ab](https://github.com/kapdon/rocknix-desktop/commit/5a1f6abeba7c735495ea8df73438998e5700598b), [7092c27](https://github.com/kapdon/rocknix-desktop/commit/7092c27cf6da55bce113e898ec4c86983b0883a3))
-- Generate concise development-release highlights from this file and link the
-  release page to the complete changelog. ([b23ee56](https://github.com/kapdon/rocknix-desktop/commit/b23ee5670273b589b157867f2d527f0962dc6032))
-
-## Development
-
-Commit: `4c6ffd651889678104840faacbc58caba50e5884`
-Built: 2026-10-04T01:25:44Z
-
-Rolling dev pre-release. The installer selects the latest successful build.
+<!-- development-revision: ee89c1e4bb794c6fcb18155488864d06330daf72 -->
 
 ## Changes since v0.1.0
-
-Compared with the latest stable release, not the previous development build.
 
 - docs: clarify ROCKNIX project independence ([a70f578](https://github.com/kapdon/rocknix-desktop/commit/a70f578d935f2f073b713b3ab43c5e27b21c838f))
 - fix: toggle Apps and Settings menus on repeated taps ([bef1135](https://github.com/kapdon/rocknix-desktop/commit/bef1135540ea28832ac8a3f2a04452b008cec364))
@@ -113,86 +53,68 @@ Compared with the latest stable release, not the previous development build.
 - fix: integrate Apps and Settings menu toggles ([dca1b28](https://github.com/kapdon/rocknix-desktop/commit/dca1b28caffd5dc4c52d43d5d66e1445133c8996))
 - feat: generate development notes since the latest stable release ([c1a1aec](https://github.com/kapdon/rocknix-desktop/commit/c1a1aec8e89b6ddeef3c9b78e58b132be5805599))
 - fix: preserve cache reuse for packages and remote image layers ([7476ca8](https://github.com/kapdon/rocknix-desktop/commit/7476ca8ec156460e638f5ab1d13faa3792c4ab57))
-- docs: record Steam reuse research and hardware gates ([7057431](https://github.com/kapdon/rocknix-desktop/commit/70574317b73b49e63c1e131c404c29b1b6e13beb))
-- test: prototype offline Steam path discovery ([3bd0994](https://github.com/kapdon/rocknix-desktop/commit/3bd0994f20131100b81683bcee4de2fb210e6828))
-- test: exercise shared Steam paths and launch exclusion ([5d0a0d0](https://github.com/kapdon/rocknix-desktop/commit/5d0a0d0e66f01cfb3d2bd2183a8e140a4129f9bc))
-- docs: assess Steam LXC reuse and remaining blockers ([9ff5c30](https://github.com/kapdon/rocknix-desktop/commit/9ff5c305e34d016c4a9254923d205588639c0d32))
-- test: validate descendant cgroup evidence for Steam exclusion ([3c16eb3](https://github.com/kapdon/rocknix-desktop/commit/3c16eb39f0e3239bc30468837d0c9215cc0778e4))
-- test: harden Steam lease state and crash recovery ([e182657](https://github.com/kapdon/rocknix-desktop/commit/e182657a4c8f9ce9fa6898cee67acfca6f200fbf))
-- docs: audit Steam containment and remaining device evidence ([32ff7eb](https://github.com/kapdon/rocknix-desktop/commit/32ff7eb79840a7ed555ff8243419f565904ac56c))
-- test: parse GNU and RP6 static ELF dependency evidence ([acd470d](https://github.com/kapdon/rocknix-desktop/commit/acd470d82fa3d60754c7bec153f2556063554ee3))
-- docs: qualify Steam reuse against installed RP6 evidence ([857cd47](https://github.com/kapdon/rocknix-desktop/commit/857cd47aeafae029562ddec50838c60d31301a3e))
 - Build and publish reusable Desktop release components ([c3e9aa1](https://github.com/kapdon/rocknix-desktop/commit/c3e9aa1f2edc0e4edc45cfc05aac99ff982d0064))
 - Reuse verified package artifacts for base-only rebuilds ([bcd3999](https://github.com/kapdon/rocknix-desktop/commit/bcd3999504bfb37ec1fb6e17afd7b49e9b82da09))
 - Preserve component prefixes in extended tar headers ([aae9465](https://github.com/kapdon/rocknix-desktop/commit/aae9465933a5541ec1ea877d4532dd241c53b238))
-- test: qualify RP6 idmaps and nested Steam runtime ([beaebdc](https://github.com/kapdon/rocknix-desktop/commit/beaebdcdcbbf86e9710f406356f5e8d3ec38dd0e))
 - Give integration components exclusive ownership of managed defaults ([15d68ba](https://github.com/kapdon/rocknix-desktop/commit/15d68ba46fe4deb5784427b93dfcba7cabea710c))
 - Keep component input keys stable across Python versions ([cb02f8d](https://github.com/kapdon/rocknix-desktop/commit/cb02f8df2edb0653a93acdcfaca65cdccf0e47be))
 - Add repeatable local component build benchmarks ([07467c1](https://github.com/kapdon/rocknix-desktop/commit/07467c1eeb15ac582ad84e0acf4fca9fe9af8ed4))
-- Record local component architecture validation and timings ([3ea8522](https://github.com/kapdon/rocknix-desktop/commit/3ea8522b2d7c0cd9d70c1f1819aa1a14d90a4c40))
-- test: record RP6 Satisfactory startup and recovery status ([711fc0c](https://github.com/kapdon/rocknix-desktop/commit/711fc0c053ed157404ddd93167806c9db694d401))
-- Allow component benchmarks on development branches ([361cd62](https://github.com/kapdon/rocknix-desktop/commit/361cd62e0fd89d15adac0000cc7c8212b95c167d))
-- docs: record native Steam gamescope desktop investigation ([8fa06a2](https://github.com/kapdon/rocknix-desktop/commit/8fa06a20210c98ad375105280e2763e23104065c))
-- fix: enable GTK file chooser in LXC desktop ([5a1f6ab](https://github.com/kapdon/rocknix-desktop/commit/5a1f6abeba7c735495ea8df73438998e5700598b))
-- Record native GitHub component cache benchmark results ([d847854](https://github.com/kapdon/rocknix-desktop/commit/d8478545939d04f2ee9958d9b86afa0eccc520ea))
-- Record successful development builds in the changelog ([d102001](https://github.com/kapdon/rocknix-desktop/commit/d10200103967eea1a908c5644b92ac7be3e89ccc))
-- Merge pull request #2 from kapdon/codex/component-builds ([3a32508](https://github.com/kapdon/rocknix-desktop/commit/3a32508bd92d184e4d961c83a8469ef510a290f5))
-- Summarize development release notes and link the full changelog ([b23ee56](https://github.com/kapdon/rocknix-desktop/commit/b23ee5670273b589b157867f2d527f0962dc6032))
-- feat: launch native Steam games with configurable Desktop lifecycle ([728ed03](https://github.com/kapdon/rocknix-desktop/commit/728ed0311b6a62241bf547db583c8403da72b2c2))
-- Use stock ROCKNIX DRM launch when closing Desktop ([b74f905](https://github.com/kapdon/rocknix-desktop/commit/b74f9055aad1f6a4bccc406547484eb3958de5ae))
-- Read Steam game menu from ROCKNIX desktop shortcuts ([916a9c5](https://github.com/kapdon/rocknix-desktop/commit/916a9c55ffb8e9981d11f065b15d7077e4394e39))
-- Switch Steam controller profiles with focus and touch override ([3344a25](https://github.com/kapdon/rocknix-desktop/commit/3344a25d6766aa028107ce83f70aebec80c54fcb))
-- Use a shared Gamescope presentation baseline for Steam sessions ([c42f9c9](https://github.com/kapdon/rocknix-desktop/commit/c42f9c9bd161707b30e0d63f0c35188d64e472a6))
-- Merge remote-tracking branch 'origin/dev' into codex/steam-lxc-reuse ([82fa900](https://github.com/kapdon/rocknix-desktop/commit/82fa900923bd5b8275b49b424ce33eedf767e3b9))
-- Include portal configuration in managed component updates ([7092c27](https://github.com/kapdon/rocknix-desktop/commit/7092c27cf6da55bce113e898ec4c86983b0883a3))
-- Reuse ROCKNIX native Steam scope and document compatibility tradeoffs \[skip ci\] ([9c9ea88](https://github.com/kapdon/rocknix-desktop/commit/9c9ea88ac0d33f78b9e8fd8ca24886e3f84a34f6))
-- Fix Steam restart and maintenance recovery handling \[skip ci\] ([c128035](https://github.com/kapdon/rocknix-desktop/commit/c128035dc786f2dbec8b4c6a7131f1025017936e))
-- Backfill committed development changes in changelog \[skip ci\] ([e7f4870](https://github.com/kapdon/rocknix-desktop/commit/e7f48704262a4cf91e98a5df701a815875d3a264))
-- feat: scope native Vulkan providers to Desktop sessions ([6da8bf2](https://github.com/kapdon/rocknix-desktop/commit/6da8bf2b4e1a888e4f7c814ed5621b9ce089ac87))
-- feat: select matching native Mesa EGL and DRI components ([513b866](https://github.com/kapdon/rocknix-desktop/commit/513b866ea90b470dad4c25fcf5364f4e9b811b5b))
-- feat: scope native codecs to media applications and check provider loads ([cc4b9fa](https://github.com/kapdon/rocknix-desktop/commit/cc4b9fa960683cc8a88af41159e98c5606c56fdc))
-- fix: include the matching native GBM backend ([389fb81](https://github.com/kapdon/rocknix-desktop/commit/389fb81e9bb86d141de57e3281ac7faa94de36f2))
-- fix: include narrow provider paths for sandboxed browser graphics ([4941d30](https://github.com/kapdon/rocknix-desktop/commit/4941d303db954cb3c5d1eee44e2933927fc4433b))
-- feat: provide guest Xwayland for legacy desktop applications ([0efac45](https://github.com/kapdon/rocknix-desktop/commit/0efac452bca782f796fce1096e24709446dac28d))
-- fix: include Xwayland package validation in the build context ([dedcfc9](https://github.com/kapdon/rocknix-desktop/commit/dedcfc9c2075e7b01bf6f96b93018fffdd4c4e0b))
-- test: constrain offline X11 dependency updates ([fda7dc1](https://github.com/kapdon/rocknix-desktop/commit/fda7dc147420b235cbe1dc5c502278c0dbf9a503))
-- build: allow ignored scratch directory symlinks ([86eaaa3](https://github.com/kapdon/rocknix-desktop/commit/86eaaa34f8c247eded5e4cfe165f37b2ccf16d99))
-- docs: explain guest Xwayland and FEX cache reuse ([c9a36cd](https://github.com/kapdon/rocknix-desktop/commit/c9a36cdf1c319e63767d99d08038e0842ab38510))
-- feat: deliver Xwayland through cached components ([449efdd](https://github.com/kapdon/rocknix-desktop/commit/449efddc63367807de9039419f98cee7d42ef4dd))
-- feat: add recoverable container replacement transaction ([eff5233](https://github.com/kapdon/rocknix-desktop/commit/eff5233d050e71bdffe76693e264027eb04958a7))
-- refactor: assemble complete component systems for updates ([4fdb3e1](https://github.com/kapdon/rocknix-desktop/commit/4fdb3e120f56f0b1d390400c48fd0a16fd483432))
-- feat: replace legacy containers while preserving home ([aec9686](https://github.com/kapdon/rocknix-desktop/commit/aec96867204c7068c7065c58ab703fd191d9a8dc))
-- build: use components for local and versioned releases ([9571ef4](https://github.com/kapdon/rocknix-desktop/commit/9571ef4db39ad146ae646479386d13e4c96672f2))
-- test: verify home preservation across rootfs replacement ([be76bb9](https://github.com/kapdon/rocknix-desktop/commit/be76bb9a4b952cb855d646abcd4d9471b1f3890d))
-- docs: clarify system replacement and password reset ([e7563ac](https://github.com/kapdon/rocknix-desktop/commit/e7563ac32db986f4fe3aaee7c600464b1fab4c56))
-- test: expect one complete component assembly per install ([73a8ca1](https://github.com/kapdon/rocknix-desktop/commit/73a8ca1a33b2d57ecd735477d1b75a24d44d7e90))
-- test: record component replacement validation on latest dev ([8cac891](https://github.com/kapdon/rocknix-desktop/commit/8cac8918f8c5be021ef42f964e88c9c3ab63a9bd))
-- fix: make controller switching available throughout Desktop ([96017b2](https://github.com/kapdon/rocknix-desktop/commit/96017b286b18ac00711aec11a2c6a8c283ec7cfd))
-- feat: add one-tap controller override and guest Gamescope detection ([520eef5](https://github.com/kapdon/rocknix-desktop/commit/520eef54a9cd2a7adc3c0cc34e55fe1fcb9a201d))
-- docs: record one-tap controller device validation ([34a8cc4](https://github.com/kapdon/rocknix-desktop/commit/34a8cc4d3e83ebb4425dda848efbedde6d3dfb76))
-- fix: honor compositor geometry for tiled X11 windows ([e394a00](https://github.com/kapdon/rocknix-desktop/commit/e394a00d679cf981bd72ae9d3710c08ccc967249))
-- fix: expose native virtual gamepad to desktop applications ([188e953](https://github.com/kapdon/rocknix-desktop/commit/188e9534647b8b94b6bcc000553b79add1b80f6e))
-- docs: record PD2 input validation and launcher handoff ([a239e12](https://github.com/kapdon/rocknix-desktop/commit/a239e12d8bc84773fe1d6b4f513aa77b9d8bc6fe))
-- fix: publish Sway work area to LXC X11 applications ([9f18567](https://github.com/kapdon/rocknix-desktop/commit/9f1856742c773ecec5d782c77ca03d0ef26de0b3))
-- fix: reconcile X11 fullscreen state with the compositor ([0a6724d](https://github.com/kapdon/rocknix-desktop/commit/0a6724d87df92f4bf45a3df793318d3ae748aeb5))
-- docs: record windowed-mode findings with LXC terminology ([2a094d9](https://github.com/kapdon/rocknix-desktop/commit/2a094d9944b337138956d528e6d58d750a54726a))
-- docs: record LXC work-area validation and Wine handoff ([3e6a7e4](https://github.com/kapdon/rocknix-desktop/commit/3e6a7e45b8e74b8f221b1d8d86f14e7795d7881b))
-- docs: correct PD2 windowed validation and resize diagnosis ([3d1da1a](https://github.com/kapdon/rocknix-desktop/commit/3d1da1a6fa3d22d47f89e27dc5b061d2744b0a7e))
-- feat: fit nested Gamescope displays to the desktop by default ([d746003](https://github.com/kapdon/rocknix-desktop/commit/d746003d43d3dfe99c41fd0e7b47a549136f62fd))
-- test: cover Gamescope display sizing and settings persistence ([304c0c5](https://github.com/kapdon/rocknix-desktop/commit/304c0c5080351c74a68649285810095eedd62e95))
-- fix: package Gamescope from Debian contrib at its installed path ([9cb7fbc](https://github.com/kapdon/rocknix-desktop/commit/9cb7fbcdd7e3dca7a5494bf0ff8ee051db267e79))
-- fix: find Debian Gamescope child process helpers ([4a972a5](https://github.com/kapdon/rocknix-desktop/commit/4a972a555f5aa25dc01652d0db910189cfc9d30f))
-- fix: install the trusted host Gamescope sizing helper ([fd0c7c2](https://github.com/kapdon/rocknix-desktop/commit/fd0c7c2e70f82ebf809147bd34c1e9c78661c206))
-- feat: add a pinned Gamescope app picker ([3dd0816](https://github.com/kapdon/rocknix-desktop/commit/3dd0816b9a026d5fc63432e1a857fabc4c68d196))
-- docs: record 0.2.0 release readiness and repository cleanup ([0ab1ea5](https://github.com/kapdon/rocknix-desktop/commit/0ab1ea5205ba2dc89a8ee00798164705c9d4ca56))
-- fix: contain guest Gamescope application teardown ([0b4bd19](https://github.com/kapdon/rocknix-desktop/commit/0b4bd19cce7415680ffed206e8de3de25195a28e))
-- test: verify Gamescope cleanup and record RP6 evidence ([4c6ffd6](https://github.com/kapdon/rocknix-desktop/commit/4c6ffd651889678104840faacbc58caba50e5884))
+- Record local component architecture validation and timings ([61cbb66](https://github.com/kapdon/rocknix-desktop/commit/61cbb664b128baed66ca088a1a20a98d82f0ea7d))
+- Allow component benchmarks on development branches ([9f032bd](https://github.com/kapdon/rocknix-desktop/commit/9f032bdc53ee8ecb3b853c0349c0d9e6bf5576b6))
+- fix: enable GTK file chooser in LXC desktop ([f28f4f0](https://github.com/kapdon/rocknix-desktop/commit/f28f4f02232db7f494a39bc771666e12d9b93491))
+- Record native GitHub component cache benchmark results ([9594bc9](https://github.com/kapdon/rocknix-desktop/commit/9594bc9f036019b3871e2f2bf531e07ab9f8e107))
+- Record successful development builds in the changelog ([a7775b2](https://github.com/kapdon/rocknix-desktop/commit/a7775b29a0a109c9842ebd3c5919e4e1090eebd2))
+- Merge pull request #2 from kapdon/codex/component-builds ([caab3d1](https://github.com/kapdon/rocknix-desktop/commit/caab3d169064aa2050d8d8e495a4b20bf38f7090))
+- Summarize development release notes and link the full changelog ([c95e0d4](https://github.com/kapdon/rocknix-desktop/commit/c95e0d4bab216f5a02a110640cc123cd535ed51a))
+- feat: launch native Steam games with configurable Desktop lifecycle ([11cb43b](https://github.com/kapdon/rocknix-desktop/commit/11cb43bccb5200e179ed08dbda555903de588ed1))
+- Use stock ROCKNIX DRM launch when closing Desktop ([60044bb](https://github.com/kapdon/rocknix-desktop/commit/60044bb75b541c558e167ef42f2272cf3ee92f79))
+- Read Steam game menu from ROCKNIX desktop shortcuts ([925f0cf](https://github.com/kapdon/rocknix-desktop/commit/925f0cf55c7c343d56cdd50e22ca604d73b06f2c))
+- Switch Steam controller profiles with focus and touch override ([6a61c09](https://github.com/kapdon/rocknix-desktop/commit/6a61c09bfb51073489a958a11559e6094971415f))
+- Use a shared Gamescope presentation baseline for Steam sessions ([873b243](https://github.com/kapdon/rocknix-desktop/commit/873b2437ae0b44589c3bb27d21414b92ea6c7503))
+- Merge remote-tracking branch 'origin/dev' into codex/steam-lxc-reuse ([8876837](https://github.com/kapdon/rocknix-desktop/commit/88768374c736e0503f45495c0747aa8af4239509))
+- Include portal configuration in managed component updates ([260f51c](https://github.com/kapdon/rocknix-desktop/commit/260f51cfd945880bbe2d442349cca03eead51d0d))
+- Reuse ROCKNIX native Steam scope and document compatibility tradeoffs \[skip ci\] ([cf88fdb](https://github.com/kapdon/rocknix-desktop/commit/cf88fdbcaf50ff2a45930524674260c01b0957c5))
+- Fix Steam restart and maintenance recovery handling \[skip ci\] ([048c8ed](https://github.com/kapdon/rocknix-desktop/commit/048c8ed9135670cec5861c63675cdbf2877c840d))
+- Backfill committed development changes in changelog \[skip ci\] ([5eafc7b](https://github.com/kapdon/rocknix-desktop/commit/5eafc7b3c7abe7432652885595f9be009dd68343))
+- feat: scope native Vulkan providers to Desktop sessions ([db9bcee](https://github.com/kapdon/rocknix-desktop/commit/db9bcee6edd30b3c7240d0ec55305d5f6d60a6dc))
+- feat: select matching native Mesa EGL and DRI components ([8dba4d0](https://github.com/kapdon/rocknix-desktop/commit/8dba4d03296ba91ca6c0ce6a6fb26278c6cafbb8))
+- feat: scope native codecs to media applications and check provider loads ([55c236f](https://github.com/kapdon/rocknix-desktop/commit/55c236fc427e3416d92e91cb6d1032845523d3c3))
+- fix: include the matching native GBM backend ([d32dc8c](https://github.com/kapdon/rocknix-desktop/commit/d32dc8c02256345e45dc2e3b340649674e4ff713))
+- fix: include narrow provider paths for sandboxed browser graphics ([518abde](https://github.com/kapdon/rocknix-desktop/commit/518abde90921ac94f24d0aa933a4d2e4d272c435))
+- feat: provide guest Xwayland for legacy desktop applications ([ee65e7a](https://github.com/kapdon/rocknix-desktop/commit/ee65e7ab1349ae22028fc12dda708108775ed95a))
+- fix: include Xwayland package validation in the build context ([266cdaa](https://github.com/kapdon/rocknix-desktop/commit/266cdaa9d23ce0388d3b68e33dfd47b0036ece49))
+- test: constrain offline X11 dependency updates ([f0d51af](https://github.com/kapdon/rocknix-desktop/commit/f0d51af2f56a4243a61dd979d7e54ef2cda8fde8))
+- build: allow ignored scratch directory symlinks ([3f887b4](https://github.com/kapdon/rocknix-desktop/commit/3f887b4bfc1146ed50eb6926ce78cf301fcee6a6))
+- docs: explain guest Xwayland and FEX cache reuse ([45a99d5](https://github.com/kapdon/rocknix-desktop/commit/45a99d504c318cee6c3f7539ae9c2b50931821d2))
+- feat: deliver Xwayland through cached components ([cbc914b](https://github.com/kapdon/rocknix-desktop/commit/cbc914bcf43170b0a6d90b0a7472a52803c91774))
+- feat: add recoverable container replacement transaction ([2d96a28](https://github.com/kapdon/rocknix-desktop/commit/2d96a28d7709796da2d6642f2ab4e4d32f2e9427))
+- refactor: assemble complete component systems for updates ([adcac36](https://github.com/kapdon/rocknix-desktop/commit/adcac36ed607547b40aabc03a21f758a94750fee))
+- feat: replace legacy containers while preserving home ([24f9bce](https://github.com/kapdon/rocknix-desktop/commit/24f9bcec7258d3cabcea3dc84d3a3f430159aba4))
+- build: use components for local and versioned releases ([732e308](https://github.com/kapdon/rocknix-desktop/commit/732e308c6956234c00cfe2c13386e32bda83645a))
+- test: verify home preservation across rootfs replacement ([40b5d39](https://github.com/kapdon/rocknix-desktop/commit/40b5d39acb5af98007b6eb9cd0fe6c2b7d9c2d2c))
+- docs: clarify system replacement and password reset ([799a28e](https://github.com/kapdon/rocknix-desktop/commit/799a28efbd692862d204d305f160e9dec18065ac))
+- test: expect one complete component assembly per install ([4728757](https://github.com/kapdon/rocknix-desktop/commit/47287578893cf4a8e6172d499bca3a8e91dcca39))
+- test: record component replacement validation on latest dev ([ac74d64](https://github.com/kapdon/rocknix-desktop/commit/ac74d64fff3361a3c430a49d36fc1574fd1b96d0))
+- fix: make controller switching available throughout Desktop ([2f89ada](https://github.com/kapdon/rocknix-desktop/commit/2f89ada995408d1093e71fc9f27011a3f50dabd6))
+- feat: add one-tap controller override and guest Gamescope detection ([ea090d1](https://github.com/kapdon/rocknix-desktop/commit/ea090d1741483ba1357203074815745c8845a318))
+- fix: honor compositor geometry for tiled X11 windows ([c151371](https://github.com/kapdon/rocknix-desktop/commit/c1513717137442fc07a537cbceb55e2e92a9973c))
+- fix: expose native virtual gamepad to desktop applications ([d2518e7](https://github.com/kapdon/rocknix-desktop/commit/d2518e730c98ff68cd2bc6776fed6fd600c67a4f))
+- fix: publish Sway work area to LXC X11 applications ([360524c](https://github.com/kapdon/rocknix-desktop/commit/360524cae05c876d0e8adbe36abc01c1c66bb637))
+- fix: reconcile X11 fullscreen state with the compositor ([52a5ace](https://github.com/kapdon/rocknix-desktop/commit/52a5ace078c515401c5c3f688ab6d38a91cbc5ff))
+- docs: record windowed-mode findings with LXC terminology ([964c475](https://github.com/kapdon/rocknix-desktop/commit/964c4753d41de8ba28db8cd0581d15bedede6911))
+- docs: record LXC work-area validation and Wine handoff ([01e66e5](https://github.com/kapdon/rocknix-desktop/commit/01e66e56260fac8f4cb1a0e3f71ed2ffc90f61f1))
+- docs: correct PD2 windowed validation and resize diagnosis ([ea1e722](https://github.com/kapdon/rocknix-desktop/commit/ea1e7223a0505e5689a4ec070ba3d1c8328ed7d5))
+- feat: fit nested Gamescope displays to the desktop by default ([2374b61](https://github.com/kapdon/rocknix-desktop/commit/2374b61ca5c4c26fe07098b58e36ace8faf2875c))
+- test: cover Gamescope display sizing and settings persistence ([197131d](https://github.com/kapdon/rocknix-desktop/commit/197131da1a9c5b92f5bf343a10377986353138f3))
+- fix: package Gamescope from Debian contrib at its installed path ([b0f4e95](https://github.com/kapdon/rocknix-desktop/commit/b0f4e956722297bca8dd505d5fee32d288994e17))
+- fix: find Debian Gamescope child process helpers ([0686f0a](https://github.com/kapdon/rocknix-desktop/commit/0686f0a1eb4e1067a90a77d5bd6242d40a212897))
+- fix: install the trusted host Gamescope sizing helper ([fedd188](https://github.com/kapdon/rocknix-desktop/commit/fedd1881ab33f504ccd555e71571d63057114670))
+- feat: add a pinned Gamescope app picker ([a947a9d](https://github.com/kapdon/rocknix-desktop/commit/a947a9d5a518f14e8210ac5066fedfc498b6dc48))
+- docs: record 0.2.0 release readiness and repository cleanup ([f928ce3](https://github.com/kapdon/rocknix-desktop/commit/f928ce36a5442ab734f2661f486dc82eec92bb73))
+- fix: contain guest Gamescope application teardown ([611e71b](https://github.com/kapdon/rocknix-desktop/commit/611e71b185e3ab7c9e481b9276f2d9d5264a5598))
+- test: verify Gamescope cleanup and record RP6 evidence ([74229cf](https://github.com/kapdon/rocknix-desktop/commit/74229cff4099f9f13b5f22c23361a75a18731f5f))
+- docs: keep agent workflow records in ignored experiments ([ee89c1e](https://github.com/kapdon/rocknix-desktop/commit/ee89c1e4bb794c6fcb18155488864d06330daf72))
 
-[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.1.0...4c6ffd651889678104840faacbc58caba50e5884)
+[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.1.0...ee89c1e4bb794c6fcb18155488864d06330daf72)
 
 <!-- development-changelog:end -->
-
-## [v0.1.0](https://github.com/kapdon/rocknix-desktop/releases/tag/v0.1.0) — 2026-10-02
-
-Retroid Pocket 6 LXC Desktop release. Source:
-[`8188d40`](https://github.com/kapdon/rocknix-desktop/commit/8188d4052daa3a1401cf48831e4c9772a7a718de).

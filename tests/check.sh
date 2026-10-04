@@ -144,7 +144,7 @@ grep -q 'INPUT_STATE_PRESENT=1' payload/bin/restore-emulationstation
 grep -q 'ROCKNIX_SWAY_RUNTIME=1' rootfs-overlay/etc/rocknix-desktop-release
 grep -q 'scripts/build-components.py' build-rootfs.sh
 python3 -m json.tool rootfs-overlay/etc/xdg/waybar/config.jsonc >/dev/null
-if rg -q '%-' rootfs-overlay/etc/xdg/waybar/config.jsonc; then
+if grep -q '%-' rootfs-overlay/etc/xdg/waybar/config.jsonc; then
   printf 'FAIL: Waybar chrono format contains an unsupported modifier\n' >&2; exit 1
 fi
 printf 'PASS: syntax, checksum rejection, lifecycle, shell and release checks\n'

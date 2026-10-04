@@ -34,10 +34,9 @@ def notes(revision, built_at, repository=REPO):
     commits = [commit for commit in commits if not (
         commit["commit"]["message"].splitlines()[0] == RECORD_SUBJECT
         and (commit.get("author") or {}).get("login") == "github-actions[bot]")]
-    lines = [f"Commit: `{revision}`", f"Built: {built_at}", "",
-             "Rolling dev pre-release. The installer selects the latest successful build.", "",
-             f"## Changes since {tag}", "",
-             "Compared with the latest stable release, not the previous development build.", ""]
+    # Keep publication identity machine-readable without build-status prose.
+    lines = [f"<!-- development-revision: {revision} -->", "",
+             f"## Changes since {tag}", ""]
     for commit in commits:
         subject = commit["commit"]["message"].splitlines()[0]
         subject = re.sub(r"([\\`*_{}\[\]<>])", r"\\\1", subject)
@@ -50,7 +49,7 @@ def notes(revision, built_at, repository=REPO):
 
 def changelog_section(content):
     if content.count(CHANGELOG_START) != 1 or content.count(CHANGELOG_END) != 1:
-        raise RuntimeError("CHANGELOG.md must contain exactly one development section")
+        raise RuntimeError("CHANGELOG.md must contain exactly one generated change-list marker pair")
     before, rest = content.split(CHANGELOG_START)
     if CHANGELOG_END not in rest:
         raise RuntimeError("CHANGELOG.md development markers are out of order")
@@ -76,13 +75,13 @@ def release_summary(details, changelog, repository=REPO):
     else:
         noun = "commit" if count == 1 else "commits"
         body = f"{count} {noun} since {tag}. See the full changelog for details."
-    return (details[:heading.start()] + f"## Highlights since {tag}\n\n" + body
+    return (f"## Highlights since {tag}\n\n" + body
             + f"\n\n[Full changelog](https://github.com/{repository}/blob/dev/CHANGELOG.md)\n")
 
 
 def render_changelog(content, release_notes):
     before, _, after = changelog_section(content)
-    return (before + CHANGELOG_START + "\n\n## Development\n\n"
+    return (before + CHANGELOG_START + "\n\n"
             + release_notes.rstrip() + "\n\n" + CHANGELOG_END + after)
 
 

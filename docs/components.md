@@ -122,12 +122,12 @@ file. Maintain those highlights alongside feature changes; they are outside the
 generated history. If the stable tag changes before its highlights are updated,
 release notes show the new comparison's commit count and full-changelog link
 instead of repeating an old release's highlights. The generated section replaces the previous
-development snapshot; stable entries are preserved and Git history retains older
+change list; the file contains only highlights and commit details, while Git history retains older
 snapshots. The workflow saves both Markdown files with its timing artifacts.
 
 A separate `docs: record development changelog [skip ci]` commit changes only that
-file on `dev`. The release manifest and notes continue to identify the source
-commit actually built. These bot commits are omitted from future change lists,
+file on `dev`. The release manifest and a hidden changelog comment identify the
+source commit actually built. These bot commits are omitted from future change lists,
 and changelog files are outside component inputs, so recording or refreshing notes
 does not rebuild components. Publication failure or benchmark mode leaves the
 changelog untouched. The update preserves unrelated concurrent commits and fails
