@@ -3,7 +3,9 @@
 ## Controller and touch
 
 Tap Apps or Settings, then tap a row or navigate with D-pad and the bottom face
-button. Printed button labels vary; these mappings use physical positions.
+button. Tap the same panel button again to dismiss its menu, including an open
+submenu. Apps and Settings keep separate menu ownership. Printed button labels
+vary; these mappings use physical positions.
 
 | Control | Action |
 | --- | --- |
@@ -125,8 +127,11 @@ The choice stays selected until you tap again or exit Desktop. Each new Desktop
 session starts with automatic focus detection: Game controls for windows in
 ROCKNIX's native Steam scope (including our nested launch), or a Gamescope
 Wayland window launched inside the mapped LXC; Desktop controls elsewhere.
-Detection checks the focused process, not window titles. Only the InputPlumber
-profile changes; the virtual DualSense stays connected.
+While an Apps, Settings or exit menu is open, automatic selection stays on
+Desktop controls across submenu transitions. Dismissal restores detection for
+the focused window. A manual Pad choice still takes precedence.
+Detection checks the focused process and active menu owner, not window titles.
+Only the InputPlumber profile changes; the virtual DualSense stays connected.
 
 Desktop exposes ROCKNIX’s existing virtual DualSense gamepad to guest applications,
 with narrow event-device and discovery-metadata mounts. Physical input devices,

@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory() as directory:
     stub.chmod(0o755)
     env = {**os.environ, 'HOME': directory, 'XDG_CACHE_HOME': str(root / 'cache'),
            'PATH': directory + ':' + os.environ['PATH'], 'ARGS': str(root / 'args'),
-           'MENU': str(root / 'menu')}
+           'MENU': str(root / 'menu'), 'ROCKNIX_MENU_FD': '9', 'ROCKNIX_MENU_FAMILY': 'apps'}
     for mode in ('apps', 'gamescope-apps', 'settings', 'confirm-return'):
         subprocess.run(['bash', str(launcher), mode], env=env, check=True)
         args = (root / 'args').read_text().splitlines()
@@ -24,8 +24,10 @@ with tempfile.TemporaryDirectory() as directory:
         expected = root / 'cache' / ('rocknix-fuzzel-gamescope' if mode == 'gamescope-apps' else 'rocknix-fuzzel') if mode in ('apps', 'gamescope-apps') else '/dev/null'
         assert caches == [f'--cache={expected}'], (mode, caches)
         if mode == 'gamescope-apps':
-            assert '--launch-prefix=/usr/local/bin/rocknix-gamescope-app' in args
+            assert '--launch-prefix=/usr/local/bin/rocknix-menu-session --launch /usr/local/bin/rocknix-gamescope-app' in args
             assert '--prompt=GAMESCOPE  ' in args
+        elif mode == 'apps':
+            assert '--launch-prefix=/usr/local/bin/rocknix-menu-session --launch' in args
         else:
             assert not any(arg.startswith('--launch-prefix=') for arg in args)
         if mode == 'confirm-return':

@@ -27,7 +27,7 @@ def check(root):
     if '(NEEDED)' not in dynamic or '[libpixman-1.so.0]' not in dynamic:
         raise ValueError('launcher does not declare the expected Pixman dependency')
     for name in ('fuzzel.tar.gz', 'pixman.tar.gz', 'protocols.tar.xz',
-                 'aarch64.ini', 'build.Dockerfile', 'check-artifact.py', 'pixman-COPYING'):
+                 'check-input.py', 'pointer-enter.patch', 'aarch64.ini', 'build.Dockerfile', 'check-artifact.py', 'pixman-COPYING'):
         if not (root / 'share/source' / name).is_file():
             raise ValueError(f'missing build provenance: {name}')
     if not (root / 'share/doc/fuzzel/LICENSE').is_file():

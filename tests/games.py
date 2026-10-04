@@ -331,6 +331,26 @@ raise SystemExit(status)
                         self.assertTrue(journal.exists())
                         self.assertFalse(any(c.args[1]=='start' for c in run.call_args_list))
 
+    def test_layer_menu_owner_identity_and_auto_priority(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(g, 'PROC', Path(tmp)), patch.object(g, 'CONTROL', Path(tmp)/'mode'), patch.object(g, 'CONTROL_PUBLIC', Path(tmp)/'public'), patch.object(g, 'control_profile'), patch.object(g.subprocess, 'run') as sway:
+            process = Path(tmp)/'123'
+            process.mkdir()
+            (process/'cmdline').write_bytes(b'/usr/bin/python3\0/usr/local/bin/rocknix-menu-session\0settings\0command\0')
+            (process/'cgroup').write_text('0::/lxc.payload.rocknix-lxc\n')
+            (process/'uid_map').write_text('0 200000 65536\n')
+            self.assertTrue(g.menu_active())
+            g.atomic(g.CONTROL, {'mode':'auto'})
+            self.assertEqual(g.control_tick({}, 'game'), 'desktop')
+            sway.assert_not_called()
+            # One-tap manual Game selection remains authoritative over menus.
+            g.atomic(g.CONTROL, {'mode':'game'})
+            self.assertEqual(g.control_tick({}, 'desktop'), 'game')
+            (process/'uid_map').write_text('0 0 4294967295\n')
+            self.assertFalse(g.menu_active())
+            (process/'uid_map').write_text('0 200000 65536\n')
+            (process/'cgroup').write_text('0::/unrelated\n')
+            self.assertFalse(g.menu_active())
+
     def test_manual_override_and_auto(self):
         with tempfile.TemporaryDirectory() as tmp,patch.object(g,'CONTROL',Path(tmp)/'mode'),patch.object(g,'CONTROL_PUBLIC',Path(tmp)/'public'),patch.object(g,'control_profile') as profile,patch.object(g.subprocess,'run',return_value=SimpleNamespace(stdout='{}')),patch.object(g,'focused_game',return_value=True):
             g.atomic(g.CONTROL,{'mode':'desktop'})

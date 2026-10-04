@@ -19,7 +19,7 @@ def fixture(root):
         path.chmod(0o755)
     (root / 'lib/libpixman-1.so.0').symlink_to('libpixman-1.so.0.46.4')
     for name in ('fuzzel.tar.gz', 'pixman.tar.gz', 'protocols.tar.xz',
-                 'aarch64.ini', 'build.Dockerfile', 'check-artifact.py', 'pixman-COPYING'):
+                 'check-input.py', 'pointer-enter.patch', 'aarch64.ini', 'build.Dockerfile', 'check-artifact.py', 'pixman-COPYING'):
         path = root / 'share/source' / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.touch()

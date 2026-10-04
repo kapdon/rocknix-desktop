@@ -8,19 +8,16 @@ if [ -f /usr/local/bin/rocknix-display-metrics ]; then
 fi
 
 mode=${1:-apps}
-fuzzel_args=(rocknix-fuzzel)
-case "${mode}" in
-  apps|gamescope-apps|settings)
-    # A second tap dismisses this menu, never a confirmation or another user's menu.
-    namespace=rocknix-desktop-${mode}
-    dismiss_namespace=${namespace}
-    [ "${mode}" != apps ] || dismiss_namespace='rocknix-desktop-(apps|gamescope-apps)'
-    if pkill -u "${UID}" -f "^/opt/rocknix-fuzzel/bin/fuzzel --override=namespace=${dismiss_namespace}( |$)"; then
-      exit 0
-    fi
-    fuzzel_args+=(--override="namespace=${namespace}")
-    ;;
-esac
+# A family owner survives Fuzzel's fork/exec handoff between menu levels.
+if [ -z "${ROCKNIX_MENU_FD:-}" ]; then
+  family=apps
+  case "${mode}" in
+    settings|display-menu) family=settings ;;
+    confirm-return) family=confirm-return ;;
+  esac
+  exec rocknix-menu-session "${family}" "$0" "$@"
+fi
+fuzzel_args=(rocknix-fuzzel --override="namespace=rocknix-desktop-${ROCKNIX_MENU_FAMILY}")
 logical_width=${ROCKNIX_LOGICAL_WIDTH:-1280}
 logical_height=${ROCKNIX_LOGICAL_HEIGHT:-720}
 bar_height=${ROCKNIX_BAR_HEIGHT:-48}
@@ -128,11 +125,11 @@ case "${mode}" in
   gamescope-apps)
     exec "${fuzzel_args[@]}" --cache="${cache}-gamescope" --lines="${line_count}" \
       --prompt='GAMESCOPE  ' --placeholder='Choose an X11 or Wine app' \
-      --launch-prefix=/usr/local/bin/rocknix-gamescope-app
+      --launch-prefix="/usr/local/bin/rocknix-menu-session --launch /usr/local/bin/rocknix-gamescope-app"
     ;;
   apps)
     rocknix-launcher-pin "${cache}"
-    exec "${fuzzel_args[@]}" --cache="${cache}" --lines="${line_count}"
+    exec "${fuzzel_args[@]}" --launch-prefix="/usr/local/bin/rocknix-menu-session --launch" --cache="${cache}" --lines="${line_count}"
     ;;
   confirm-return)
     # Unsorted dmenu input keeps the safe action selected on every opening.
@@ -158,9 +155,9 @@ case "${mode}" in
           --placeholder='Choose a setting'
     ) || exit 0
     case "${selection}" in
-      'Audio settings') pavucontrol >/dev/null 2>&1 & ;;
+      'Audio settings') rocknix-menu-session --launch pavucontrol >/dev/null 2>&1 & ;;
       'Network settings')
-        /usr/local/bin/rocknix-network-settings >/dev/null 2>&1 &
+        rocknix-menu-session --launch /usr/local/bin/rocknix-network-settings >/dev/null 2>&1 &
         ;;
       'Display settings') /usr/local/bin/rocknix-display-menu ;;
       'Gamescope settings') /usr/local/bin/rocknix-games settings ;;

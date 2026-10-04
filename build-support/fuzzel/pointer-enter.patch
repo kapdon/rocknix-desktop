@@ -1,0 +1,57 @@
+--- a/wayland.c
++++ b/wayland.c
+@@ -1166,21 +1166,12 @@
+         return;
+     seat->pointer.serial = serial;
+ 
+-    /*
+-     * Note: do *not* set seat->pointer.{x,y} here!
+-     *
+-     * We only use the coordinates to move the selection when the user
+-     * moves the mouse.
+-     *
+-     * Since the compositor will send a) enter events if the mouse is
+-     * where our layer appears even if the cursor is stationary, and
+-     * b) since we might get motion events if we are forced to
+-     * re-render the layer due to e.g. scale changes (or us guessing
+-     * the scale wrong for the initial frame), the coordinates must
+-     * remain 0,0 until the mouse is _actually_ moved.
+-     *
+-     * See wl_pointer_motion()
+-     */
++    /* Keep click coordinates even before the first motion event. Do not
++     * change keyboard selection merely because a layer appeared under a
++     * stationary pointer (including a scale/configure round trip). */
++    seat->pointer.x = round(seat->wayl->scale * wl_fixed_to_double(surface_x));
++    seat->pointer.y = round(seat->wayl->scale * wl_fixed_to_double(surface_y));
++    seat->pointer.has_motion = false;
+ 
+     if (!attempt_cursor_shape(seat->wayl, wl_pointer, serial)) {
+         reload_cursor_theme(seat, seat->wayl->scale);
+@@ -1209,14 +1200,13 @@
+     const int x = wl_fixed_to_int(surface_x);
+     const int y = wl_fixed_to_int(surface_y);
+ 
+-    const int old_x = seat->pointer.x;
+-    const int old_y = seat->pointer.y;
+ 
+     seat->pointer.x = round(seat->wayl->scale * x);
+     seat->pointer.y = round(seat->wayl->scale * y);
+ 
+-    if (old_x != 0 && old_y != 0)
++    if (seat->pointer.has_motion)
+         select_hovered_match(seat, false);
++    seat->pointer.has_motion = true;
+ }
+ 
+ static void
+--- a/wayland.h
++++ b/wayland.h
+@@ -51,6 +51,7 @@
+ 
+         int x;
+         int y;
++        bool has_motion;
+ 
+         struct wl_surface *surface;
+         struct wp_viewport *viewport;
