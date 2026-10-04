@@ -42,7 +42,7 @@
 
 <!-- development-changelog:start -->
 
-<!-- development-revision: ee2234af4eca053dd70755b9f1fa8dcaa0b29e10 -->
+<!-- development-revision: ff70db2b52a9dca2971195158129c38d200b93b2 -->
 
 ## Changes since v0.1.0
 
@@ -122,7 +122,9 @@
 - build: cache finished layers and publish one installation bundle ([7d498cd](https://github.com/kapdon/rocknix-desktop/commit/7d498cd2146d3162838bc585f9a33dce047e8c7e))
 - build: include Docker target selection in archive cache keys ([a17f979](https://github.com/kapdon/rocknix-desktop/commit/a17f97945bf74f510ceeb66371eb39bc3bdf8388))
 - fix: stop forcing nested Gamescope windows fullscreen \[skip ci\] ([ee2234a](https://github.com/kapdon/rocknix-desktop/commit/ee2234af4eca053dd70755b9f1fa8dcaa0b29e10))
+- build: assemble and validate release systems in CI \[skip ci\] ([0066557](https://github.com/kapdon/rocknix-desktop/commit/0066557ddec432ad37029d3a1eae12d265323f90))
+- fix: extract assembled releases with ROCKNIX BusyBox tar \[skip ci\] ([ff70db2](https://github.com/kapdon/rocknix-desktop/commit/ff70db2b52a9dca2971195158129c38d200b93b2))
 
-[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.1.0...ee2234af4eca053dd70755b9f1fa8dcaa0b29e10)
+[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.1.0...ff70db2b52a9dca2971195158129c38d200b93b2)
 
 <!-- development-changelog:end -->
