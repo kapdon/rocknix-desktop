@@ -3,7 +3,7 @@
 ## Highlights since v0.2.0
 
 - Isolate Desktop-launched Steam shared memory so stopped sessions cannot accumulate new host allocations, and add Show Steam for running Keep Desktop sessions.
-- Fix Gamescope SDL shutdown and bound child-process cleanup when an application closes.
+- Fix Gamescope SDL shutdown, coordinate window visibility with Vulkan presentation, and bound child-process cleanup when an application closes or the compositor crashes.
 - Make Apps and Settings menus dismiss reliably, preserve manual controller overrides, and correct Fuzzel selection when clicking immediately after pointer entry.
 
 <!-- development-changelog:start -->

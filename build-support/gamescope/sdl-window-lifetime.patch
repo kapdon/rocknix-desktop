@@ -1,0 +1,47 @@
+Subject: SDL: serialize window visibility with Vulkan presentation
+
+Hiding an SDL Wayland surface while QueuePresentKHR is active can leave Mesa
+waiting forever for a frame callback. Hold one lock across show/hide and the
+presentation path, and skip rendering while the surface is hidden. This also
+allows an application to hide and reopen its windows within one session.
+
+--- a/src/Backends/SDLBackend.cpp
++++ b/src/Backends/SDLBackend.cpp
+@@ -131,6 +131,7 @@
+ 
+ 	class CSDLBackend : public CBaseBackend
+ 	{
++		friend class CSDLConnector;
+ 	public:
+ 		CSDLBackend();
+ 		~CSDLBackend();
+@@ -198,6 +199,8 @@
+ 		std::thread m_SDLThread;
+ 		std::atomic<SDLInitState> m_eSDLInit = { SDLInitState::SDLInit_Waiting };
+ 
++		std::mutex m_WindowMutex;
++
+ 		std::atomic<bool> m_bApplicationGrabbed = { false };
+ 		std::atomic<bool> m_bApplicationVisible = { false };
+ 		std::atomic<std::shared_ptr<INestedHints::CursorInfo>> m_pApplicationCursor;
+@@ -341,6 +344,12 @@
+ 
+ 	int CSDLConnector::Present( const FrameInfo_t *pFrameInfo, bool bAsync )
+ 	{
++		// SDL must not unmap the Wayland surface during Vulkan presentation:
++		// Mesa may otherwise wait forever for a frame callback on that surface.
++		std::unique_lock windowLock( m_pBackend->m_WindowMutex );
++		if ( !m_pBackend->m_bShown )
++			return 0;
++
+ 		// TODO: Resolve const crap
+ 		std::optional oCompositeResult = vulkan_composite( (FrameInfo_t *)pFrameInfo, nullptr, false );
+ 		if ( !oCompositeResult )
+@@ -880,6 +889,7 @@
+ 						if ( steamMode )
+ 							bVisible |= !g_bFirstFrame;
+ 
++						std::unique_lock windowLock( m_WindowMutex );
+ 						if ( m_bShown != bVisible )
+ 						{
+ 							m_bShown = bVisible;

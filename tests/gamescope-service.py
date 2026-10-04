@@ -28,10 +28,10 @@ class Lifetime(unittest.TestCase):
             compositor.write_text('''import os, resource, signal, subprocess, sys, time
 mode, marker = sys.argv[1:3]
 app = subprocess.Popen(sys.argv[3:])
-if mode == 'crash':
+if mode in ('abort', 'segfault'):
  while not os.path.exists(marker): time.sleep(.01)
  resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
- os.kill(os.getpid(), signal.SIGABRT)
+ os.kill(os.getpid(), signal.SIGSEGV if mode == 'segfault' else signal.SIGABRT)
 sys.exit(app.wait())
 ''')
             daemon = root / 'detached.py'
@@ -44,13 +44,13 @@ while True: time.sleep(1)
             app.write_text('''import os, subprocess, sys, time
 subprocess.Popen([sys.executable, sys.argv[1], sys.argv[2]], start_new_session=True)
 while not os.path.exists(sys.argv[2]): time.sleep(.01)
-if sys.argv[3] == 'crash':
+if sys.argv[3] in ('abort', 'segfault'):
  while True: time.sleep(1)
 ''')
             # Models a shared provider outside the launch service. It is not FEX.
             unrelated = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(90)'])
             try:
-                for mode, expected in [('normal', 0), ('crash', 134)]:
+                for mode, expected in [('normal', 0), ('abort', 134), ('segfault', 139)]:
                     with self.subTest(mode=mode):
                         marker = root / (mode + '.pid')
                         code = api['launch']([sys.executable, str(compositor), mode, str(marker)],
@@ -65,12 +65,13 @@ if sys.argv[3] == 'crash':
                         self.assertIsNone(unrelated.poll())
                 results = [json.loads(p.read_text()) for p in
                     root.glob('rocknix-desktop/gamescope-sessions/*.json')]
-                self.assertEqual(len(results), 2)
+                self.assertEqual(len(results), 3)
                 self.assertTrue(all(r['cleanup_complete'] and r['service']['ControlGroup'] == '' for r in results))
                 normal = next(r for r in results if r['application'] == 0)
                 self.assertEqual(normal['service']['Result'], 'timeout')
-                crashed = next(r for r in results if r['compositor'] == -signal.SIGABRT)
-                self.assertIn(crashed['service']['Result'], ('exit-code', 'timeout'))
+                for signum in (signal.SIGABRT, signal.SIGSEGV):
+                    crashed = next(r for r in results if r['compositor'] == -signum)
+                    self.assertIn(crashed['service']['Result'], ('exit-code', 'timeout'))
             finally:
                 unrelated.terminate()
                 unrelated.wait(timeout=5)

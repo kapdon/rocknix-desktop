@@ -12,9 +12,10 @@ sed -i "s/glslang-tools:native/glslang-tools:$(dpkg --print-architecture)/" debi
 sed -i 's/build_machine.cpu_family()/host_machine.cpu_family()/g' layer/meson.build
 # Give the patched package an identifiable version above the Debian backport.
 cat >debian/changelog.new <<'EOF'
-gamescope (3.16.22+ds-1~bpo13+1+rocknix1) trixie-backports; urgency=medium
+gamescope (3.16.22+ds-1~bpo13+1+rocknix2) trixie-backports; urgency=medium
 
   * Backport upstream SDL backend thread shutdown (16a44df7).
+  * Serialize SDL window visibility with Vulkan presentation.
   * Bound reaper TERM-to-KILL cleanup and keep signal handlers minimal.
   * Correct Vulkan layer artifact names when cross-compiling.
 

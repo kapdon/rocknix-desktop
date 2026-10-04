@@ -10,7 +10,12 @@ match this failure pattern. The packaged SDL backend also destroyed a joinable `
 `steamcompmgr_exit`, causing `std::terminate` on normal teardown. The guest
 package backports upstream [16a44df7](https://github.com/ValveSoftware/gamescope/commit/16a44df7b4a067daf62a38d73d87a0a9cdca45a3):
 post `SDL_QUIT`, return from the event loop, and join the SDL thread before
-backend destruction. The package also bounds reaper shutdown: signal handlers
+backend destruction. Window visibility and Vulkan presentation also share a
+lock: SDL cannot unmap the outer Wayland surface while a frame is being
+presented, and hidden windows are not presented to. Without this ordering,
+closing the last app window can leave Mesa waiting indefinitely for a Wayland
+frame callback. The surface can still hide and reopen during the same session.
+The package also bounds reaper shutdown: signal handlers
 only set a flag, primary-child waits poll that flag, and descendant cleanup
 escalates TERM to KILL after three seconds. After five seconds it returns control
 to Gamescope; the enclosing systemd service must still prove the cgroup empty.
@@ -67,7 +72,7 @@ cleanup boundary is confirmed.
 real child processes plus mocked service control. On a machine with a running
 user systemd manager, `python3 tests/gamescope-service.py` additionally verifies
 that detached TERM-resistant descendants are gone after normal exit and a
-compositor abort, while an unrelated process survives. These synthetic fixtures
+compositor abort or segfault, while an unrelated process survives. These synthetic fixtures
 do not replace Mousepad/PD2, Wine cleanup or shared FEX validation on the RP6.
 
 `python3 tests/gamescope-reaper.py /path/to/gamescopereaper` tests the actual

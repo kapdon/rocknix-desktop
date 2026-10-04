@@ -183,7 +183,7 @@ RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Keep Debian's package/dependency layout, with the upstream SDL thread join fix.
+# Keep Debian's package/dependency layout, with SDL lifetime and reaper fixes.
 COPY --from=gamescope-builder /opt/rocknix-gamescope/ /tmp/rocknix-gamescope/
 RUN apt-get update \
     && apt-get install -y --no-install-recommends /tmp/rocknix-gamescope/*.deb \
