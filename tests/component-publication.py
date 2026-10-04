@@ -39,11 +39,11 @@ with tempfile.TemporaryDirectory() as temporary:
     assert not publisher.upload('development', payload.name, sha, size)
     assert len(calls) == 1
     remote[payload.name]['digest'] = 'sha256:' + '0' * 64
-    rejects(publisher.upload, 'development', payload.name, sha, size, payload)
-    assert len(calls) == 1
+    assert publisher.upload('development', payload.name, sha, size, payload)
+    assert len(calls) == 2
     remote.clear()
     rejects(publisher.upload, 'development', payload.name, sha, size)
-    assert len(calls) == 1
+    assert len(calls) == 2
     print('PASS: publisher skips verified existing assets and rejects mismatches or unavailable misses')
 
     C = P['C']; components = {}
@@ -66,7 +66,7 @@ with tempfile.TemporaryDirectory() as temporary:
             if self.fail:
                 raise RuntimeError('interrupted upload')
         def assets(self, tag):
-            return {event[2]: {'updated_at': '2026-10-02T01:00:00Z'} for event in events if event[0] == 'upload'}
+            return {'obsolete.json': {'id': 123}, **{event[2]: {'id': 456} for event in events if event[0] == 'upload'}}
         def gh(self, *args, **kwargs):
             events.append(('gh', *args))
             return SimpleNamespace(stdout='c' * 40)
@@ -87,12 +87,12 @@ with tempfile.TemporaryDirectory() as temporary:
     with patch.dict(state, Publisher=FakePublisher), patch.dict(P['B'], input_keys=lambda: ({r: 'b' * 64 for r in C['ROLES']}, {})), \
          patch.object(state['subprocess'], 'check_output', output), patch.object(state['subprocess'], 'run', generate_notes):
         P['publish'](manifest, work, 'owner/repo')
-        pointers = [i for i, e in enumerate(events) if e[:4] == ('gh', 'release', 'upload', 'development')]
-        assert len(pointers) == 1
         assert events[0] == ('notes',)
         assert (manifest.parent / 'CHANGELOG.md').read_text() == 'changelog fixture'
         uploads = [i for i, e in enumerate(events) if e[0] == 'upload']
-        assert len(uploads) == 4 and max(uploads) < pointers[0]
+        deletes = [i for i, e in enumerate(events) if '--method' in e and 'DELETE' in e]
+        assert len(uploads) == 2 and len(deletes) == 1 and max(uploads) < deletes[0]
+        assert not any('latest.json' in str(e) or '.py' in str(e) for e in events if e[0] == 'upload')
         events.clear()
         P['publish'](manifest, work, 'owner/repo', components_only=True)
         assert not events
@@ -117,4 +117,4 @@ with tempfile.TemporaryDirectory() as temporary:
         value['local_override'] = True; manifest.write_bytes(C['encoded'](value)); events.clear()
         rejects(P['publish'], manifest, work, 'owner/repo')
         assert not events
-    print('PASS: immutable uploads precede pointer; failed uploads and local overrides cannot advance a channel')
+    print('PASS: two verified uploads precede CI cleanup; failures cannot publish release notes or remove old assets')

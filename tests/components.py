@@ -171,41 +171,22 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
     assert all(B['Store'](restored).find(r, spec['input_key']) == spec for r, spec in new['components'].items())
     print('PASS: Actions cache stage/restore preserves all verified archive bindings')
 
-    # CI packages an already validated rootfs; the device only downloads/extracts.
+    # CI creates a finished archive containing all installation metadata.
     P = runpy.run_path(str(PROJECT / 'scripts/publish-components.py'))
     bundle_source = work / 'bundle-source.json'; bundle_source.write_bytes(C['encoded'](new))
     bundle_output = work / 'bundle-output'; bundle_output.mkdir()
-    published, candidate_manifest, helper, bundle, checksum = P['prepare_release'](bundle_source, store.directory, bundle_output, 'development')
-    assert published['bundle']['format'] == 'assembled-tar-xz'
-    def bundle_download(repository, tag, asset, target, expected, size):
-        assert tag == 'development' and asset == bundle.name
-        assert expected == C['digest'](bundle) and size == bundle.stat().st_size
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(bundle, target)
-        return target
-    downloaded = work / 'downloaded-system'
-    with patch.dict(C['download_release'].__globals__, fetch=bundle_download,
-                    assemble=lambda *_: (_ for _ in ()).throw(AssertionError('device assembly forbidden'))):
-        C['download_release'](published, work / 'downloaded-cache', 'owner/repo', downloaded)
-        assert (downloaded / 'rootfs/usr/bin/sudo').stat().st_mode & 0o7777 == 0o4755
-        assert (downloaded / 'rootfs/var/lib/service/data').stat().st_uid == 101
-        assert (downloaded / 'rootfs/var/lib/service/data').stat().st_gid == 102
-        assert json.loads((downloaded / 'components.json').read_text()) == published
-        assert (downloaded / 'desktop-integration.tar.gz').is_file()
-        wrong = copy.deepcopy(published); wrong['commit'] = 'b' * 40
-        rejects(C['download_release'], wrong, work / 'wrong-cache', 'owner/repo', work / 'wrong-system')
-        assert not (work / 'wrong-system').exists()
-    rejects(C['download_release'], new, work / 'missing-cache', 'owner/repo', work / 'missing-system')
-    # A corrupt cached final archive must be downloaded again and rejected before tar.
-    badcache = work / 'corrupt-cache'; badcache.mkdir()
-    bad = badcache / 'system.tar.xz'; bad.write_bytes(b'corrupt')
-    def corrupt_download(args, **kwargs):
-        assert args[0] == 'curl', 'corruption reached extraction'
-        Path(args[-1]).write_bytes(b'corrupt')
-    with patch('subprocess.run', side_effect=corrupt_download):
-        rejects(C['download_release'], published, badcache, 'owner/repo', work / 'corrupt-system')
-    assert not (work / 'corrupt-system').exists()
-    print('PASS: CI-assembled release preserves ownership/setuid; device skips assembly and rejects corruption/provenance mismatch')
+    published, bundle, checksum = P['prepare_release'](bundle_source, store.directory, bundle_output, 'development')
+    assert bundle.name == 'rocknix-desktop-rp6-arm64.tar.xz'
+    assert checksum.read_text().split() == [C['digest'](bundle), bundle.name]
+    downloaded = work / 'downloaded-system'; downloaded.mkdir()
+    subprocess.run(['tar', '-xJf', str(bundle), '--numeric-owner', '-C', str(downloaded)], check=True)
+    assert (downloaded / 'rootfs/usr/bin/sudo').stat().st_mode & 0o7777 == 0o4755
+    assert (downloaded / 'rootfs/var/lib/service/data').stat().st_uid == 101
+    assert (downloaded / 'rootfs/var/lib/service/data').stat().st_gid == 102
+    assert json.loads((downloaded / 'components.json').read_text()) == published
+    assert json.loads((downloaded / 'release-info.json').read_text())['commit'] == published['commit']
+    assert (downloaded / 'desktop-integration.tar.gz').is_file()
+    print('PASS: finished tarball contains CI metadata and preserves ownership/setuid on direct extraction')
 
     allfiles = {r: store.directory / spec['asset'] for r, spec in new['components'].items()}
     selected = lambda profile: {r: allfiles[r] for r in C['PROFILES'][profile]}
@@ -240,12 +221,13 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
     candidate = work / 'upgrade-candidate'; candidate.mkdir()
     with patch.dict(upgrade['extract'].__globals__,
                     helper_path=lambda _: PROJECT / 'payload/bin/rocknix-components',
-                    safe_directory=lambda _: None), patch.dict(C['download_release'].__globals__, fetch=bundle_download):
-        assert upgrade['extract'](release_path, C['digest'](release_path), candidate, components=C) == 'a' * 40
+                    safe_directory=lambda _: None):
+        assert upgrade['extract'](bundle, C['digest'](bundle), candidate, components=C) == 'a' * 40
     assert (candidate / 'rootfs/etc/shadow').exists()
     assert (candidate / 'desktop-integration.tar.gz').is_file()
     assert (candidate / 'rootfs/opt/rocknix-xwayland/bin/xwayland-satellite').is_file()
-    print('PASS: real format-2 upgrade extraction verifies manifest and stages a complete replacement')
+    rejects(upgrade['extract'], bundle, '0' * 64, work / 'corrupt-target')
+    print('PASS: updater verifies the tarball checksum and consumes CI-produced metadata')
 
 
     legacy = copy.deepcopy(new)

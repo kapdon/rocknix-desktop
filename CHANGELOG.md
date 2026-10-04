@@ -24,7 +24,9 @@
 - **Simpler cached builds:** Cache finished archives in GitHub Actions and rebuild
   only changed layers. Publish one complete installation bundle per development
   or versioned release. CI validates and assembles the complete system; devices
-  download and extract it without component assembly or integration generation.
+  download and extract it directly through `install.sh`, without a separately
+  downloaded helper, component assembly or integration generation. Releases contain
+  only the finished tarball and checksum; CI embeds all installation metadata.
 - **Apps and Settings toggles:** Tap either button again to close its open menu.
 - **Better cache reuse:** Preserve Trash packages and remote Docker layers, and
   include the keyboard layout in its compiler inputs.

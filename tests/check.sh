@@ -152,7 +152,6 @@ grep -q 'dev/install.sh' README.md
 bash tests/persistence.sh
 bash tests/upgrade.sh
 bash tests/release-selection.sh
-bash tests/release-publication.sh
 python3 tests/versioned-components.py
 python3 tests/development-changelog.py
 bash tests/installer-flow.sh

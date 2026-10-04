@@ -19,6 +19,8 @@ def package(manifest, store, output):
     with tempfile.TemporaryDirectory(prefix='assembled-release-', dir=output.parent) as scratch:
         system = Path(scratch) / 'system'
         C['assemble'](value, files, system, 'install')
+        (system / 'release-info.json').write_bytes(C['encoded']({
+            'commit': value['commit'], 'built_at': value['built_at']}))
         assembled = time.monotonic()
         # This process and tar share the caller's fakeroot session: archive
         # service owners, hardlinks and setuid modes survive CI's unprivileged UID.

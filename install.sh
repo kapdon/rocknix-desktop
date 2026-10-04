@@ -162,10 +162,10 @@ verify_bundle() {
 }
 
 record_release() {
-  # The release record describes the exact downloaded and verified bundle.
+  # Copy CI-produced metadata unchanged; never generate it on the device.
   [ -x "$BASE/bin/rocknix-tools-metadata" ] || return 0
   [ ! -L "$BASE/release-info.json" ] || fail 'release metadata must not be a symlink'
-  cp "$STAGING/latest.json" "$BASE/release-info.json"
+  cp "$STAGING/release-info.json" "$BASE/release-info.json"
   "$BASE/bin/rocknix-tools-metadata"
 }
 
@@ -223,56 +223,22 @@ main() {
   STAGING=$(mktemp -d "$WORKSPACE/install.XXXXXX")
   trap 'rc=$?; if [ "$rc" = 0 ]; then rm -rf -- "$STAGING"; else
     printf "Installation stopped. Diagnostics/staging retained at %s\n" "$STAGING" >&2; fi' EXIT
-  if [ "$VERSION" = latest ]; then
-    curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
-      -H 'Accept: application/vnd.github+json' \
-      "https://api.github.com/repos/$REPOSITORY/releases/latest" -o "$STAGING/latest-release.json" ||
-      fail 'cannot determine the latest stable release'
-    VERSION=$(jq -er 'if .draft == false and .prerelease == false then .tag_name else error("not a stable release") end' \
-      "$STAGING/latest-release.json") || fail 'invalid latest release metadata'
-    [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'invalid latest release tag'
-  fi
   local url="https://github.com/$REPOSITORY/releases/download/$VERSION"
-  curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
-    --retry-all-errors "$url/latest.json" -o "$STAGING/latest.json"
+  [ "$VERSION" != latest ] || url="https://github.com/$REPOSITORY/releases/latest/download"
   local revision expected
-  revision=$(jq -er '.commit' "$STAGING/latest.json")
-  expected=$(jq -er '.sha256' "$STAGING/latest.json")
-  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || fail 'invalid build commit'
-  [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || fail 'invalid build checksum'
-  ASSET=$(jq -er '.asset' "$STAGING/latest.json")
-  local release_format
-  release_format=$(jq -r '.format // 1' "$STAGING/latest.json")
-  case "$release_format" in
-    1) [[ "$ASSET" =~ ^rocknix-desktop-rp6-arm64-${revision}(-r[0-9]+a[0-9]+)?\.tar\.xz$ ]] || fail 'invalid build filename' ;;
-    2) [[ "$ASSET" = "rocknix-desktop-components-${revision}-${expected}.json" ]] || fail 'invalid component manifest filename' ;;
-    *) fail 'unsupported release format; update the installer' ;;
-  esac
+  ASSET=rocknix-desktop-rp6-arm64.tar.xz
   check_power
-  printf 'Downloading ROCKNIX Desktop (Sway) %s (%s)\n' "$VERSION" "$revision"
+  printf 'Downloading ROCKNIX Desktop (Sway) %s\n' "$VERSION"
+  curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
+    "$url/$ASSET.sha256" -o "$STAGING/$ASSET.sha256"
   curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
     "$url/$ASSET" -o "$STAGING/$ASSET"
-  printf '%s  %s\n' "$expected" "$ASSET" >"$STAGING/$ASSET.sha256"
   verify_bundle "$STAGING"
-  if [ "$release_format" = 2 ]; then
-    local helper helper_sha helper_size
-    helper=$(jq -er '.bootstrap.asset' "$STAGING/latest.json")
-    helper_sha=$(jq -er '.bootstrap.sha256' "$STAGING/latest.json")
-    helper_size=$(jq -er '.bootstrap.size' "$STAGING/latest.json")
-    [[ "$helper_sha" =~ ^[0-9a-f]{64}$ && "$helper" = "rocknix-components-${helper_sha}.py" &&
-       "$helper_size" =~ ^[0-9]{1,7}$ ]] || fail 'invalid component bootstrap'
-    [ "$helper_size" -le 1048576 ] || fail 'component bootstrap is too large'
-    curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 --max-filesize 1048576 \
-      "$url/$helper" -o "$STAGING/component-installer.py"
-    [ "$(wc -c <"$STAGING/component-installer.py")" -eq "$helper_size" ] || fail 'component bootstrap size mismatch'
-    printf '%s  %s\n' "$helper_sha" "$STAGING/component-installer.py" | sha256sum -c -
-    # Both actions use a complete new guest system; home lives outside it.
-    python3 "$STAGING/component-installer.py" --manifest "$STAGING/$ASSET" \
-      --repository "$REPOSITORY" --cache "$STAGING/components" --profile update --output "$STAGING/bundle"
-  else
-    mkdir "$STAGING/bundle"
-    tar -xJf "$STAGING/$ASSET" -C "$STAGING/bundle"
-  fi
+  expected=$(awk 'NR == 1 {print $1}' "$STAGING/$ASSET.sha256")
+  mkdir "$STAGING/bundle"
+  tar -xJf "$STAGING/$ASSET" --numeric-owner -C "$STAGING/bundle"
+  revision=$(jq -er '.commit' "$STAGING/bundle/release-info.json")
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || fail 'invalid build commit'
   grep -Fxq "commit=$revision" "$STAGING/bundle/build-info" || fail 'bundle provenance mismatch'
   # Verify required integration before probing or changing installed data.
   [ -f "$STAGING/bundle/payload/systemd/rocknix-desktop.service" ] &&
@@ -301,16 +267,15 @@ main() {
   if [ "$requested" = update ] && [ "$INSTALL_STATUS" != healthy ]; then
     fail 'Update is unavailable for an absent or invalid installation. Run Install to replace Desktop data.'
   fi
-  if [ "$action" = Update ] && [ "$INSTALLED_REVISION" = "$revision" ] &&
-     [ -f "$BASE/release-info.json" ] && [ ! -L "$BASE/release-info.json" ] &&
-     jq -e --arg commit "$revision" --arg sha256 "$expected" \
-       '.commit == $commit and .sha256 == $sha256' "$BASE/release-info.json" >/dev/null; then
+  if [ "$action" = Update ] && [ "$INSTALLED_REVISION" = "$revision" ]; then
+    cp "$STAGING/bundle/release-info.json" "$STAGING/release-info.json"
     record_release
     printf 'Already up to date; release metadata refreshed.\n'
     return
   fi
   if [ "$yes" != 1 ]; then confirm_action "$action" || return 0; fi
   check_power
+  cp "$STAGING/bundle/release-info.json" "$STAGING/release-info.json"
   if [ "$action" = Update ]; then
     # The upgrader acquires this same lock and revalidates the installation.
     # Close our descriptor first to avoid deadlocking the child process.

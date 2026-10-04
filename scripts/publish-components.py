@@ -1,11 +1,10 @@
 #!/usr/bin/python3
-"""Publish immutable components first, then advance the rolling release pointer."""
+"""Publish the CI-built tarball and checksum, then retire old rolling assets."""
 import argparse
 import json
 import os
 from pathlib import Path
 import runpy
-import shutil
 import subprocess
 import tempfile
 
@@ -41,16 +40,18 @@ class Publisher:
         assets = self.assets(tag)
         if name in assets:
             item = assets[name]
-            if item['state'] != 'uploaded' or item['size'] != size or item.get('digest') != 'sha256:' + digest:
+            if item['state'] == 'uploaded' and item['size'] == size and item.get('digest') == 'sha256:' + digest:
+                return False
+            if tag != 'development':
                 raise RuntimeError('immutable asset collision or incomplete upload: ' + name)
-            return False
         if len(assets) >= 990:
             raise RuntimeError('release is full; retire old development bundles before publishing')
         if source is None or not source.is_file() or C['digest'](source) != digest or source.stat().st_size != size:
             raise RuntimeError('missing verified local artifact: ' + name)
         if source.name != name:
             raise RuntimeError('asset filename mismatch')
-        self.gh('release', 'upload', tag, source, '--repo', self.repository)
+        self.gh('release', 'upload', tag, source, '--repo', self.repository,
+                *(['--clobber'] if tag == 'development' else []))
         self.known.pop(tag)
         item = self.assets(tag).get(name)
         if not item or item.get('digest') != 'sha256:' + digest or item['size'] != size or item['state'] != 'uploaded':
@@ -69,17 +70,10 @@ def prepare_release(manifest, store, destination, tag):
     if bundle.stat().st_size >= 2 * 1024**3:
         raise RuntimeError('bundle exceeds release asset limit')
     bundle_sha = C['digest'](bundle)
-    bundle = bundle.rename(destination / f'rocknix-desktop-{revision}-{bundle_sha}.tar.xz')
+    bundle = bundle.rename(destination / 'rocknix-desktop-rp6-arm64.tar.xz')
     checksum = destination / (bundle.name + '.sha256')
     checksum.write_text(f'{bundle_sha}  {bundle.name}\n')
-    value['bundle'] = {'format': 'assembled-tar-xz', 'tag': tag, 'asset': bundle.name, 'sha256': bundle_sha, 'size': bundle.stat().st_size}
-    candidate = destination / 'release.json'; candidate.write_bytes(C['encoded'](value))
-    sha = C['digest'](candidate)
-    candidate = candidate.rename(destination / f'rocknix-desktop-components-{revision}-{sha}.json')
-    helper_source = PROJECT / 'payload/bin/rocknix-components'
-    helper = destination / f"rocknix-components-{C['digest'](helper_source)}.py"
-    shutil.copyfile(helper_source, helper)
-    return value, candidate, helper, bundle, checksum
+    return value, bundle, checksum
 
 
 def publish(manifest, store, repository, components_only=False):
@@ -95,7 +89,7 @@ def publish(manifest, store, repository, components_only=False):
     with tempfile.TemporaryDirectory(prefix='component-publication-') as scratch:
         scratch = Path(scratch)
         # Generate release highlights and the full changelog before publication.
-        # Record the latter on dev after the pointer, notes and tag all succeed.
+        # Record the latter on dev after the assets, notes and tag all succeed.
         notes = manifest.parent / 'development-notes.md'
         if not components_only:
             with notes.open('w') as stream:
@@ -106,20 +100,16 @@ def publish(manifest, store, repository, components_only=False):
         if components_only:
             print('Build validated; benchmark leaves all releases unchanged.')
             return
-        value, candidate, helper, bundle, checksum = prepare_release(manifest, store, scratch, 'development')
-        for artifact in (bundle, checksum, candidate, helper):
+        value, bundle, checksum = prepare_release(manifest, store, scratch, 'development')
+        for artifact in (bundle, checksum):
             publisher.upload('development', artifact.name, C['digest'](artifact), artifact.stat().st_size, artifact)
-        sha, name = C['digest'](candidate), candidate.name
-        helper_sha = C['digest'](helper)
-        pointer = {'format': 2, 'commit': revision, 'asset': name, 'sha256': sha,
-                   'size': candidate.stat().st_size, 'built_at': value['built_at'],
-                   'released_at': publisher.assets('development')[name]['updated_at'],
-                   'bootstrap': {'asset': helper.name, 'sha256': helper_sha, 'size': helper.stat().st_size}}
-        latest = scratch / 'latest.json'; latest.write_bytes(C['encoded'](pointer))
-        publisher.gh('release', 'upload', 'development', latest, '--clobber', '--repo', repository)
         publisher.gh('release', 'edit', 'development', '--repo', repository, '--prerelease', '--latest=false',
                      '--title', 'Rolling development build', '--notes-file', notes)
-        # Retain previous immutable bundles until explicit release cleanup.
+        # Only the current tarball and checksum remain on the rolling release.
+        # New uploads are verified before deleting any superseded asset.
+        for name, asset in publisher.assets('development').items():
+            if name not in (bundle.name, checksum.name):
+                publisher.gh('api', f'repos/{repository}/releases/assets/{asset["id"]}', '--method', 'DELETE')
         tag = publisher.gh('api', f'repos/{repository}/git/tags', '--method', 'POST',
                            '-f', 'tag=development', '-f', f'object={revision}', '-f', 'type=commit',
                            '-f', f'message=Rolling development components ({revision})', '--jq', '.sha',

@@ -13,7 +13,6 @@ from pathlib import Path, PurePosixPath
 import re
 import runpy
 import shutil
-import subprocess
 import tarfile
 import tempfile
 
@@ -121,31 +120,6 @@ def release(value):
     return value
 
 
-def fetch(repository, tag, asset, target, expected=None, size=None):
-    if not re.fullmatch('[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
-        raise RuntimeError('invalid repository')
-    if not re.fullmatch('[A-Za-z0-9_.-]+', tag) or not re.fullmatch('[A-Za-z0-9_.-]+', asset):
-        raise RuntimeError('invalid asset location')
-    target = Path(target)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists() and expected and target.stat().st_size == size and digest(target) == expected:
-        return target
-    fd, name = tempfile.mkstemp(prefix='.download-', dir=target.parent)
-    os.close(fd)
-    temporary = Path(name)
-    try:
-        subprocess.run(['curl', '--fail', '--location', '--proto', '=https', '--proto-redir', '=https',
-                        '--retry', '3', '--max-time', '1800',
-                        f'https://github.com/{repository}/releases/download/{tag}/{asset}',
-                        '-o', str(temporary)], check=True)
-        if expected and (temporary.stat().st_size != size or digest(temporary) != expected):
-            raise RuntimeError('component download integrity mismatch')
-        temporary.replace(target)
-    finally:
-        temporary.unlink(missing_ok=True)
-    return target
-
-
 def materialize(value, cache, repository, profile):
     release(value)
     cache = Path(cache)
@@ -155,44 +129,6 @@ def materialize(value, cache, repository, profile):
            and digest(path) == value['components'][role]['sha256'] for role, path in files.items()):
         return files
     raise RuntimeError('missing local component archives; restore the build cache first')
-
-
-def download_release(value, cache, repository, target):
-    """Download and extract a CI-validated system; never assemble on the device."""
-    release(value)
-    bundle = value.get('bundle', {})
-    if (bundle.get('format') != 'assembled-tar-xz' or
-            not HEX.fullmatch(str(bundle.get('sha256', ''))) or
-            type(bundle.get('size')) is not int or not 0 < bundle['size'] < 2 * 1024**3):
-        raise RuntimeError('release must contain a CI-assembled system archive')
-    target = Path(target)
-    if target.exists() or target.is_symlink():
-        raise RuntimeError('release destination must be new')
-    target.parent.mkdir(parents=True, exist_ok=True)
-    needed = sum(value['components'][r]['unpacked_size'] for r in profile_roles(value, 'install'))
-    if shutil.disk_usage(target.parent).free < needed + bundle['size'] + 256 * 1024**2:
-        raise RuntimeError('insufficient installation space')
-    archive = fetch(repository, bundle['tag'], bundle['asset'], Path(cache) / 'system.tar.xz',
-                    bundle['sha256'], bundle['size'])
-    temporary = Path(tempfile.mkdtemp(prefix='.release-', dir=target.parent))
-    try:
-        # CI validates the complete path/link graph and ownership before packaging.
-        # The finished archive is checksum-bound above. Extract it once using tar,
-        # preserving numeric owners, hardlinks and setuid bits for the UID shift.
-        subprocess.run(['tar', '-xJf', str(archive), '--numeric-owner',
-                        '-C', str(temporary)], check=True)
-        embedded = json.loads((temporary / 'components.json').read_text())
-        if embedded != {k: v for k, v in value.items() if k != 'bundle'}:
-            raise RuntimeError('assembled release manifest mismatch')
-        if ('commit=' + value['commit'] + '\n') not in (temporary / 'build-info').read_text():
-            raise RuntimeError('assembled release provenance mismatch')
-        (temporary / 'components.json').write_bytes(encoded(value))
-        temporary.rename(target)
-    finally:
-        if temporary.exists():
-            shutil.rmtree(temporary)
-    archive.unlink()
-    return target
 
 
 def validate_archives(value, files, profile):
@@ -342,11 +278,8 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
     value = release(json.loads(args.manifest.read_text()))
-    if 'bundle' in value:
-        download_release(value, args.cache, args.repository, args.output)
-    else:
-        files = materialize(value, args.cache, args.repository, args.profile)
-        assemble(value, files, args.output, args.profile)
+    files = materialize(value, args.cache, args.repository, args.profile)
+    assemble(value, files, args.output, args.profile)
 
 
 if __name__ == '__main__':

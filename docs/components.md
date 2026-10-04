@@ -1,8 +1,7 @@
 # Component build and release format
 
 Local, development and versioned builds use `scripts/build-components.py`.
-`build-rootfs.sh` invokes the same component builder. Historical full archives
-remain readable for explicit fresh installs; Update requires a component manifest.
+`build-rootfs.sh` invokes the same component builder. CI produces the complete installable tarball; Install and Update consume it directly.
 
 Actions caches each finished compressed archive independently. Cache hits skip
 compilation, export and compression. Cache misses rebuild only the affected
@@ -44,7 +43,7 @@ Keys contain source bytes, modes, links, selected Docker stages, build architect
 where applicable, and the explicit dependency lock. Commit IDs, clocks and
 per-run export attestations are excluded. Keys identify inputs; separate SHA-256
 digests identify actual compressed artifact bytes. Existing bindings are immutable.
-The source commit and timestamp live in a small release manifest.
+The source commit and timestamp are generated in CI and stored inside the tarball.
 
 `build-support/components/dependencies.json` pins the Debian and Debian-security
 snapshot used for component builds. Refresh it explicitly to adopt distribution
@@ -91,37 +90,37 @@ inside the same fakeroot session; do not deploy its loose directory as a
 metadata-preserving copy. The device installer extracts the completed archive as actual host root.
 
 The same command with `--profile update` includes the same complete system.
-A downloaded release manifest fetches its CI-assembled system archive, verifies
-the checksum and embedded provenance, and extracts it with numeric owners and
-permissions preserved. Component validation and integration generation run only
-in the CI packaging step. `packaging-timings.json` records assembly/validation and
-compression separately from component build timing.
+The installer downloads only `rocknix-desktop-rp6-arm64.tar.xz` and its
+`.sha256` file, verifies the checksum, and extracts the system with numeric owners
+and permissions preserved. All build metadata is generated in CI and stored
+inside the archive. No release API lookup, extra helper download, or device-side
+metadata generation is needed. `packaging-timings.json` is a CI artifact, not a
+release asset, and records assembly/validation and compression separately.
 
-## Publication and compatibility
+## Publication
 
-The development and versioned workflows calculate exact input keys, restore each
-finished archive with `actions/cache`, resolve misses, and set up Buildx only when
-compilation is necessary. Both use the same builder and dependency lock.
+The development and versioned workflows restore individual archives from Actions
+cache and rebuild only misses. CI validates their combined paths, assembles the
+system, generates integration data, and compresses the final tarball.
 
-Publication uploads and verifies the bundle, checksum, manifest and bootstrap
-helper before advancing `latest.json`. Only `development` and explicit versioned
-releases receive public assets. Partial uploads leave the previous pointer intact.
-The manifest retains format 2 so the installer and transactional updater keep
-using the established complete-system replacement path. Its `bundle` field
-identifies the one immutable tar download by release tag, name, size and SHA-256.
+Every new release contains exactly two assets: the tarball and its SHA-256 file.
+The rolling workflow uploads and verifies both, then removes superseded assets.
+Versioned releases remain drafts until both assets are verified. The installer
+uses fixed filenames under the selected release URL; latest stable uses GitHub's
+`releases/latest/download` redirect. Historical releases use their corresponding
+installer version; this format does not add migration support for old artifacts.
 
 For a branch benchmark, dispatch `development.yml` with `benchmark=true`. It
-builds and populates Actions caches, but changes no releases, tags, pointers,
+builds and populates Actions caches, but changes no releases, tags,
 notes or changelog. Cached entries are scoped according to GitHub's branch cache
 rules; benchmark and release comparisons should use the same branch. Plans and
 timings are saved as workflow artifacts. A cold build seeds the caches; subsequent
 runs measure reuse and selective invalidation. Cache transfer and bundle upload
 time remain part of the hosted job even when no compiler runs.
 
-Publication is serialized by the workflow. GitHub's pointer clobber operation is
-not atomic; the installer retries a brief missing-pointer window. Manual
-publishers must obey the same single-writer rule. Keep bundles referenced by
-supported releases when retiring old development assets.
+Publication is serialized by the workflow. Replacing the rolling tarball and
+checksum is not atomic. An installation attempted during replacement can fail its
+checksum check before any installed data changes; retry once publication finishes.
 
 After a successful development publication, Actions records the full cumulative
 commit history in [CHANGELOG.md](../CHANGELOG.md), comparing the published source

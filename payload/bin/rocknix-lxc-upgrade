@@ -162,29 +162,25 @@ def atomic(path, data, mode=0o644):
 
 
 def extract(bundle, expected, target, assembled=None, components=None):
-    """Verify and assemble a complete replacement from immutable components."""
-    if bundle.suffix != '.json':
-        raise RuntimeError('updates require a component release manifest; legacy exports are unsupported')
+    """Consume a checksum-verified, CI-assembled system archive."""
     with bundle.open('rb') as stream:
         if hashlib.file_digest(stream, 'sha256').hexdigest() != expected:
-            raise RuntimeError('component manifest checksum mismatch')
-    components = components or runpy.run_path(str(helper_path('rocknix-components')))
-    value = components['release'](json.loads(bundle.read_text()))
+            raise RuntimeError('system archive checksum mismatch')
     if assembled is None:
-        assembled = target / 'components-candidate'
-        components['download_release'](value, bundle.parent / 'components',
-                                       'kapdon/rocknix-desktop', assembled)
+        assembled = target / 'system-candidate'
+        assembled.mkdir()
+        subprocess.run(['tar', '-xJf', str(bundle), '--numeric-owner', '-C', str(assembled)], check=True)
     else:
-        # The downloader has already assembled this root-owned candidate under
-        # the installation lock. Consume it once instead of unpacking twice.
+        # Consume the root-owned candidate already extracted by install.sh.
         assembled = assembled.absolute()
         safe_directory(assembled)
         no_mounts(assembled)
         if assembled == target or assembled in target.parents or target in assembled.parents:
-            raise RuntimeError('overlapping component staging paths')
-        if json.loads((assembled / 'components.json').read_text()) != value:
-            raise RuntimeError('staged component manifest mismatch')
-        validate_candidate(assembled)
+            raise RuntimeError('overlapping system staging paths')
+    components = components or runpy.run_path(str(helper_path('rocknix-components')))
+    value = components['release'](json.loads((assembled / 'components.json').read_text()))
+    if validate_candidate(assembled) != value['commit']:
+        raise RuntimeError('system archive manifest mismatch')
     for source in assembled.iterdir():
         source.rename(target / source.name)
     assembled.rmdir()

@@ -35,15 +35,15 @@ print('PASS: retired host payload files removed without following redirects')
 extract = api['extract']
 with tempfile.TemporaryDirectory() as directory:
     base = Path(directory)
-    bundle = base / 'legacy.tar.xz'; bundle.write_bytes(b'legacy')
+    bundle = base / 'corrupt.tar.xz'; bundle.write_bytes(b'corrupt')
     target = base / 'stage'; target.mkdir()
     try:
-        extract(bundle, hashlib.sha256(bundle.read_bytes()).hexdigest(), target)
-        raise AssertionError('legacy export accepted for update')
+        extract(bundle, '0' * 64, target)
+        raise AssertionError('corrupt archive accepted for update')
     except RuntimeError as error:
-        assert 'component release manifest' in str(error)
+        assert 'checksum mismatch' in str(error)
     assert not list(target.iterdir())
-print('PASS: legacy export updates rejected before extraction')
+print('PASS: corrupt system archives rejected before extraction')
 
 # Simulate ENOSPC at the durable-write boundary: old control files and guards
 # must survive, and the incomplete atomic temporary must be removed.

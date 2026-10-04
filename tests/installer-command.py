@@ -25,7 +25,7 @@ installer = (root / 'install.sh').read_text()
 guard = 'if [[ "${BASH_SOURCE[0]:-$0}" = "$0" ]]; then'
 assert guard in installer, 'bash -c entry point must handle an unset BASH_SOURCE'
 candidate, previous = '1' * 40, '2' * 40
-asset = f'rocknix-desktop-rp6-arm64-{candidate}.tar.xz'
+asset = 'rocknix-desktop-rp6-arm64.tar.xz'
 
 
 def terminal(command, environment, replies):
@@ -101,12 +101,12 @@ def run(channel=fixture_version, answers=('y',), *, healthy=False, untested=Fals
                 + ('exec 8>"$FIXTURE/lock"\nflock -n 8\n' if action == 'Update' else '')
                 + f'printf "{action} %s consent=%s\\n" "$*" '
                 '"$ROCKNIX_UNTESTED_DEVICE_CONFIRMED" >>"$FIXTURE/actions"\n')
+        (bundle / 'release-info.json').write_text(json.dumps({'commit': candidate}))
         with tarfile.open(fixture / asset, 'w:xz') as archive:
             for path in sorted(bundle.rglob('*')):
                 archive.add(path, arcname=str(path.relative_to(bundle)), recursive=False)
         checksum = hashlib.sha256((fixture / asset).read_bytes()).hexdigest()
-        (fixture / 'latest.json').write_text(json.dumps(
-            {'commit': candidate, 'sha256': '0' * 64 if corrupt else checksum, 'asset': asset}))
+        (fixture / (asset + '.sha256')).write_text(('0' * 64 if corrupt else checksum) + '  ' + asset + '\n')
         installed = workspace / 'managed/host/bin'
         if '--uninstall' in flags:
             installed.mkdir(parents=True)
@@ -190,7 +190,7 @@ for channel in commands:
     status, output, actions, downloads, checks, created = run(channel)
     assert status == 0 and actions == 'Install --replace consent=0\n', output
     assert created and checks == ['terminal', 'terminal', 'power', 'power', 'power']
-    assert downloads[1:] == [f'https://github.com/kapdon/rocknix-desktop/releases/download/{channel}/latest.json',
+    assert downloads[1:] == [f'https://github.com/kapdon/rocknix-desktop/releases/download/{channel}/{asset}.sha256',
                              f'https://github.com/kapdon/rocknix-desktop/releases/download/{channel}/{asset}']
     for answer in ('No', '', None):
         status, output, actions, _, _, _ = run(channel, (answer,))
