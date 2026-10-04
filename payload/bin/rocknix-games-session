@@ -49,7 +49,7 @@ while :; do
   rm -f -- "$steam_status_dir/status"
   gamescope_status=0
   /usr/bin/gamescope --backend wayland "${display_args[@]}" -r 60 \
-    --xwayland-count 2 --force-windows-fullscreen -- \
+    --xwayland-count 2 -- \
     /bin/bash -c '
       status_file=$1
       shift

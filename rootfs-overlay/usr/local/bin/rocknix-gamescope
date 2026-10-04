@@ -73,7 +73,7 @@ def main(argv=None):
     # Children use Gamescope's X11 display, not the outer desktop's Wayland socket.
     launch = runpy.run_path('/usr/local/bin/rocknix-gamescope-session')['launch']
     return launch(['/usr/games/gamescope', '--backend', 'sdl', *dimensions,
-              '--force-windows-fullscreen', '--', '/usr/bin/env', '-u', 'WAYLAND_DISPLAY',
+              '--', '/usr/bin/env', '-u', 'WAYLAND_DISPLAY',
               '-u', 'WAYLAND_SOCKET', 'SDL_VIDEODRIVER=x11', 'GDK_BACKEND=x11',
               'QT_QPA_PLATFORM=xcb'], command, env)
 

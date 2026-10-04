@@ -11,7 +11,8 @@
 - **Gamescope display fitting:** Default nested games to the current Sway
   content area, with an option to use the full monitor resolution and a shared launcher for
   LXC X11/Wine games. Keep the game resolution stable while Gamescope scales
-  window changes. Native DRM launching remains unchanged.
+  window changes without forcing application windows fullscreen. Native DRM
+  launching remains unchanged.
 - **Component replacement:** Replace the system container on update while preserving
   home data and metadata; installed system packages and password changes reset.
   Legacy-export migration and interrupted replacement were tested on RP6.
