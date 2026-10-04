@@ -8,7 +8,7 @@
 
 <!-- development-changelog:start -->
 
-<!-- development-revision: b79f02182f968a4e444a72fa61eba27d52b7d6b9 -->
+<!-- development-revision: 045fbfc41f2743838d9336b5f2cdc309da900263 -->
 
 ## Changes since v0.2.0
 
@@ -20,7 +20,9 @@
 - Merge completed desktop menu fixes into dev \[skip ci\] ([4533c95](https://github.com/kapdon/rocknix-desktop/commit/4533c95e66a272dc15c77ffb6591735bd269e1e1))
 - docs: summarize completed desktop fixes since v0.2.0 \[skip ci\] ([45c68a0](https://github.com/kapdon/rocknix-desktop/commit/45c68a00e381f00c6ccadd3c68a68886743d7020))
 - Merge tested Steam lifecycle fix into dev \[skip ci\] ([b79f021](https://github.com/kapdon/rocknix-desktop/commit/b79f02182f968a4e444a72fa61eba27d52b7d6b9))
+- docs: include Steam lifecycle fixes in development highlights \[skip ci\] ([984a89e](https://github.com/kapdon/rocknix-desktop/commit/984a89edaf363f32522074a420063bed48445077))
+- Fix SDL window lifetime during nested Gamescope shutdown ([045fbfc](https://github.com/kapdon/rocknix-desktop/commit/045fbfc41f2743838d9336b5f2cdc309da900263))
 
-[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.2.0...b79f02182f968a4e444a72fa61eba27d52b7d6b9)
+[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.2.0...045fbfc41f2743838d9336b5f2cdc309da900263)
 
 <!-- development-changelog:end -->
