@@ -20,7 +20,7 @@
   ],
   "custom/apps": {
     "format": "Apps",
-    "tooltip-format": "Open apps \u2022 D-pad moves\nBottom button: launch \u2022 Right button: dismiss\nR3: close focused window",
+    "tooltip": false,
     "on-click": "/usr/local/bin/rocknix-launcher"
   },
   "custom/windows": {

@@ -1,0 +1,104 @@
+#!/usr/bin/python3
+"""Own a menu chain until its last inherited pipe writer closes.
+
+Only menu helpers retain ownership. Ordinary launched applications leave the
+menu process group and close the pipe before exec, so dismissal cannot kill them.
+"""
+import fcntl
+import os
+from pathlib import Path
+import selectors
+import signal
+import socket
+import subprocess
+import sys
+import time
+
+FAMILIES = ('apps', 'settings', 'confirm-return')
+
+
+def inherited():
+    try:
+        fd = int(os.environ['ROCKNIX_MENU_FD'])
+        os.fstat(fd)
+        return os.environ['ROCKNIX_MENU_FAMILY'] in FAMILIES
+    except (KeyError, ValueError, OSError):
+        return False
+
+
+def launch(command):
+    program = Path(command[0]).name
+    keep = (program == 'rocknix-launcher' or program == 'rocknix-display-menu' or
+            (program == 'rocknix-games' and command[1:] in ([], ['settings'])))
+    if not keep and inherited():
+        os.close(int(os.environ.pop('ROCKNIX_MENU_FD')))
+        family = os.environ.pop('ROCKNIX_MENU_FAMILY')
+        # Fuzzel's forked app is not the process-group leader.
+        if os.getpid() != os.getpgrp():
+            os.setsid()
+        # Fuzzel has already completed fork+exec into this prefix. Wait for
+        # its owner to finish before a fast-failing app can open a new menu;
+        # otherwise the new menu would accidentally toggle the old one.
+        lock_path = Path(os.environ['XDG_RUNTIME_DIR']) / 'rocknix-menus' / (family + '.lock')
+        with lock_path.open('r') as lock:
+            fcntl.flock(lock, fcntl.LOCK_SH)
+    os.execvp(command[0], command)
+
+
+def own(family, command):
+    if family not in FAMILIES:
+        raise ValueError('Unknown menu family')
+    if inherited():
+        os.execvp(command[0], command)
+    directory = Path(os.environ['XDG_RUNTIME_DIR']) / 'rocknix-menus'
+    directory.mkdir(mode=0o700, exist_ok=True)
+    address = str(directory / (family + '.sock'))
+    with (directory / (family + '.lock')).open('w') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            # The owner can still be between taking its lock and binding.
+            with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as client:
+                for attempt in range(100):
+                    try:
+                        client.sendto(b'dismiss', address)
+                        return
+                    except (FileNotFoundError, ConnectionRefusedError):
+                        time.sleep(.01)
+            raise RuntimeError('Menu owner did not accept dismissal')
+        Path(address).unlink(missing_ok=True)
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as server:
+            server.bind(address)
+            read_fd, write_fd = os.pipe()
+            env = dict(os.environ, ROCKNIX_MENU_FD=str(write_fd), ROCKNIX_MENU_FAMILY=family)
+            child = subprocess.Popen(command, env=env, pass_fds=(write_fd,), start_new_session=True)
+            os.close(write_fd)
+            def dismiss(*_):
+                try:
+                    os.killpg(child.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            signal.signal(signal.SIGTERM, dismiss)
+            signal.signal(signal.SIGINT, dismiss)
+            try:
+                with selectors.DefaultSelector() as poll:
+                    poll.register(read_fd, selectors.EVENT_READ)
+                    poll.register(server, selectors.EVENT_READ)
+                    done = False
+                    while not done:
+                        for key, _ in poll.select():
+                            if key.fileobj == read_fd:
+                                done = not os.read(read_fd, 1024)
+                            elif server.recv(64) == b'dismiss':
+                                dismiss()
+                return child.wait()
+            finally:
+                os.close(read_fd)
+                Path(address).unlink(missing_ok=True)
+
+
+if __name__ == '__main__':
+    if sys.argv[1:2] == ['--launch']:
+        launch(sys.argv[2:])
+    else:
+        sys.exit(own(sys.argv[1], sys.argv[2:]))

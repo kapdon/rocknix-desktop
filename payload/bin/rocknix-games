@@ -123,6 +123,31 @@ def focused_game(tree):
     return any(focused_game(n) for n in tree.get('nodes', []) + tree.get('floating_nodes', []))
 
 
+def menu_active():
+    """Layer menus are absent from Sway's tree; their LXC owner holds focus.
+
+    The owner survives gaps between levels and exits on pipe EOF, including
+    crashed menu clients. Do not infer ownership from a window title or a
+    guest-writable state file.
+    """
+    for process in PROC.iterdir():
+        if not process.name.isdecimal():
+            continue
+        try:
+            argv = (process / 'cmdline').read_bytes().split(b'\0')
+            if (len(argv) < 4 or argv[1] != b'/usr/local/bin/rocknix-menu-session'
+                    or argv[2] not in (b'apps', b'settings', b'confirm-return')):
+                continue
+            groups = [line.split(':', 2)[-1].split('/')
+                      for line in (process / 'cgroup').read_text().splitlines()]
+            if (any('lxc.payload.rocknix-lxc' in group for group in groups)
+                    and (process / 'uid_map').read_text().split() == ['0', '200000', '65536']):
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
 def control_profile(saved, target):
     profile = saved['controller'][target]
     run('inputplumber', 'device', '0', 'profile', 'load', profile, timeout=5)
@@ -133,7 +158,9 @@ def control_tick(saved, previous):
     if selected not in ('auto', 'desktop', 'game'):
         raise ValueError('Invalid controller mode')
     target = selected
-    if selected == 'auto':
+    if selected == 'auto' and menu_active():
+        target = 'desktop'
+    elif selected == 'auto':
         env = dict(os.environ, XDG_RUNTIME_DIR='/run/0-runtime-dir',
                    SWAYSOCK='/run/0-runtime-dir/sway-ipc.0.sock')
         result = subprocess.run(['swaymsg', '-t', 'get_tree', '-r'], env=env,
