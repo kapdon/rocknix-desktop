@@ -57,7 +57,7 @@ def changelog_section(content):
     return before, section, after
 
 
-def release_summary(details, changelog, repository=REPO):
+def release_summary(details, changelog, repository=REPO, changelog_ref="dev"):
     heading = re.search(r"^## Changes since ([^\n]+)$", details, re.MULTILINE)
     if heading is None:
         raise RuntimeError("Development notes are missing the stable release comparison")
@@ -76,7 +76,7 @@ def release_summary(details, changelog, repository=REPO):
         noun = "commit" if count == 1 else "commits"
         body = f"{count} {noun} since {tag}. See the full changelog for details."
     return (f"## Highlights since {tag}\n\n" + body
-            + f"\n\n[Full changelog](https://github.com/{repository}/blob/dev/CHANGELOG.md)\n")
+            + f"\n\n[Full changelog](https://github.com/{repository}/blob/{quote(changelog_ref, safe='')}/CHANGELOG.md)\n")
 
 
 def render_changelog(content, release_notes):

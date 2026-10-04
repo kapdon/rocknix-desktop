@@ -1,5 +1,7 @@
 # Changelog
 
+Release **v0.2.0**.
+
 ## Highlights since v0.1.0
 
 - **Guest Gamescope cleanup:** Contain each launch in an unprivileged service,
@@ -44,7 +46,7 @@
 
 <!-- development-changelog:start -->
 
-<!-- development-revision: 1035cd5115b935941b5ba504b6ae3a8a32ecc8c7 -->
+<!-- development-revision: a29f2018607ecead9dc258bfae73413c4b9231cd -->
 
 ## Changes since v0.1.0
 
@@ -127,7 +129,8 @@
 - build: assemble and validate release systems in CI \[skip ci\] ([0066557](https://github.com/kapdon/rocknix-desktop/commit/0066557ddec432ad37029d3a1eae12d265323f90))
 - fix: extract assembled releases with ROCKNIX BusyBox tar \[skip ci\] ([ff70db2](https://github.com/kapdon/rocknix-desktop/commit/ff70db2b52a9dca2971195158129c38d200b93b2))
 - build: publish only the complete tarball and checksum \[skip ci\] ([1035cd5](https://github.com/kapdon/rocknix-desktop/commit/1035cd5115b935941b5ba504b6ae3a8a32ecc8c7))
+- docs: describe the two-file release installation flow \[skip ci\] ([a29f201](https://github.com/kapdon/rocknix-desktop/commit/a29f2018607ecead9dc258bfae73413c4b9231cd))
 
-[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.1.0...1035cd5115b935941b5ba504b6ae3a8a32ecc8c7)
+[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.1.0...a29f2018607ecead9dc258bfae73413c4b9231cd)
 
 <!-- development-changelog:end -->

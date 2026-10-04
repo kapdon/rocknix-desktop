@@ -12,6 +12,9 @@ with tempfile.TemporaryDirectory() as temporary:
     work = Path(temporary)
     manifest = work / 'release.json'
     manifest.write_text(json.dumps({'built_at': '2026-10-03T00:00:00Z'}))
+    (work / 'CHANGELOG.md').write_text('## Highlights since v0.1.0\n\n- Fit games to the desktop.\n\n'
+        '<!-- development-changelog:start -->\n## Changes since v0.1.0\n\n- A change.\n'
+        '<!-- development-changelog:end -->\n')
     calls = []
     pointer = None
     collision = False
@@ -29,6 +32,14 @@ with tempfile.TemporaryDirectory() as temporary:
             'digest': 'sha256:' + ('0' * 64 if fail_pointer else hashlib.sha256(data).hexdigest())}
             for name, data in [('bundle.tar', b'bundle'), ('bundle.tar.sha256', b'checksum')]]})
     def run(args, **kwargs):
+        if args[1:3] == ['release', 'create']:
+            notes = Path(args[args.index('--notes-file') + 1]).read_text()
+            tag = args[3]
+            assert '## Highlights since v0.1.0' in notes
+            assert 'Fit games to the desktop.' in notes
+            assert f'https://github.com/owner/repo/blob/{tag}/CHANGELOG.md' in notes
+            assert '/blob/dev/' not in notes
+            assert f'--release {tag}' in notes
         calls.append(args)
     def dependencies(*args, **kwargs):
         assert kwargs == {'components_only': True}
@@ -38,7 +49,8 @@ with tempfile.TemporaryDirectory() as temporary:
         bundle = scratch / 'bundle.tar'; bundle.write_bytes(b'bundle')
         checksum = scratch / 'bundle.tar.sha256'; checksum.write_bytes(b'checksum')
         return json.loads(manifest.read_text()), bundle, checksum
-    with patch.dict(P['P'], publish=dependencies, prepare_release=prepare), patch.dict(P['C'], release=lambda x: x), \
+    with patch.dict(P['publish'].__globals__, PROJECT=work), \
+         patch.dict(P['P'], publish=dependencies, prepare_release=prepare), patch.dict(P['C'], release=lambda x: x), \
          patch('subprocess.check_output', side_effect=output), patch('subprocess.run', side_effect=run):
         for tag in ('v0.2.0', 'v0.2.0-beta.1'):
             calls.clear()

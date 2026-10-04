@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Publish a tested component manifest as an immutable versioned release."""
+"""Publish a tested installation tarball as an immutable versioned release."""
 import argparse
 import json
 from pathlib import Path
@@ -11,6 +11,7 @@ import tempfile
 PROJECT = Path(__file__).resolve().parents[1]
 P = runpy.run_path(str(PROJECT / 'scripts/publish-components.py'))
 C = P['C']
+N = runpy.run_path(str(PROJECT / 'scripts/development-release-notes.py'))
 
 
 def publish(tag, manifest, store, repository):
@@ -27,16 +28,16 @@ def publish(tag, manifest, store, repository):
     # This validates clean/exact source without publishing intermediate artifacts.
     # It never advances the development pointer or tag.
     P['publish'](manifest, store, repository, components_only=True)
-    value = C['release'](json.loads(manifest.read_text()))
-    sha = C['digest'](manifest)
     def gh(*args):
         subprocess.run(['gh', *map(str, args), '--repo', repository], check=True)
     with tempfile.TemporaryDirectory(prefix='versioned-components-') as scratch:
         scratch = Path(scratch)
         value, bundle, checksum = P['prepare_release'](manifest, store, scratch, tag)
         notes = scratch / 'notes.md'
-        notes.write_text(f'Commit: `{revision}`\nBuilt: {value["built_at"]}\n\n'
-                         f'ROCKNIX Desktop component release. Install with `--release {tag}`.\n')
+        changelog = (PROJECT / 'CHANGELOG.md').read_text()
+        _, details, _ = N['changelog_section'](changelog)
+        notes.write_text(N['release_summary'](details, changelog, repository, tag)
+                         + f'\nInstall with `--release {tag}`.\n')
         prerelease = '-' in tag
         flags = ['--prerelease'] if prerelease else []
         gh('release', 'create', tag, bundle, checksum, '--target', revision,

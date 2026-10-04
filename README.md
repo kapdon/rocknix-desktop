@@ -7,6 +7,21 @@ returns to ROCKNIX. Save your work before exiting.
 > **Disclaimer:** ROCKNIX Desktop is an independent project and is not affiliated
 > with, endorsed by, or maintained by the [ROCKNIX project](https://rocknix.org/).
 
+## What's new in 0.2.0
+
+Launch installed ROCKNIX Steam games from Apps, or use **Launch with Gamescope**
+for desktop applications. Nested Gamescope fits the available desktop area by
+default. The always-available **Pad: Desktop / Game** button switches controller
+input, and game sessions clean up their Wine processes when they close.
+
+Updates now install a complete system assembled and validated by CI, preserving
+home data while replacing system packages. Releases contain just the installation
+tarball and its checksum. See the [full changelog](CHANGELOG.md).
+
+Steam game launches reuse native ROCKNIX Steam. Running Steam itself inside LXC
+for library management is planned for a later release; native Steam's Browse
+dialog remains a known limitation.
+
 ## Desktop preview
 
 Actual screens captured on the Retroid Pocket 6.
@@ -64,24 +79,19 @@ SSH session on the ROCKNIX device**, not in your computer's local terminal.
 The device needs Internet access, at least **4 GiB free
 on /storage**, and **10% main-device battery**. Charging does not bypass the threshold.
 
-Use the current rolling development build while the new release format is in beta:
+Install or update to the latest stable release (**v0.2.0**):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash -s -- --dev
+curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash
 ```
 
 CI publishes a complete `rocknix-desktop-rp6-arm64.tar.xz` and its `.sha256` file.
 The installer downloads those two files, verifies the checksum and installs the
 prepared system. Build metadata and integration files are already inside it.
 
-For a version published with this format, replace `--dev` with `--release TAG`.
-Without a selector, the installer targets the latest stable release. The existing
-`v0.1.0` predates this format and uses its
-[original installer](https://github.com/kapdon/rocknix-desktop/blob/v0.1.0/install.sh);
-use `--dev` until a new stable release is published.
-
-Choose either `--dev` or `--release TAG`; they cannot be combined.
-Available versions are on the
+Use `--release TAG` to select a specific version: append `-s -- --release v0.2.0` to `bash`.
+For the rolling development build, append `-s -- --dev` instead. These selectors
+cannot be combined. Available versions and changes are on the
 [releases page](https://github.com/kapdon/rocknix-desktop/releases).
 
 On eligible non-RP6 devices, the installer asks whether to proceed on untested

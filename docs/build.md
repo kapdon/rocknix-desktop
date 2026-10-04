@@ -33,10 +33,18 @@ ROCKNIX_TRASH_PACKAGES_DIR=/path/to/native/trash-packages bash build-rootfs.sh
 
 The manifest is `dist/components/release.json`; compressed artifacts and bindings
 are in `build/component-store/`. See [assembly commands](components.md#local-commands).
-The historical `dist/rocknix-desktop-rp6-arm64.tar.xz` export is no longer produced
-by local or release builds and is not accepted as an update candidate.
-For local update tests, assemble the manifest, then use its `upgrade.sh` with
-`--bundle MANIFEST --sha256 HASH --check` before `--yes`. Never extract over a
+To produce the same complete archive used by releases, package the cached
+components in one fakeroot session (including validation and integration generation):
+
+```sh
+fakeroot -- python3 scripts/package-components.py \
+  --manifest dist/components/release.json --store build/component-store \
+  --output dist/rocknix-desktop-rp6-arm64.tar.xz
+(cd dist && sha256sum rocknix-desktop-rp6-arm64.tar.xz > rocknix-desktop-rp6-arm64.tar.xz.sha256)
+```
+
+Use the assembled archive as the `--bundle` candidate for local `upgrade.sh`
+tests, with its `--sha256 HASH` and `--check` before `--yes`. Never extract over a
 running installation. Ordinary users should use the [download installer](../README.md#install-or-update).
 
 Build inputs are defined in [Dockerfile.rootfs](../Dockerfile.rootfs),

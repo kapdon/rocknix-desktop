@@ -9,7 +9,7 @@ selection flags cannot be combined. See the [installation commands](../README.md
 | Operation | Effect |
 | --- | --- |
 | Install | Replaces Desktop applications, home and settings after an explicit overwrite warning |
-| Update | Replaces the container system and packages from components; preserves home and shared storage |
+| Update | Replaces the container system and packages from the release archive; preserves home and shared storage |
 | Uninstall | Removes native launch integration; retains Desktop data and trusted tools |
 
 Shared ROCKNIX storage and native ROCKNIX accounts are outside these operations.
@@ -22,10 +22,11 @@ for the complete candidate system and temporary host backup before activation.
 Other eligible [SM8550 devices](devices.md) receive a default-No untested-device
 warning. `--yes` and charging do not bypass device eligibility or battery checks.
 
-The installer downloads checksum-verified components and assembles a complete
-new container. A healthy existing LXC installation defaults to Update, including
-installations originally made from a monolithic export. Updates require a new
-component release manifest; a legacy export cannot serve as an update candidate.
+The installer downloads the complete release tarball and its checksum, verifies
+and extracts it, then installs the system already assembled by CI. A healthy
+existing LXC installation defaults to Update, including installations originally
+made from a legacy export. Update candidates use the current assembled release
+format; legacy exports cannot serve as candidates.
 
 Update preserves `data/home` in place: no recursive ownership changes or copying.
 It also preserves shared Steam/game storage and host display/provider preferences.
