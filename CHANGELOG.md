@@ -49,8 +49,6 @@ the change list.
   configuration through managed component updates. This does not fix native
   Steam's separate Browse dialog.
 
-Current release gaps and evidence boundaries: [0.2.0 readiness](docs/release-readiness-0.2.0.md).
-
 ## Committed development changes through `c128035` — 2026-10-03
 
 Backfill audited against `origin/dev` at
@@ -93,20 +91,6 @@ record and merge-only bookkeeping are omitted.
   separate Browse-dialog limitation remains. ([5a1f6ab](https://github.com/kapdon/rocknix-desktop/commit/5a1f6abeba7c735495ea8df73438998e5700598b), [7092c27](https://github.com/kapdon/rocknix-desktop/commit/7092c27cf6da55bce113e898ec4c86983b0883a3))
 - Generate concise development-release highlights from this file and link the
   release page to the complete changelog. ([b23ee56](https://github.com/kapdon/rocknix-desktop/commit/b23ee5670273b589b157867f2d527f0962dc6032))
-- Record Steam reuse research, offline path discovery, shared-path and launch
-  exclusion experiments, descendant-cgroup checks, lease/crash recovery fixtures,
-  containment review and ELF dependency parsing. These are research and validation
-  artifacts, not a shipped in-LXC Steam runtime. ([7057431](https://github.com/kapdon/rocknix-desktop/commit/70574317b73b49e63c1e131c404c29b1b6e13beb), [3bd0994](https://github.com/kapdon/rocknix-desktop/commit/3bd0994f20131100b81683bcee4de2fb210e6828), [5d0a0d0](https://github.com/kapdon/rocknix-desktop/commit/5d0a0d0e66f01cfb3d2bd2183a8e140a4129f9bc), [9ff5c30](https://github.com/kapdon/rocknix-desktop/commit/9ff5c305e34d016c4a9254923d205588639c0d32), [3c16eb3](https://github.com/kapdon/rocknix-desktop/commit/3c16eb39f0e3239bc30468837d0c9215cc0778e4), [e182657](https://github.com/kapdon/rocknix-desktop/commit/e182657a4c8f9ce9fa6898cee67acfca6f200fbf), [32ff7eb](https://github.com/kapdon/rocknix-desktop/commit/32ff7eb79840a7ed555ff8243419f565904ac56c), [acd470d](https://github.com/kapdon/rocknix-desktop/commit/acd470d82fa3d60754c7bec153f2556063554ee3))
-- Record installed-RP6 inventory, idmap/nested-runtime experiments, partial
-  Satisfactory startup and recovery results, and the native Gamescope investigation.
-  Preserve their documented limitations; the LXC game experiment is not a gameplay
-  pass. See the [Steam evidence index](experiments/steam-lxc/README.md) and
-  [native integration validation boundaries](docs/native-steam.md#validation-boundaries).
-  ([857cd47](https://github.com/kapdon/rocknix-desktop/commit/857cd47aeafae029562ddec50838c60d31301a3e), [beaebdc](https://github.com/kapdon/rocknix-desktop/commit/beaebdcdcbbf86e9710f406356f5e8d3ec38dd0e), [711fc0c](https://github.com/kapdon/rocknix-desktop/commit/711fc0c053ed157404ddd93167806c9db694d401), [8fa06a2](https://github.com/kapdon/rocknix-desktop/commit/8fa06a20210c98ad375105280e2763e23104065c))
-
-[Backfill comparison](https://github.com/kapdon/rocknix-desktop/compare/3a32508bd92d184e4d961c83a8469ef510a290f5...c128035dc786f2dbec8b4c6a7131f1025017936e)
-
-<!-- development-changelog:start -->
 
 ## Development
 

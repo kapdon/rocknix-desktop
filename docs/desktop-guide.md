@@ -68,18 +68,8 @@ Portal-aware LXC applications use the GTK file chooser. The image includes
 ROCKNIX backend configuration and exports its Wayland environment before starting
 the private session bus. No host bus connection is needed.
 
-Retained containers keep their installed packages. If upgrading an older
-container, install the missing packages from its terminal:
-
-```sh
-sudo apt-get update
-sudo apt-get install --no-install-recommends xdg-desktop-portal xdg-desktop-portal-gtk
-```
-
-After applying the updated Desktop session/configuration, exit Desktop and enter
-again so D-Bus activation inherits the correct environment. Installing these
-packages does not enable the unimplemented Browse function in the tested native
-ARM64 Steam client; see the [RP6 file chooser findings](../experiments/steam-lxc/FILE-CHOOSER.md).
+The tested native ARM64 Steam client (build 1790377368) does not implement its
+Browse dialog. Installing a guest portal does not add that client-side function.
 
 ## Display settings
 
@@ -144,7 +134,3 @@ raw HID and input injection remain private to ROCKNIX. Switching profiles change
 mappings; some games only detect controllers at startup.
 Exiting Desktop restores ROCKNIX's original profile and targets. Close Desktop
 continues to use the ordinary native ROCKNIX input lifecycle.
-
-RP6 validation currently covers Satisfactory reaching its main menu and the
-Desktop lifecycle, not loaded-factory gameplay, controller/audio acceptance or a
-full image build. See the [FPS and handoff record](../experiments/steam-lxc/NATIVE-FPS.md).

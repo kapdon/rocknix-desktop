@@ -23,6 +23,11 @@ The manually dispatched GitHub bundle workflow is the publication step,
 not a substitute for local testing. Afterwards, verify the raw GitHub installer and rolling bundle URLs end
 to end. Never use remote builds as the normal edit/test loop.
 
+Keep agent handoffs, research experiments, release-readiness audits and dated
+session evidence in the ignored `experiments/` directory. Public docs should
+explain the product, architecture, supported behavior or reproducible contributor
+procedures; do not commit personal workflow records.
+
 Keep temporary diagnostics out of the product tree. Attach exact revision/bundle
 evidence to the review or release
 and preserve required third-party attribution. Published

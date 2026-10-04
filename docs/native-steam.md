@@ -1,41 +1,18 @@
 # Native Steam integration decision
 
-Decision recorded 2026-10-03: prioritize compatibility with the installed ROCKNIX
-Steam launcher and reuse its native scope. Accept ROCKNIX's host-root execution
-model for this version. Privilege separation is future research, not a release
-requirement for this integration.
+Desktop reuses ROCKNIX's native Steam launcher and scope, including its host-root
+execution model. This preserves the installed Steam library, launch settings and
+native Gaming Mode behavior.
 
-## Source and runtime evidence
+## Native launch identity
 
-The reference checkout is `/home/nexus/code/rocknix-distribution`, updated to
-ROCKNIX `upstream/next` commit
-[`4a92dd9202eec29514705d84a68f0a7f602adfac`](https://github.com/ROCKNIX/distribution/tree/4a92dd9202eec29514705d84a68f0a7f602adfac).
-Its original `next` tracking branch followed the older fork `origin/next`;
-updating that fork alone did not update it to current ROCKNIX.
-
-- `projects/ROCKNIX/packages/ui/emulationstation/system.d/essway.service` sets
-  `HOME=/storage` and does not select `User=`. It is a root system service.
-- ROCKNIX packages systemd 255.8. That version sets `USER=root` for a system
-  service without an explicit user; the profile also sets `HOME=/storage`.
-- `steam_scope_reexec_if_needed` in `start_steam.sh` invokes
-  `systemd-run --scope --slice=system.slice --unit=steam-bigpicture --collect`.
-  It forwards `_STEAM_SCOPE`, `HOME`, `USER` and `TZ` as environment variables.
-  `-E USER=...` does not change process credentials.
-- `start_steam_arm64.sh` prepares native state and invokes that helper before
-  launching Gamescope and Steam. There is no privilege drop in this script chain.
-- The `USER` fallback in FEX's `package.mk` belongs to its build, not Steam's
-  runtime user selection.
-
-The installed RP6 scope helper matched the updated reference function byte for
-byte (SHA-256
-`6d0f546ecbd29fbcba69935e0a3984268b5a359abe80422297846f01afa74093`).
-A native launch using EmulationStation's captured environment, without Desktop's
-Steam wrapper, observed EmulationStation, Gamescope, Steam and wineserver with
-real/effective UID 0 in the host user namespace. That particular run encountered
-Proton/Wine startup errors before the Satisfactory executable was captured; it
-does not establish credentials for every possible game/runtime descendant.
-Subsequent Desktop integration tests captured Satisfactory itself with host UID 0
-inside the native scope in both launch modes; see the validation log below.
+The upstream [ROCKNIX launcher source](https://github.com/ROCKNIX/distribution/tree/4a92dd9202eec29514705d84a68f0a7f602adfac)
+starts EmulationStation as a root system service with `HOME=/storage`.
+`steam_scope_reexec_if_needed` in `start_steam.sh` uses
+`systemd-run --scope --slice=system.slice --unit=steam-bigpicture --collect` and
+forwards `_STEAM_SCOPE`, `HOME`, `USER` and `TZ`. Setting `USER` is environment
+propagation, not a credential change. The native ARM64 launch chain does not drop
+privileges before starting Gamescope and Steam.
 
 ## Current design
 
@@ -153,7 +130,7 @@ Application exit, compositor exit and confirmed service cleanup are distinct:
 a forced cleanup after a successful application exit does not produce a false
 application-failure popup. A missing manager or shared FEX service fails closed.
 Do not treat the absence of a popup as proof that Gamescope itself exited cleanly.
-See [teardown validation](gamescope-teardown.md) for RP6 evidence and limits.
+See [Gamescope cleanup](gamescope-teardown.md) for the lifetime boundary and limits.
 
 ## Accepted trust tradeoff
 
@@ -173,37 +150,9 @@ launch/replacement of the single scope is not qualified. The scope helper is an
 installed script function rather than a documented stable API; firmware changes
 still require integration validation.
 
-## Deferred privilege-separation direction
+## Troubleshooting
 
-The preferred research direction is a small privileged session manager for
-display handoff, device access, system settings and recovery, with Steam, Proton,
-FEX and games executing under an unprivileged identity. Reuse the existing files
-through scoped access/mappings rather than copying libraries or changing their
-ownership. Qualify nested graphics first, then direct DRM, controllers, audio,
-client/game updates, non-Steam games and recovery.
-
-ROCKNIX currently combines privileged preparation and execution. A maintainable
-solution would introduce an explicit upstream launch boundary; merely adding
-`User=` to the existing launcher would break privileged operations. Root processes
-must also avoid loading libraries/plugins from the writable Steam tree before
-that boundary.
-
-Protecting only Desktop-origin launches would leave native Gaming Mode's root
-execution of the same writable files unchanged. Full isolation needs both launch
-paths to adopt the boundary, or separate/protected executable storage. Keeping
-unmodified root launching, arbitrary writable shared executables and strong
-guest-to-host isolation simultaneously is not a supported security claim.
-
-## Validation boundaries
-
-Source tests cover native-helper routing, inherited identity variables, shared
-WSI policy, manual controller selection, cleanup ordering, failed cleanup journal
-retention, idempotent stop, Steam restart/stop behavior and maintenance exclusion
-through recovery and copied updater entry points. The restart and maintenance
-regressions use local fixtures; no new device qualification is claimed. Device
-results are recorded in [the Steam experiment log](../experiments/steam-lxc/NATIVE-FPS.md).
-
-An early native-scope attempt hit a full `/dev/shm` and Steam's SIGBUS. Inspection
-found 1,012 unreferenced root Steam `u0-Shm_*` files occupying 6,005,923,840 bytes.
-They were removed with Steam stopped after checking open descriptors and memory
-maps. This was dev-device cleanup, not an automatic deletion policy in the product.
+Check the host game service journal and the guest Gamescope session logs when a
+launch fails or leaves a cleanup warning. Steam and Proton can fail when shared
+memory is exhausted; investigate live owners before removing files. Desktop does
+not automatically delete native Steam shared-memory files.

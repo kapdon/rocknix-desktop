@@ -42,12 +42,6 @@ inherit that display. The server uses the existing Wayland bridge to present
 windows on native Sway; no native X11 socket is shared. Session shutdown also
 terminates translated applications and their detached Wine services.
 
-When reusing a PD2 Launcher download cache across devices, let the Launcher
-reverify payloads in a fresh home. Its retained transaction journals and download
-receipts contain filesystem/inode identities and cannot be copied as valid
-state. Preserve the original home; import cached installer/client payloads
-without its `.pd2launcher-retained` directories or old `downloads.json` receipt.
-
 ## X11 work area
 
 The session publishes Sway's usable Desktop workspace to X11 as `_NET_WORKAREA`
@@ -56,14 +50,10 @@ bounds; window decorations and individual tiled allocations are separate. The
 bridge matches the output to its RandR monitor and translates logical bounds
 into X11 pixels. It does not expose the host Sway control socket to the guest.
 
-Wine runners can override that information. In particular, the tested Wine-GE
-8-26 fullscreen-hack handler replaces the work rectangle with the full monitor.
-See the [windowed-mode investigation](PD2_WINDOWED_SIZE_HANDOFF.md) for the
-verified API behavior and windowed-game tests. That flag alone does not fix
-PD2: its renderer retains its configured size instead of following the accepted
-client size. A real Wine test window receives 1920x953, keyboard-reduced 1920x575,
-and restored 1920x953 through WM_SIZE/GetClientRect. Desktop does not globally
-change Wine fullscreen policy or overwrite game preferences.
+Wine runners and game renderers may override the published work area or retain a
+fixed client size. Desktop does not globally change Wine fullscreen policy or
+overwrite game preferences. Use [Gamescope virtual display fitting](native-steam.md#nested-virtual-display-sizing)
+when a game needs a display sized to the available Desktop area.
 
 ## Compatibility limits
 

@@ -6,3 +6,8 @@ __pycache__/
 .env.local
 *.log
 /.impeccable/hook.cache.json
+
+# Private agent research, handoffs and session evidence
+/experiments/
+/docs/*HANDOFF*.md
+/docs/release-readiness*.md

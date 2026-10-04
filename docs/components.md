@@ -151,12 +151,7 @@ recompilation or recompression. Device updates still assemble a whole new rootfs
 The `trash-packages` artifact remains a build-cache dependency for the guest base;
 neither install nor update delivers an offline package transaction to the device.
 
-## Validation and remaining acceptance
-
-See [the local validation report](components-validation.md) for real component
-assembly checks and repeated measurements against the full-package baseline.
-The [GitHub benchmark](components-github-benchmark.md) records the native cold
-build, warm baseline and exact Apps/Settings toggle-fix replay.
+## Testing component builds
 
 `fakeroot -- python3 tests/components.py` exercises real packing, composition and
 updater application with small producer fixtures. It checks dependency invalidation,
@@ -171,10 +166,9 @@ disposable source copy, rejects any Docker invocation, and records compression
 input sizes in `dist/component-benchmark/results.json`. Use a constrained Ubuntu
 container for runner-like packaging measurements; retain the component store
 and the same native-package override environment used for the initial build. Fixture timings are correctness evidence, not GitHub performance
-claims. Native ARM64 branch build timing and component publication have been measured.
-Development-channel promotion and RP6 fresh-install, replacement-update and
-interruption acceptance remain separate gates before calling this production
-validated. No hardware operation is part of source or build-performance testing.
+claims. Test development-channel delivery and RP6 installation, replacement
+updates and recovery separately. Source tests and build benchmarks do not
+establish hardware behavior.
 
 Implementation references: [BuildKit GHA cache authentication](https://docs.docker.com/build/cache/backends/gha/) and [GitHub release asset digests](https://docs.github.com/en/rest/releases/assets).
 
