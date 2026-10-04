@@ -40,6 +40,18 @@ RUN sh /tmp/mpv-ffmpeg/build.sh prepare
 COPY build-support/mpv-ffmpeg/*.patch /tmp/mpv-ffmpeg/
 RUN sh /tmp/mpv-ffmpeg/build.sh
 
+FROM ffmpeg-cross-builder AS gamescope-builder
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends devscripts equivs g++-aarch64-linux-gnu
+ADD --checksum=sha256:34c629000aed0111bbb31c0c8c6455ece01791c94c57ada61eeb9c71da4fcba8 \
+    https://deb.debian.org/debian/pool/contrib/g/gamescope/gamescope_3.16.22+ds.orig.tar.xz /tmp/gamescope.orig.tar.xz
+ADD --checksum=sha256:3bfa4345317435d342640a61f54d0156bda66457587cb0a6bf2944204980441c \
+    https://deb.debian.org/debian/pool/contrib/g/gamescope/gamescope_3.16.22+ds-1~bpo13+1.debian.tar.xz /tmp/gamescope.debian.tar.xz
+COPY build-support/gamescope/prepare.sh /tmp/gamescope-support/prepare.sh
+RUN sh /tmp/gamescope-support/prepare.sh
+COPY build-support/gamescope/build.sh build-support/gamescope/*.patch /tmp/gamescope-support/
+RUN sh /tmp/gamescope-support/build.sh
+
 FROM --platform=$BUILDPLATFORM debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS keyboard-builder
 ARG TARGETARCH
 RUN test "${TARGETARCH}" = "arm64" \
@@ -171,12 +183,14 @@ RUN printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Nested guest Gamescope needs the SDL backend available in trixie-backports.
-# Debian ships Gamescope in contrib. Retain the signed snapshot source URI.
-RUN sed -i 's/^Suites: trixie trixie-updates$/Suites: trixie trixie-updates trixie-backports/; s/^Components: main$/Components: main contrib/' /etc/apt/sources.list.d/debian.sources \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends -t trixie-backports gamescope \
+# Keep Debian's package/dependency layout, with the upstream SDL thread join fix.
+COPY --from=gamescope-builder /opt/rocknix-gamescope/ /tmp/rocknix-gamescope/
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends /tmp/rocknix-gamescope/*.deb \
     && test -x /usr/games/gamescope \
+    && mkdir -p /usr/local/share/rocknix-desktop/gamescope-source \
+    && cp /tmp/rocknix-gamescope/source/* /usr/local/share/rocknix-desktop/gamescope-source/ \
+    && rm -r /tmp/rocknix-gamescope \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # X11 dependencies are part of every fresh guest base, including upgrades.

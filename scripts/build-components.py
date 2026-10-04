@@ -23,7 +23,7 @@ import time
 PROJECT = Path(__file__).resolve().parents[1]
 C = runpy.run_path(str(PROJECT / 'payload/bin/rocknix-components'))
 ROOT_STAGES = {
-    'guest-base': ('trash-package-inputs', 'desktop-dependencies', 'guest-base'),
+    'guest-base': ('ffmpeg-cross-builder', 'gamescope-builder', 'trash-package-inputs', 'desktop-dependencies', 'guest-base'),
     'firefox-media': ('ffmpeg-cross-builder', 'ffmpeg-rpi-builder', 'firefox-component'),
     'mpv-media': ('ffmpeg-cross-builder', 'mpv-ffmpeg-builder', 'mpv-component'),
     'keyboard': ('keyboard-builder', 'keyboard-component'),
@@ -91,7 +91,7 @@ def input_keys(root=None):
                        {'add_bytes', 'add_tree', 'payload_tar', 'compress', 'check_payload'})
     recipe['ownership'] = functions('payload/bin/rocknix-components', {'owns'})
     selected = {
-        'guest-base': ['build-support/components/bootstrap-base.sh',
+        'guest-base': ['build-support/components/bootstrap-base.sh', 'build-support/gamescope',
                        'build-support/trash/check-packages.py', 'build-support/trash/install-image.py',
                        'rootfs-overlay/usr/local/bin/rocknix-default-password',
                        'rootfs-overlay/etc/systemd/system/rocknix-desktop-session.service'],
@@ -121,7 +121,7 @@ def input_keys(root=None):
             data['producer'] = functions('scripts/build-components.py', {'docker_export', 'locked_dockerfile'})
             data['context_rules'] = paths(root, ['.dockerignore'])
             data['docker_frontend'] = (root / DOCKER[role][0]).read_text().split('FROM ', 1)[0]
-        if role in ('firefox-media', 'mpv-media', 'keyboard', 'fuzzel', 'xwayland'):
+        if role in ('firefox-media', 'mpv-media', 'keyboard', 'fuzzel', 'xwayland', 'guest-base'):
             data['build_architecture'] = platform.machine()
         if role in ROOT_STAGES:
             data['docker'] = {stage: root_stages[stage] for stage in ROOT_STAGES[role]}

@@ -45,6 +45,7 @@ def supervise(request):
                                 *data['command']], env=data['env'], cwd=data['cwd'])
     app = None
     forced = False
+    shutdown_requested = False
     try:
         while process.poll() is None and not stopping and not status.exists():
             time.sleep(.05)
@@ -54,6 +55,7 @@ def supervise(request):
         # Main-app exit must stop even a compositor stuck waiting on its reaper.
         # systemd clears remaining descendants after this main process exits.
         if process.poll() is None:
+            shutdown_requested = True
             process.terminate()
             try:
                 process.wait(timeout=GRACE)
@@ -62,14 +64,24 @@ def supervise(request):
                 process.kill()
         process.wait(timeout=GRACE)
     result = {'application': app, 'compositor': process.returncode,
-              'forced_compositor_stop': forced, 'signal': stopping}
+              'forced_compositor_stop': forced, 'signal': stopping,
+              'compositor_stop_requested': shutdown_requested}
     Path(data['result']).write_text(json.dumps(result) + '\n')
     print('Gamescope session outcome: ' + json.dumps(result), file=sys.stderr)
-    if stopping:
-        return 128 + stopping
-    # A successful primary app remains successful, but compositor failure is
-    # recorded separately. The caller still requires completed cgroup cleanup.
-    code = app if app is not None else process.returncode or 1
+    return exit_status(result)
+
+
+def exit_status(result):
+    if result['signal']:
+        return 128 + result['signal']
+    compositor = result['compositor']
+    # Only our explicit TERM/KILL escalation is an expected signal outcome.
+    # A compositor crash remains a failure even if the app reported success.
+    expected = (compositor == 0 or
+                result.get('compositor_stop_requested', False) and compositor == -signal.SIGTERM or
+                result.get('forced_compositor_stop', False) and compositor == -signal.SIGKILL)
+    app = result['application']
+    code = (app if app is not None else 0) if expected else compositor
     return code if code >= 0 else 128 - code
 
 
@@ -118,10 +130,9 @@ def launch(prefix, command, env):
                 result.update(service=state, cleanup_complete=True)
                 outcome.write_text(json.dumps(result) + '\n')
                 # Timeout here means systemd escalated remaining children to
-                # SIGKILL. Accept the app outcome only after the cgroup is gone.
-                if state.get('Result') == 'timeout' and not result['signal'] and result['application'] is not None:
-                    code = result['application']
-                    code = code if code >= 0 else 128 - code
+                # SIGKILL. Accept the recorded outcome only after the cgroup is gone.
+                if state.get('Result') == 'timeout':
+                    code = exit_status(result)
             return code
         finally:
             # Also stop the service when its foreground client is interrupted.
