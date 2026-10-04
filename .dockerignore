@@ -17,3 +17,6 @@
 !build-support/xwayland
 !build-support/xwayland/**
 !scripts/package-trash.py
+
+!build-support/gamescope
+!build-support/gamescope/**
