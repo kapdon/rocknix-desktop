@@ -73,7 +73,10 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
     updated, _ = B['input_keys'](source)
     assert {k for k in initial if initial[k] != updated[k]} == set(B['DOCKER'])
     lock.write_text(old)
-    print('PASS: config/theme/media/package/mode/lock changes invalidate only their dependency branches')
+    with patch.dict(B['input_keys'].__globals__['DOCKER'], {'host-runtime': ('build-support/lxc/Dockerfile.host-tools', 'changed-target')}):
+        updated, _ = B['input_keys'](source)
+        assert {k for k in initial if initial[k] != updated[k]} == {'host-runtime'}
+    print('PASS: config/theme/media/package/mode/lock/target changes invalidate only their dependency branches')
 
     calls = []
     def export(role, directory, trash=None):

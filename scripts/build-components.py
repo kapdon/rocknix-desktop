@@ -117,6 +117,7 @@ def input_keys(root=None):
         data = {'role': role, 'platform': 'linux/arm64', 'recipe': recipe, 'files': paths(root, selected[role])}
         if role in DOCKER:
             data['dependencies'] = lock
+            data['docker_target'] = DOCKER[role]
             data['producer'] = functions('scripts/build-components.py', {'docker_export', 'locked_dockerfile'})
             data['context_rules'] = paths(root, ['.dockerignore'])
             data['docker_frontend'] = (root / DOCKER[role][0]).read_text().split('FROM ', 1)[0]
