@@ -31,18 +31,18 @@ with tempfile.TemporaryDirectory() as temporary:
         return remote
     def gh(*args, **kwargs):
         calls.append(args)
-        assert args[:3] == ('release', 'upload', 'components-v1-aaa')
+        assert args[:3] == ('release', 'upload', 'development')
         remote[Path(args[3]).name] = {'size': size, 'digest': 'sha256:' + sha, 'state': 'uploaded'}
     publisher.assets, publisher.gh = assets, gh
-    assert publisher.upload('components-v1-aaa', payload.name, sha, size, payload)
+    assert publisher.upload('development', payload.name, sha, size, payload)
     assert len(calls) == 1
-    assert not publisher.upload('components-v1-aaa', payload.name, sha, size)
+    assert not publisher.upload('development', payload.name, sha, size)
     assert len(calls) == 1
     remote[payload.name]['digest'] = 'sha256:' + '0' * 64
-    rejects(publisher.upload, 'components-v1-aaa', payload.name, sha, size, payload)
+    rejects(publisher.upload, 'development', payload.name, sha, size, payload)
     assert len(calls) == 1
     remote.clear()
-    rejects(publisher.upload, 'components-v1-aaa', payload.name, sha, size)
+    rejects(publisher.upload, 'development', payload.name, sha, size)
     assert len(calls) == 1
     print('PASS: publisher skips verified existing assets and rejects mismatches or unavailable misses')
 
@@ -50,7 +50,8 @@ with tempfile.TemporaryDirectory() as temporary:
     for role in C['ROLES']:
         components[role] = {'format': 1, 'id': role, 'input_key': 'b' * 64, 'sha256': sha,
                             'asset': sha + '.tar.xz', 'size': size, 'unpacked_size': 20,
-                            'store_tag': 'components-v1-bbb', 'managed': {}}
+                            'managed': {}}
+    (work / (sha + '.tar.xz')).write_bytes(payload.read_bytes())
     manifest = work / 'release.json'
     value = {'format': 2, 'minimum_installer': 2, 'runtime_abi': C['ABI'], 'platform': 'linux/arm64',
              'commit': 'a' * 40, 'built_at': '2026-10-02T00:00:00Z', 'components': components}
@@ -87,12 +88,11 @@ with tempfile.TemporaryDirectory() as temporary:
         assert events[0] == ('notes',)
         assert (manifest.parent / 'CHANGELOG.md').read_text() == 'changelog fixture'
         uploads = [i for i, e in enumerate(events) if e[0] == 'upload']
-        assert len(uploads) == 2 * len(C['ROLES']) + 2 and max(uploads) < pointers[0]
+        assert len(uploads) == 4 and max(uploads) < pointers[0]
         events.clear()
         P['publish'](manifest, work, 'owner/repo', components_only=True)
-        assert len(events) == 2 * len(C['ROLES'])
-        assert all(e[0] == 'upload' and e[1].startswith('components-v1-') for e in events)
-        print('PASS: hosted benchmark publishes reusable components without advancing a release')
+        assert not events
+        print('PASS: hosted benchmark validates without publishing any release assets')
         events.clear()
         def failed_notes(*args, **kwargs):
             raise RuntimeError('release comparison unavailable')

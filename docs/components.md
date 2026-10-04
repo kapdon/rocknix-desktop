@@ -4,11 +4,16 @@ Local, development and versioned builds use `scripts/build-components.py`.
 `build-rootfs.sh` invokes the same component builder. Historical full archives
 remain readable for explicit fresh installs; Update requires a component manifest.
 
-The performance target is the configuration-only GitHub Actions build. Resolve
-small immutable component descriptors **before** setting up Buildx. If a matching
-artifact exists, reference its digest without downloading, loading, exporting,
-compressing or uploading it again. BuildKit caches accelerate actual component
-misses; they are not the release artifact store.
+Actions caches each finished compressed archive independently. Cache hits skip
+compilation, export and compression. Cache misses rebuild only the affected
+parts, with BuildKit layer caching available for compiler work. Caches are
+optional and disposable: an empty or evicted cache causes a normal rebuild.
+
+Each release publishes one installation bundle containing eight compressed
+archives and a manifest. Wrapping those archives in an uncompressed tar avoids
+unpacking and recompressing the full root filesystem. The complete bundle is a
+durable public download; installers never depend on Actions caches or run artifacts.
+There are no individual component releases or registry packages.
 
 ## Components and invalidation
 
@@ -21,16 +26,17 @@ misses; they are not the release artifact store.
 | Fuzzel | Launcher, Pixman and protocol sources/recipes, compiler snapshot |
 | Keyboard | Sources, layout/patches, compiler snapshot |
 | Xwayland | Satellite sources, compiler snapshot |
-| Guest integration | Overlay scripts, configuration, desktop defaults |
-| Host integration | Host helpers, installer, service/input files, guest updater |
-| Host theme | GTK configuration and ROCKNIX theme assets |
-| Trash packages | Native package recipe, patches, sources and dependency snapshot |
+| Integration | Guest overlay, host helpers, installer, service/input files and GTK theme |
 
-Changing Waybar CSS rebuilds only guest integration. A GTK theme edit rebuilds
-guest integration and host theme. Changing an MPV patch rebuilds MPV media.
+Trash packages are a ninth **build-only cache entry**, used to produce the guest
+base. They are not an installed layer or a separately published download.
+
+Changing Waybar CSS, a launcher flag or GTK theme rebuilds only integration. Changing an MPV patch rebuilds MPV media.
 Changing the Trash family rebuilds its transaction payload and fresh-install
 base. A base-only bootstrap change consumes the cached package artifacts instead
-of rebuilding the native packages. Changing the packaging format/validator rebuilds components conservatively.
+of rebuilding the native packages. Producer and archive ownership policy changes invalidate components conservatively.
+Cache transport, release publication and CLI changes do not invalidate compiled
+archives; guest/host helper changes rebuild integration.
 
 Keys contain source bytes, modes, links, selected Docker stages, build architecture
 where applicable, and the explicit dependency lock. Commit IDs, clocks and
@@ -56,8 +62,6 @@ hardlinks and setuid bits and use the existing one-time mapped ownership shift.
 ```sh
 python3 scripts/build-components.py --plan
 python3 scripts/build-components.py
-# Resolve existing release assets before building on a fresh machine:
-python3 scripts/build-components.py --repository kapdon/rocknix-desktop
 ```
 
 Artifacts and immutable key bindings are in `build/component-store/`; the release
@@ -84,35 +88,38 @@ Fakeroot ownership exists only for that session. Inspect or archive the result
 inside the same fakeroot session; do not deploy its loose directory as a
 metadata-preserving copy. The device installer assembles as actual host root.
 
-The same command with `--profile update` omits the Debian base and includes the
-existing audited package transaction. Assembly verifies every artifact and the
+The same command with `--profile update` includes the same complete system.
+A downloaded release manifest automatically fetches its single bundle when local
+archives are missing, verifies the outer checksum and every compressed archive,
+and then assembles the system. Assembly verifies every artifact and the
 combined path/link graph before extraction. Corruption, path overlap, unsafe
 links, unrepresentable owners and insufficient free space stop assembly.
 
 ## Publication and compatibility
 
-The development workflow resolves first, conditionally creates a builder, builds
-misses, then calls `scripts/publish-components.py`. Components live in prereleases
-named `components-v1-<three input-key hex digits>`, separate from the rolling
-`development` release. Content-addressed archives and input-key descriptors are
-write-once. The publisher checks remote sizes/digests, skips uploaded components,
-and refuses shards approaching the release asset limit. No garbage collector or
-rolling legacy pruner deletes component assets.
+The development and versioned workflows calculate exact input keys, restore each
+finished archive with `actions/cache`, resolve misses, and set up Buildx only when
+compilation is necessary. Both use the same builder and dependency lock.
 
-For a branch benchmark, dispatch `development.yml` with `benchmark=true`. This
-runs the same build and component publication stages, using
-`publish-components.py --components-only`; it does not upload a rolling manifest,
-advance `latest.json`, or change the development tag, release notes or changelog. Run once to
-populate the native artifact store, then repeat to measure warm reuse. A source
-change on the benchmark branch can measure selective invalidation. Timings and
-the candidate manifest are saved as workflow artifacts.
+Publication uploads and verifies the bundle, checksum, manifest and bootstrap
+helper before advancing `latest.json`. Only `development` and explicit versioned
+releases receive public assets. Partial uploads leave the previous pointer intact.
+The manifest retains format 2 so the installer and transactional updater keep
+using the established complete-system replacement path. Its `bundle` field
+identifies the one immutable tar download by release tag, name, size and SHA-256.
 
-Upload and verify all components, then an immutable release manifest and hashed
-installer helper, before advancing `latest.json`. Publication is serialized by
-the development workflow. GitHub's clobber operation is not atomic: the installer
-retries the brief missing-pointer window; prior immutable manifests remain
-available for recovery. A failed partial upload cannot change the old pointer.
-Manual publishers must obey the same single-writer rule.
+For a branch benchmark, dispatch `development.yml` with `benchmark=true`. It
+builds and populates Actions caches, but changes no releases, tags, pointers,
+notes or changelog. Cached entries are scoped according to GitHub's branch cache
+rules; benchmark and release comparisons should use the same branch. Plans and
+timings are saved as workflow artifacts. A cold build seeds the caches; subsequent
+runs measure reuse and selective invalidation. Cache transfer and bundle upload
+time remain part of the hosted job even when no compiler runs.
+
+Publication is serialized by the workflow. GitHub's pointer clobber operation is
+not atomic; the installer retries a brief missing-pointer window. Manual
+publishers must obey the same single-writer rule. Keep bundles referenced by
+supported releases when retiring old development assets.
 
 After a successful development publication, Actions records the full cumulative
 commit history in [CHANGELOG.md](../CHANGELOG.md), comparing the published source
@@ -156,7 +163,7 @@ neither install nor update delivers an offline package transaction to the device
 `fakeroot -- python3 tests/components.py` exercises real packing, composition and
 updater application with small producer fixtures. It checks dependency invalidation,
 zero producers on a warm run, one small compression on a CSS change, fresh-runner
-metadata-only resolution, preserved ownership/setuid/symlinks, full union retention,
+finished-archive cache restoration and cache eviction, preserved ownership/setuid/symlinks, full union retention,
 and fail-before-extraction corruption/path checks. Replacement tests exercise interruption boundaries, rollback and home identity
 preservation. These filesystem fixtures do not establish RP6 runtime acceptance.
 
@@ -177,4 +184,4 @@ Implementation references: [BuildKit GHA cache authentication](https://docs.dock
 The Xwayland component carries the guest-owned Satellite bridge and its source
 and license files. Debian X11 dependencies are installed in the guest base.
 Install and Update both receive them in the new rootfs; there is no retained
-container package updater or compatibility path for older ten-component manifests.
+container package updater or compatibility path for older component manifests without the bundled layout.

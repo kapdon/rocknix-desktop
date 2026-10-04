@@ -1,9 +1,9 @@
-name: Development components
+name: Development build
 on:
   workflow_dispatch:
     inputs:
       benchmark:
-        description: 'Test this branch and publish reusable components without updating the development release'
+        description: 'Build and cache this branch without updating any release'
         type: boolean
         default: false
 permissions:
@@ -19,9 +19,59 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-      - name: Resolve published components before Docker setup
+      - name: Compute archive cache keys
+        id: keys
+        run: python3 scripts/component-cache.py keys
+      - name: Cache guest-base archive
+        uses: actions/cache@v4
+        with:
+          path: build/actions-cache/guest-base
+          key: archive-v2-${{ runner.os }}-${{ runner.arch }}-guest-base-${{ steps.keys.outputs['guest-base'] }}
+      - name: Cache host-runtime archive
+        uses: actions/cache@v4
+        with:
+          path: build/actions-cache/host-runtime
+          key: archive-v2-${{ runner.os }}-${{ runner.arch }}-host-runtime-${{ steps.keys.outputs['host-runtime'] }}
+      - name: Cache firefox-media archive
+        uses: actions/cache@v4
+        with:
+          path: build/actions-cache/firefox-media
+          key: archive-v2-${{ runner.os }}-${{ runner.arch }}-firefox-media-${{ steps.keys.outputs['firefox-media'] }}
+      - name: Cache mpv-media archive
+        uses: actions/cache@v4
+        with:
+          path: build/actions-cache/mpv-media
+          key: archive-v2-${{ runner.os }}-${{ runner.arch }}-mpv-media-${{ steps.keys.outputs['mpv-media'] }}
+      - name: Cache fuzzel archive
+        uses: actions/cache@v4
+        with:
+          path: build/actions-cache/fuzzel
+          key: archive-v2-${{ runner.os }}-${{ runner.arch }}-fuzzel-${{ steps.keys.outputs['fuzzel'] }}
+      - name: Cache keyboard archive
+        uses: actions/cache@v4
+        with:
+          path: build/actions-cache/keyboard
+          key: archive-v2-${{ runner.os }}-${{ runner.arch }}-keyboard-${{ steps.keys.outputs['keyboard'] }}
+      - name: Cache xwayland archive
+        uses: actions/cache@v4
+        with:
+          path: build/actions-cache/xwayland
+          key: archive-v2-${{ runner.os }}-${{ runner.arch }}-xwayland-${{ steps.keys.outputs['xwayland'] }}
+      - name: Cache integration archive
+        uses: actions/cache@v4
+        with:
+          path: build/actions-cache/integration
+          key: archive-v2-${{ runner.os }}-${{ runner.arch }}-integration-${{ steps.keys.outputs['integration'] }}
+      - name: Cache trash-packages archive
+        uses: actions/cache@v4
+        with:
+          path: build/actions-cache/trash-packages
+          key: archive-v2-${{ runner.os }}-${{ runner.arch }}-trash-packages-${{ steps.keys.outputs['trash-packages'] }}
+      - name: Restore finished archives and resolve misses
         id: components
-        run: python3 scripts/build-components.py --repository "$GITHUB_REPOSITORY" --plan
+        run: |
+          python3 scripts/component-cache.py restore
+          python3 scripts/build-components.py --plan
       - name: Install archive ownership support
         run: sudo apt-get update && sudo apt-get install -y fakeroot
       - name: Check source
@@ -41,11 +91,13 @@ jobs:
               }
             }
       - name: Build only missing components
-        run: python3 scripts/build-components.py --repository "$GITHUB_REPOSITORY"
-      - name: Publish benchmark components without advancing development
+        run: python3 scripts/build-components.py
+      - name: Stage finished archives for Actions cache
+        run: python3 scripts/component-cache.py stage
+      - name: Validate benchmark without publishing
         if: inputs.benchmark
         run: python3 scripts/publish-components.py --repository "$GITHUB_REPOSITORY" --components-only
-      - name: Publish immutable components and rolling manifest
+      - name: Publish installation bundle and rolling manifest
         if: ${{ !inputs.benchmark }}
         run: python3 scripts/publish-components.py --repository "$GITHUB_REPOSITORY"
       - name: Record the published changelog on dev

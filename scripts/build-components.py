@@ -82,7 +82,14 @@ def input_keys(root=None):
             not re.fullmatch(r'\d{8}T\d{6}Z', lock.get('debian_snapshot', '')) or
             lock.get('runtime_abi') != C['ABI']):
         raise RuntimeError('unsupported component dependency lock')
-    recipe = paths(root, ['scripts/build-components.py', 'payload/bin/rocknix-components'])
+    # Hash producers, not cache transport, CLI or publication orchestration.
+    def functions(path, names):
+        source = (root / path).read_text()
+        return {n.name: ast.get_source_segment(source, n) for n in ast.parse(source).body
+                if isinstance(n, ast.FunctionDef) and n.name in names}
+    recipe = functions('scripts/build-components.py',
+                       {'add_bytes', 'add_tree', 'payload_tar', 'compress', 'check_payload'})
+    recipe['ownership'] = functions('payload/bin/rocknix-components', {'owns'})
     selected = {
         'guest-base': ['build-support/components/bootstrap-base.sh',
                        'build-support/trash/check-packages.py', 'build-support/trash/install-image.py',
@@ -101,6 +108,8 @@ def input_keys(root=None):
                              'rootfs-overlay/usr/local/bin/rocknix-gamescope'],
         'host-theme': ['rootfs-overlay/etc/gtk-3.0/settings.ini', 'rootfs-overlay/usr/share/themes/ROCKNIX'],
     }
+    selected['integration'] = sorted(set(selected.pop('guest-integration') +
+                                         selected.pop('host-integration') + selected.pop('host-theme')))
     root_stages = docker_stages((root / 'Dockerfile.rootfs').read_text())
     host_stages = docker_stages((root / 'build-support/lxc/Dockerfile.host-tools').read_text())
     keys, inputs = {}, {}
@@ -108,6 +117,7 @@ def input_keys(root=None):
         data = {'role': role, 'platform': 'linux/arm64', 'recipe': recipe, 'files': paths(root, selected[role])}
         if role in DOCKER:
             data['dependencies'] = lock
+            data['producer'] = functions('scripts/build-components.py', {'docker_export', 'locked_dockerfile'})
             data['context_rules'] = paths(root, ['.dockerignore'])
             data['docker_frontend'] = (root / DOCKER[role][0]).read_text().split('FROM ', 1)[0]
         if role in ('firefox-media', 'mpv-media', 'keyboard', 'fuzzel', 'xwayland'):
@@ -116,6 +126,8 @@ def input_keys(root=None):
             data['docker'] = {stage: root_stages[stage] for stage in ROOT_STAGES[role]}
         elif role == 'host-runtime':
             data['docker'] = host_stages['host-runtime']
+        if role == 'trash-packages':
+            data['package_producer'] = functions('scripts/build-components.py', {'prepare_trash'})
         if role == 'trash-packages' and os.environ.get('ROCKNIX_TRASH_PACKAGES_DIR'):
             # A local native override must never masquerade as the locked CI
             # build. Hash audited bytes, excluding volatile export attestations.
@@ -142,59 +154,26 @@ def input_keys(root=None):
 
 
 class Store:
-    """Local cache is disposable. Release assets are the durable authority."""
-    def __init__(self, directory, repository=None):
-        self.directory, self.repository = Path(directory), repository
+    """Disposable finished archives restored by Actions cache, or retained locally."""
+    def __init__(self, directory):
+        self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
-        self.releases = {}
-
-    def asset_list(self, tag):
-        if tag not in self.releases:
-            result = subprocess.run(['gh', 'api', f'repos/{self.repository}/releases/tags/{tag}'],
-                                    capture_output=True, text=True)
-            if result.returncode:
-                if '(HTTP 404)' in result.stderr:
-                    self.releases[tag] = {}
-                else:
-                    raise RuntimeError('cannot inspect component store: ' + result.stderr)
-            else:
-                value = json.loads(result.stdout)
-                self.releases[tag] = {item['name']: item for item in value['assets'] if item['state'] == 'uploaded'}
-        return self.releases[tag]
 
     def find(self, role, key):
-        tag = 'components-v1-' + key[:3]
-        name = f'{role}-{key}.json'
-        binding = self.directory / name
-        if self.repository:
-            assets = self.asset_list(tag)
-            if name not in assets:
-                return None
-            item = assets[name]
-            expected = item.get('digest', '').removeprefix('sha256:')
-            if not C['HEX'].fullmatch(expected):
-                raise RuntimeError('component binding lacks remote digest')
-            C['fetch'](self.repository, tag, name, binding, expected, item['size'])
-        elif not binding.exists():
+        binding = self.directory / f'{role}-{key}.json'
+        if not binding.exists():
             return None
         spec = C['descriptor'](json.loads(binding.read_text()), role, key)
-        if self.repository:
-            item = assets.get(spec['asset'])
-            if not item or item['size'] != spec['size'] or item.get('digest') != 'sha256:' + spec['sha256']:
-                raise RuntimeError('published component is missing or corrupt')
-        else:
-            blob = self.directory / spec['asset']
-            if not blob.exists():
-                return None
-            if blob.stat().st_size != spec['size'] or C['digest'](blob) != spec['sha256']:
-                raise RuntimeError('local component cache is corrupt')
+        blob = self.directory / spec['asset']
+        if not blob.exists():
+            return None
+        if blob.is_symlink() or blob.stat().st_size != spec['size'] or C['digest'](blob) != spec['sha256']:
+            raise RuntimeError('local component cache is corrupt')
         return spec
 
     def blob(self, spec):
         path = self.directory / spec['asset']
-        if self.repository:
-            C['fetch'](self.repository, spec['store_tag'], spec['asset'], path, spec['sha256'], spec['size'])
-        if path.stat().st_size != spec['size'] or C['digest'](path) != spec['sha256']:
+        if path.is_symlink() or path.stat().st_size != spec['size'] or C['digest'](path) != spec['sha256']:
             raise RuntimeError('component artifact verification failed')
         return path
 
@@ -271,7 +250,17 @@ def payload_tar(role, work, raw=None, trash=None):
     result = work / 'payload.tar'
     guest = runpy.run_path(str(PROJECT / 'rootfs-overlay/usr/local/bin/rocknix-container-update'))
     with tarfile.open(result, 'w') as archive:
-        if raw:
+        if role == 'integration':
+            seen = set()
+            for part in ('guest-integration', 'host-integration', 'host-theme'):
+                directory = work / part; directory.mkdir()
+                with tarfile.open(payload_tar(part, directory)) as source:
+                    for item in source:
+                        if item.name in seen and item.isdir():
+                            continue
+                        seen.add(item.name)
+                        archive.addfile(item, source.extractfile(item) if item.isfile() else None)
+        elif raw:
             prefix = 'host-tools/' if role == 'host-runtime' else 'rootfs/'
             with tarfile.open(raw) as source:
                 for original in source:
@@ -389,7 +378,7 @@ def compress(role, key, raw, store):
         run(['xz', '-c', raw], stdout=output)
     sha = C['digest'](compressed)
     spec = {'format': 1, 'id': role, 'input_key': key, 'sha256': sha,
-            'asset': sha + '.tar.xz', 'store_tag': 'components-v1-' + key[:3],
+            'asset': sha + '.tar.xz',
             'size': compressed.stat().st_size, 'unpacked_size': unpacked, 'managed': managed}
     C['descriptor'](spec, role, key)
     blob = store.directory / spec['asset']
@@ -514,11 +503,10 @@ def build(store, output, plan_only=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--store', type=Path, default=PROJECT / 'build/component-store')
-    parser.add_argument('--repository', help='resolve previously published immutable components before building')
     parser.add_argument('--output', type=Path, default=PROJECT / 'dist/components')
     parser.add_argument('--plan', action='store_true')
     args = parser.parse_args()
-    build(Store(args.store, args.repository), args.output, args.plan)
+    build(Store(args.store), args.output, args.plan)
 
 
 if __name__ == '__main__':

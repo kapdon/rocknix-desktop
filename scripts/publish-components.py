@@ -8,6 +8,8 @@ import runpy
 import shutil
 import subprocess
 import tempfile
+import tarfile
+import io
 
 PROJECT = Path(__file__).resolve().parents[1]
 B = runpy.run_path(str(PROJECT / 'scripts/build-components.py'))
@@ -31,7 +33,7 @@ class Publisher:
                     raise RuntimeError('cannot inspect release: ' + result.stderr)
                 self.gh('release', 'create', tag, '--repo', self.repository, '--target', self.revision,
                         '--prerelease', '--latest=false', '--title', tag,
-                        '--notes', 'Immutable Desktop component artifacts. Referenced by release manifests; do not delete.')
+                        '--notes', 'ROCKNIX Desktop installation bundles.')
                 self.known[tag] = {}
             else:
                 self.known[tag] = {item['name']: item for item in json.loads(result.stdout)['assets']}
@@ -45,7 +47,7 @@ class Publisher:
                 raise RuntimeError('immutable asset collision or incomplete upload: ' + name)
             return False
         if len(assets) >= 990:
-            raise RuntimeError('component shard is full; add a new store layout before publishing')
+            raise RuntimeError('release is full; retire old development bundles before publishing')
         if source is None or not source.is_file() or C['digest'](source) != digest or source.stat().st_size != size:
             raise RuntimeError('missing verified local artifact: ' + name)
         if source.name != name:
@@ -56,6 +58,41 @@ class Publisher:
         if not item or item.get('digest') != 'sha256:' + digest or item['size'] != size or item['state'] != 'uploaded':
             raise RuntimeError('uploaded artifact verification failed: ' + name)
         return True
+
+
+def prepare_release(manifest, store, destination, tag):
+    """Wrap finished archives without decompressing or recompressing the rootfs."""
+    value = C['release'](json.loads(manifest.read_text()))
+    revision = value['commit']
+    bundle = destination / 'bundle.tar'
+    with tarfile.open(bundle, 'w') as archive:
+        data = C['encoded'](value)
+        member = tarfile.TarInfo('release.json'); member.size = len(data); member.mode = 0o644
+        archive.addfile(member, io.BytesIO(data))
+        seen = set()
+        for role in C['profile_roles'](value, 'install'):
+            spec = value['components'][role]
+            source = B['Store'](store).blob(spec)
+            if spec['asset'] in seen:
+                continue
+            seen.add(spec['asset'])
+            member = tarfile.TarInfo(spec['asset']); member.size = spec['size']; member.mode = 0o644
+            with source.open('rb') as stream:
+                archive.addfile(member, stream)
+    if bundle.stat().st_size >= 2 * 1024**3:
+        raise RuntimeError('bundle exceeds release asset limit')
+    bundle_sha = C['digest'](bundle)
+    bundle = bundle.rename(destination / f'rocknix-desktop-{revision}-{bundle_sha}.tar')
+    checksum = destination / (bundle.name + '.sha256')
+    checksum.write_text(f'{bundle_sha}  {bundle.name}\n')
+    value['bundle'] = {'tag': tag, 'asset': bundle.name, 'sha256': bundle_sha, 'size': bundle.stat().st_size}
+    candidate = destination / 'release.json'; candidate.write_bytes(C['encoded'](value))
+    sha = C['digest'](candidate)
+    candidate = candidate.rename(destination / f'rocknix-desktop-components-{revision}-{sha}.json')
+    helper_source = PROJECT / 'payload/bin/rocknix-components'
+    helper = destination / f"rocknix-components-{C['digest'](helper_source)}.py"
+    shutil.copyfile(helper_source, helper)
+    return value, candidate, helper, bundle, checksum
 
 
 def publish(manifest, store, repository, components_only=False):
@@ -79,24 +116,14 @@ def publish(manifest, store, repository, components_only=False):
                                 revision, value['built_at'], '--repository', repository,
                                 '--changelog', manifest.parent / 'CHANGELOG.md'],
                                check=True, stdout=stream)
-        # Failure anywhere in these immutable uploads leaves the old pointer.
-        for role, spec in value['components'].items():
-            publisher.upload(spec['store_tag'], spec['asset'], spec['sha256'], spec['size'],
-                             store / spec['asset'])
-            binding = scratch / f"{role}-{spec['input_key']}.json"
-            binding.write_bytes(C['encoded'](spec))
-            publisher.upload(spec['store_tag'], binding.name, C['digest'](binding), binding.stat().st_size, binding)
         if components_only:
-            print('Component artifacts verified; development release unchanged.')
+            print('Build validated; benchmark leaves all releases unchanged.')
             return
-        sha = C['digest'](manifest)
-        name = f'rocknix-desktop-components-{revision}-{sha}.json'
-        candidate = scratch / name; shutil.copyfile(manifest, candidate)
-        publisher.upload('development', name, sha, candidate.stat().st_size, candidate)
-        helper_source = PROJECT / 'payload/bin/rocknix-components'
-        helper_sha = C['digest'](helper_source)
-        helper = scratch / f'rocknix-components-{helper_sha}.py'; shutil.copyfile(helper_source, helper)
-        publisher.upload('development', helper.name, helper_sha, helper.stat().st_size, helper)
+        value, candidate, helper, bundle, checksum = prepare_release(manifest, store, scratch, 'development')
+        for artifact in (bundle, checksum, candidate, helper):
+            publisher.upload('development', artifact.name, C['digest'](artifact), artifact.stat().st_size, artifact)
+        sha, name = C['digest'](candidate), candidate.name
+        helper_sha = C['digest'](helper)
         pointer = {'format': 2, 'commit': revision, 'asset': name, 'sha256': sha,
                    'size': candidate.stat().st_size, 'built_at': value['built_at'],
                    'released_at': publisher.assets('development')[name]['updated_at'],
@@ -105,7 +132,7 @@ def publish(manifest, store, repository, components_only=False):
         publisher.gh('release', 'upload', 'development', latest, '--clobber', '--repo', repository)
         publisher.gh('release', 'edit', 'development', '--repo', repository, '--prerelease', '--latest=false',
                      '--title', 'Rolling development build', '--notes-file', notes)
-        # Retain immutable manifests and components; no rolling asset pruning.
+        # Retain previous immutable bundles until explicit release cleanup.
         tag = publisher.gh('api', f'repos/{repository}/git/tags', '--method', 'POST',
                            '-f', 'tag=development', '-f', f'object={revision}', '-f', 'type=commit',
                            '-f', f'message=Rolling development components ({revision})', '--jq', '.sha',
@@ -120,6 +147,6 @@ if __name__ == '__main__':
     parser.add_argument('--store', type=Path, default=PROJECT / 'build/component-store')
     parser.add_argument('--repository', default='kapdon/rocknix-desktop')
     parser.add_argument('--components-only', action='store_true',
-                        help='publish reusable artifacts without changing any channel pointer or tag')
+                        help='validate the build without publishing or changing any channel pointer or tag')
     args = parser.parse_args()
     publish(args.manifest, args.store, args.repository, args.components_only)

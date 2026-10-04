@@ -47,13 +47,16 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
             shutil.copy2(path, source / name)
     initial, _ = B['input_keys'](source)
     cases = {
-        'rootfs-overlay/etc/xdg/waybar/style.css': {'guest-integration'},
-        'payload/bin/rocknix-lxc': {'host-integration'},
-        'rootfs-overlay/usr/share/themes/ROCKNIX/gtk-3.0/gtk.css': {'guest-integration', 'host-theme'},
+        'rootfs-overlay/etc/xdg/waybar/style.css': {'integration'},
+        'payload/bin/rocknix-lxc': {'integration'},
+        'payload/bin/rocknix-components': {'integration'},
+        'scripts/publish-components.py': set(),
+        'scripts/build-components.py': set(),
+        'rootfs-overlay/usr/share/themes/ROCKNIX/gtk-3.0/gtk.css': {'integration'},
         'build-support/mpv-ffmpeg/build.sh': {'mpv-media'},
         'build-support/trash/mount-identity.h': {'trash-packages', 'guest-base'},
-        'rootfs-overlay/usr/local/bin/rocknix-container-update': {'guest-integration', 'host-integration'},
-        'rootfs-overlay/usr/local/bin/rocknix-gamescope': {'guest-integration', 'host-integration'},
+        'rootfs-overlay/usr/local/bin/rocknix-container-update': {'integration'},
+        'rootfs-overlay/usr/local/bin/rocknix-gamescope': {'integration'},
     }
     for name, expected in cases.items():
         path = source / name; old = path.read_bytes(); path.write_bytes(old + b'\n# changed\n')
@@ -63,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
     config = source / 'rootfs-overlay/etc/xdg/waybar/style.css'
     config.chmod(0o600)
     changed, _ = B['input_keys'](source)
-    assert {k for k in initial if initial[k] != changed[k]} == {'guest-integration'}
+    assert {k for k in initial if initial[k] != changed[k]} == {'integration'}
     config.chmod(0o644)
     lock = source / 'build-support/components/dependencies.json'; old = lock.read_text()
     lock.write_text(old.replace('20261001T000000Z', '20260930T000000Z'))
@@ -125,9 +128,9 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
         new = B['build'](store, work / 'changed')
         assert [entry[0] for entry in calls] == ['xz'], calls
         metrics = json.loads((work / 'changed/timings.json').read_text())
-        assert metrics['built'] == ['guest-integration']
+        assert metrics['built'] == ['integration']
         assert not json.loads((work / 'changed/plan.json').read_text())['needs_docker']
-        assert all(new['components'][r] == value['components'][r] for r in C['ROLES'] if r != 'guest-integration')
+        assert all(new['components'][r] == value['components'][r] for r in C['ROLES'] if r != 'integration')
         print('PASS: real orchestrator warm build calls no producer; CSS build runs one small xz, zero Docker calls')
         calls.clear()
         bootstrap = source / 'build-support/components/bootstrap-base.sh'
@@ -140,22 +143,58 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
         print('PASS: base-only change reuses the verified package transaction without rebuilding Trash')
 
 
-        # A fresh runner resolves references using only small descriptor downloads.
+        # Simulate Actions restoring finished archives on a fresh runner.
         remote_cache = work / 'remote-cache'; remote_cache.mkdir()
-        remote = B['Store'](remote_cache, 'owner/project')
-        remote_assets = {}
         for spec in new['components'].values():
             binding = store.directory / f"{spec['id']}-{spec['input_key']}.json"
             shutil.copyfile(binding, remote_cache / binding.name)
-            remote_assets.setdefault(spec['store_tag'], {}).update({
-                binding.name: {'digest': 'sha256:' + C['digest'](binding), 'size': binding.stat().st_size},
-                spec['asset']: {'digest': 'sha256:' + spec['sha256'], 'size': spec['size']}})
-        remote.releases = remote_assets
-        with patch.dict(C['fetch'].__globals__, subprocess=SimpleNamespace(run=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError('network download')))):
-            resolved = B['build'](remote, work / 'fresh-runner', plan_only=True)
+            shutil.copyfile(store.directory / spec['asset'], remote_cache / spec['asset'])
+        remote = B['Store'](remote_cache)
+        resolved = B['build'](remote, work / 'fresh-runner', plan_only=True)
         assert not resolved['missing'] and not resolved['needs_docker']
-        assert not list(remote_cache.glob('*.tar.xz'))
-        print('PASS: fresh-runner resolution reuses all large assets without downloading them')
+        spec = new['components']['keyboard']
+        (remote_cache / spec['asset']).unlink()
+        resolved = B['build'](remote, work / 'evicted-cache', plan_only=True)
+        assert resolved['missing'] == ['keyboard'] and resolved['needs_docker']
+        print('PASS: finished archives restore on fresh runners; evicted entries rebuild only the missing layer')
+
+    # Exercise the actual Actions staging/restoration CLI with finished archives.
+    K = runpy.run_path(str(PROJECT / 'scripts/component-cache.py'))
+    staged = work / 'actions-cache'; restored = work / 'actions-restored'
+    with patch.dict(K['B'], input_keys=lambda: ({r: spec['input_key'] for r, spec in new['components'].items()}, {})):
+        for action, destination in (('stage', store.directory), ('restore', restored)):
+            with patch('sys.argv', ['component-cache.py', action, '--cache', str(staged), '--store', str(destination)]):
+                K['main']()
+    assert all(B['Store'](restored).find(r, spec['input_key']) == spec for r, spec in new['components'].items())
+    print('PASS: Actions cache stage/restore preserves all verified archive bindings')
+
+    # A real published bundle can be copied/extracted without touching inner compression.
+    P = runpy.run_path(str(PROJECT / 'scripts/publish-components.py'))
+    bundle_source = work / 'bundle-source.json'; bundle_source.write_bytes(C['encoded'](new))
+    bundle_output = work / 'bundle-output'; bundle_output.mkdir()
+    published, candidate_manifest, helper, bundle, checksum = P['prepare_release'](bundle_source, store.directory, bundle_output, 'development')
+    bundle_cache = work / 'bundle-cache'
+    C['unpack_bundle'](published, bundle, bundle_cache, 'install')
+    assert len(list(bundle_cache.glob('*.tar.xz'))) == 8
+    def bundle_download(repository, tag, asset, target, expected, size):
+        assert tag == 'development' and asset == bundle.name
+        assert expected == C['digest'](bundle) and size == bundle.stat().st_size
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(bundle, target)
+        return target
+    downloaded_cache = work / 'downloaded-cache'
+    with patch.dict(C['materialize'].__globals__, fetch=bundle_download):
+        downloaded = C['materialize'](published, downloaded_cache, 'owner/repo', 'install')
+    assert len(downloaded) == 8 and not (downloaded_cache / 'bundle.tar').exists()
+    materialized = C['materialize'](published, bundle_cache, 'invalid/offline', 'install')
+    assert all(C['digest'](path) == published['components'][role]['sha256'] for role, path in materialized.items())
+    wrong = copy.deepcopy(published); wrong['commit'] = 'b' * 40
+    rejects(C['unpack_bundle'], wrong, bundle, work / 'wrong-bundle', 'install')
+    hostile_bundle = work / 'bad-bundle.tar'
+    with tarfile.open(hostile_bundle, 'w') as archive:
+        put(archive, '../escape', b'bad')
+    rejects(C['unpack_bundle'], published, hostile_bundle, work / 'bad-bundle', 'install')
+    print('PASS: bundled compressed archives roundtrip offline with digest, manifest and path checks')
 
     allfiles = {r: store.directory / spec['asset'] for r, spec in new['components'].items()}
     selected = lambda profile: {r: allfiles[r] for r in C['PROFILES'][profile]}
@@ -203,7 +242,7 @@ with tempfile.TemporaryDirectory(prefix='rocknix-components-test-') as temp:
     rejects(C['release'], legacy)
 
     bad = copy.deepcopy(new)
-    bad['components']['host-integration']['managed'] = copy.deepcopy(new['components']['guest-integration']['managed'])
+    bad['components']['guest-base']['managed'] = copy.deepcopy(new['components']['integration']['managed'])
     rejects(C['release'], bad)
     corrupt = selected('update').copy()
     path = work / 'corrupt.tar.xz'; path.write_bytes(b'not an artifact'); corrupt['keyboard'] = path

@@ -80,7 +80,7 @@ def measure(store_path, output, samples):
                     builder['build'](store, output / case)
                     elapsed = time.monotonic() - started
                     metrics = json.loads((output / case / 'timings.json').read_text())
-                    wanted = ['guest-integration'] if kind == 'css' else []
+                    wanted = ['integration'] if kind == 'css' else []
                     assert metrics['built'] == wanted, metrics
                     assert len(calls) == len(wanted), calls
                     report['runs'].append({'case': case, 'seconds': round(elapsed, 3),

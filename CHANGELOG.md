@@ -20,8 +20,9 @@
   Desktop/Game override with secondary Gamescope detection.
 - **Scoped host providers:** Add opt-in native graphics reuse with narrow read-only
   mounts. Packaged providers remain the default; native codecs remain diagnostic.
-- **Faster development builds:** Reuse unchanged components and rebuild only the
-  affected parts, avoiding repeated export and compression of the Debian runtime.
+- **Simpler cached builds:** Cache finished archives in GitHub Actions and rebuild
+  only changed layers. Publish one complete installation bundle per development
+  or versioned release, without separate component release pages or rootfs recompression.
 - **Apps and Settings toggles:** Tap either button again to close its open menu.
 - **Better cache reuse:** Preserve Trash packages and remote Docker layers, and
   include the keyboard layout in its compiler inputs.

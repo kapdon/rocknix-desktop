@@ -25,7 +25,7 @@ def publish(tag, manifest, store, repository):
         raise RuntimeError('release source must match remote dev')
     if output('git', '-C', str(PROJECT), 'ls-remote', '--tags', 'origin', 'refs/tags/' + tag):
         raise RuntimeError('version tag already exists')
-    # This validates clean/exact source and publishes immutable dependencies.
+    # This validates clean/exact source without publishing intermediate artifacts.
     # It never advances the development pointer or tag.
     P['publish'](manifest, store, repository, components_only=True)
     value = C['release'](json.loads(manifest.read_text()))
@@ -34,18 +34,15 @@ def publish(tag, manifest, store, repository):
         subprocess.run(['gh', *map(str, args), '--repo', repository], check=True)
     with tempfile.TemporaryDirectory(prefix='versioned-components-') as scratch:
         scratch = Path(scratch)
-        name = f'rocknix-desktop-components-{revision}-{sha}.json'
-        candidate = scratch / name; shutil.copyfile(manifest, candidate)
-        helper_source = PROJECT / 'payload/bin/rocknix-components'
-        helper_sha = C['digest'](helper_source)
-        helper = scratch / f'rocknix-components-{helper_sha}.py'
-        shutil.copyfile(helper_source, helper)
+        value, candidate, helper, bundle, checksum = P['prepare_release'](manifest, store, scratch, tag)
+        name, sha = candidate.name, C['digest'](candidate)
+        helper_sha = C['digest'](helper)
         notes = scratch / 'notes.md'
         notes.write_text(f'Commit: `{revision}`\nBuilt: {value["built_at"]}\n\n'
                          f'ROCKNIX Desktop component release. Install with `--release {tag}`.\n')
         prerelease = '-' in tag
         flags = ['--prerelease'] if prerelease else []
-        gh('release', 'create', tag, candidate, helper, '--target', revision,
+        gh('release', 'create', tag, bundle, checksum, candidate, helper, '--target', revision,
            '--draft', *flags, '--title', 'ROCKNIX Desktop ' + tag, '--notes-file', notes)
         released = output('gh', 'release', 'view', tag, '--repo', repository, '--json', 'assets',
                           '--jq', f'.assets[] | select(.name == "{name}") | .updatedAt')

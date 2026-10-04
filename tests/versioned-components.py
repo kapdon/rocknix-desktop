@@ -37,7 +37,13 @@ with tempfile.TemporaryDirectory() as temporary:
     def dependencies(*args, **kwargs):
         assert kwargs == {'components_only': True}
         calls.append(['dependencies'])
-    with patch.dict(P['P'], publish=dependencies), patch.dict(P['C'], release=lambda x: x), \
+    def prepare(manifest, store, scratch, tag):
+        candidate = scratch / 'manifest.json'; candidate.write_bytes(manifest.read_bytes())
+        helper = scratch / 'helper.py'; helper.write_bytes(b'helper')
+        bundle = scratch / 'bundle.tar'; bundle.write_bytes(b'bundle')
+        checksum = scratch / 'bundle.tar.sha256'; checksum.write_bytes(b'checksum')
+        return json.loads(manifest.read_text()), candidate, helper, bundle, checksum
+    with patch.dict(P['P'], publish=dependencies, prepare_release=prepare), patch.dict(P['C'], release=lambda x: x), \
          patch('subprocess.check_output', side_effect=output), patch('subprocess.run', side_effect=run):
         for tag in ('v0.2.0', 'v0.2.0-beta.1'):
             calls.clear()

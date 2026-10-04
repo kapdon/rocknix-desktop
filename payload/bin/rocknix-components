@@ -20,7 +20,7 @@ import tempfile
 FORMAT = 2
 ABI = 'debian13-arm64-lxc-v1'
 ROLES = ('guest-base', 'host-runtime', 'firefox-media', 'mpv-media', 'fuzzel',
-         'keyboard', 'xwayland', 'guest-integration', 'host-integration', 'host-theme', 'trash-packages')
+         'keyboard', 'xwayland', 'integration', 'trash-packages')
 # Updates replace the guest system with the same complete image as installs.
 PROFILES = {name: tuple(x for x in ROLES if x != 'trash-packages')
             for name in ('install', 'update')}
@@ -51,6 +51,8 @@ def safe_name(name):
 
 
 def owns(role, name):
+    if role == 'integration':
+        return any(owns(part, name) for part in ('guest-integration', 'host-integration', 'host-theme'))
     if role == 'guest-base':
         return name == 'rootfs' or name.startswith('rootfs/')
     if role == 'host-runtime':
@@ -84,8 +86,6 @@ def descriptor(spec, role=None, key=None):
             raise RuntimeError('invalid component digest')
     if spec.get('asset') != spec['sha256'] + '.tar.xz':
         raise RuntimeError('invalid immutable asset name')
-    if spec.get('store_tag') != 'components-v1-' + spec['input_key'][:3]:
-        raise RuntimeError('invalid component store')
     for field in ('size', 'unpacked_size'):
         if type(spec.get(field)) is not int or not 0 <= spec[field] <= 16 * 1024**3:
             raise RuntimeError('invalid component size')
@@ -149,9 +149,54 @@ def fetch(repository, tag, asset, target, expected=None, size=None):
 def materialize(value, cache, repository, profile):
     release(value)
     cache = Path(cache)
-    return {role: fetch(repository, spec['store_tag'], spec['asset'], cache / spec['asset'],
-                        spec['sha256'], spec['size'])
-            for role in profile_roles(value, profile) for spec in (value['components'][role],)}
+    specs = [value['components'][role] for role in profile_roles(value, profile)]
+    files = {spec['id']: cache / spec['asset'] for spec in specs}
+    if all(path.is_file() and not path.is_symlink() and path.stat().st_size == value['components'][role]['size']
+           and digest(path) == value['components'][role]['sha256'] for role, path in files.items()):
+        return files
+    bundle = value.get('bundle')
+    if not isinstance(bundle, dict):
+        raise RuntimeError('missing local archives or release bundle')
+    if (not HEX.fullmatch(str(bundle.get('sha256', ''))) or
+            type(bundle.get('size')) is not int or not 0 < bundle['size'] < 2 * 1024**3):
+        raise RuntimeError('invalid release bundle')
+    archive_path = fetch(repository, bundle['tag'], bundle['asset'], cache / 'bundle.tar',
+                         bundle['sha256'], bundle['size'])
+    unpack_bundle(value, archive_path, cache, profile)
+    archive_path.unlink()
+    return files
+
+
+def unpack_bundle(value, path, cache, profile):
+    """Copy only verified regular blobs; never extract arbitrary outer tar paths."""
+    release(value)
+    cache = Path(cache); cache.mkdir(parents=True, exist_ok=True)
+    expected = {value['components'][role]['asset']: value['components'][role]
+                for role in profile_roles(value, profile)}
+    with tarfile.open(path, 'r:') as archive:
+        members = archive.getmembers()
+        if (len(members) != len(expected) + 1 or
+                {item.name for item in members} != set(expected) | {'release.json'} or
+                any(not item.isfile() for item in members)):
+            raise RuntimeError('invalid bundle contents')
+        manifest = archive.getmember('release.json')
+        if manifest.size > 16 * 1024**2:
+            raise RuntimeError('oversized bundle manifest')
+        bundled = release(json.load(archive.extractfile(manifest)))
+        if bundled != {key: item for key, item in value.items() if key != 'bundle'}:
+            raise RuntimeError('bundle manifest mismatch')
+        # Validate the complete member list before writing any archive.
+        if any(item.size != expected[item.name]['size'] for item in members if item.name != 'release.json'):
+            raise RuntimeError('bundle member size mismatch')
+        with tempfile.TemporaryDirectory(prefix='.bundle-', dir=cache) as scratch:
+            for name, spec in expected.items():
+                target = Path(scratch) / name
+                with target.open('wb') as stream:
+                    shutil.copyfileobj(archive.extractfile(name), stream)
+                if digest(target) != spec['sha256']:
+                    raise RuntimeError('bundle member checksum mismatch')
+            for name in expected:
+                (Path(scratch) / name).replace(cache / name)
 
 
 def validate_archives(value, files, profile):
@@ -188,7 +233,8 @@ def validate_archives(value, files, profile):
                         'host-tools' if role in ('host-runtime', 'host-theme') else 'rootfs')
                     if role == 'xwayland' and name in ('payload', 'payload/guest'):
                         root = 'payload'
-                    if name != root and not name.startswith(root + '/'):
+                    valid_roots = ('rootfs', 'payload', 'host-tools') if role == 'integration' else (root,)
+                    if not any(name == r or name.startswith(r + '/') for r in valid_roots):
                         raise RuntimeError('component directory outside its root')
                 if item.uid < 0 or item.gid < 0 or item.uid >= 65536 or item.gid >= 65536:
                     raise RuntimeError('unmappable component ownership')
