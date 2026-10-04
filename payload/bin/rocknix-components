@@ -179,8 +179,8 @@ def download_release(value, cache, repository, target):
         # CI validates the complete path/link graph and ownership before packaging.
         # The finished archive is checksum-bound above. Extract it once using tar,
         # preserving numeric owners, hardlinks and setuid bits for the UID shift.
-        subprocess.run(['tar', '-xJf', str(archive), '--numeric-owner', '--same-owner',
-                        '--same-permissions', '-C', str(temporary)], check=True)
+        subprocess.run(['tar', '-xJf', str(archive), '--numeric-owner',
+                        '-C', str(temporary)], check=True)
         embedded = json.loads((temporary / 'components.json').read_text())
         if embedded != {k: v for k, v in value.items() if k != 'bundle'}:
             raise RuntimeError('assembled release manifest mismatch')
