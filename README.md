@@ -7,20 +7,24 @@ returns to ROCKNIX. Save your work before exiting.
 > **Disclaimer:** ROCKNIX Desktop is an independent project and is not affiliated
 > with, endorsed by, or maintained by the [ROCKNIX project](https://rocknix.org/).
 
-## What's new in 0.2.0
+## Features
 
-Launch installed ROCKNIX Steam games from Apps, or use **Launch with Gamescope**
-for desktop applications. Nested Gamescope fits the available desktop area by
-default. The always-available **Pad: Desktop / Game** button switches controller
-input, and game sessions clean up their Wine processes when they close.
+- **A desktop built for handhelds:** Touch-friendly Apps and Settings menus,
+  controller navigation, and an on-screen keyboard.
+- **Linux desktop applications:** Firefox, file management, a terminal, and Debian
+  packages inside LXC, with shared access to your ROCKNIX game folders.
+- **Gamescope from the app launcher:** Run desktop applications and Wine games
+  in a virtual display that fits the available desktop area by default.
+- **Native Steam game launches:** Reuse ROCKNIX's installed Steam games, with a
+  choice to keep Desktop running or return to native fullscreen gaming.
+- **Controller control at a tap:** Switch between desktop mouse controls and
+  gamepad input from the bottom bar.
+- **Integrated with ROCKNIX:** Reuse the host kernel, hardware services and gaming
+  setup, and return to EmulationStation with **Exit Desktop**.
 
-Updates now install a complete system assembled and validated by CI, preserving
-home data while replacing system packages. Releases contain just the installation
-tarball and its checksum. See the [full changelog](CHANGELOG.md).
-
-Steam game launches reuse native ROCKNIX Steam. Running Steam itself inside LXC
-for library management is planned for a later release; native Steam's Browse
-dialog remains a known limitation.
+Steam game launches use native ROCKNIX Steam. Steam library management inside
+LXC is not yet available, and native Steam's Browse dialog remains a known
+limitation.
 
 ## Desktop preview
 
