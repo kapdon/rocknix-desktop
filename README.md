@@ -64,22 +64,21 @@ SSH session on the ROCKNIX device**, not in your computer's local terminal.
 The device needs Internet access, at least **4 GiB free
 on /storage**, and **10% main-device battery**. Charging does not bypass the threshold.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash
-```
-
-This command selects the latest published stable version. To select a specific
-version, use the same installer and add `--release TAG`, for example:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash -s -- --release v0.1.0
-```
-
-For the rolling development build, add `--dev`:
+Use the current rolling development build while the new release format is in beta:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/kapdon/rocknix-desktop/dev/install.sh | bash -s -- --dev
 ```
+
+CI publishes a complete `rocknix-desktop-rp6-arm64.tar.xz` and its `.sha256` file.
+The installer downloads those two files, verifies the checksum and installs the
+prepared system. Build metadata and integration files are already inside it.
+
+For a version published with this format, replace `--dev` with `--release TAG`.
+Without a selector, the installer targets the latest stable release. The existing
+`v0.1.0` predates this format and uses its
+[original installer](https://github.com/kapdon/rocknix-desktop/blob/v0.1.0/install.sh);
+use `--dev` until a new stable release is published.
 
 Choose either `--dev` or `--release TAG`; they cannot be combined.
 Available versions are on the

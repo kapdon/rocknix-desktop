@@ -20,7 +20,7 @@ fixture_version = 'v1.2.3'
 commands = {fixture_version: bootstrap + ' -s -- --release ' + fixture_version,
             'development': bootstrap + ' -s -- --dev'}
 readme = (root / 'README.md').read_text().splitlines()
-assert bootstrap in readme, 'README bootstrap command changed'
+assert any(bootstrap in line for line in readme), 'README bootstrap command changed'
 installer = (root / 'install.sh').read_text()
 guard = 'if [[ "${BASH_SOURCE[0]:-$0}" = "$0" ]]; then'
 assert guard in installer, 'bash -c entry point must handle an unset BASH_SOURCE'

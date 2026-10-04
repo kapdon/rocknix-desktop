@@ -97,7 +97,7 @@ jobs:
       - name: Validate benchmark without publishing
         if: inputs.benchmark
         run: python3 scripts/publish-components.py --repository "$GITHUB_REPOSITORY" --components-only
-      - name: Publish installation bundle and rolling manifest
+      - name: Publish tarball and checksum
         if: ${{ !inputs.benchmark }}
         run: python3 scripts/publish-components.py --repository "$GITHUB_REPOSITORY"
       - name: Record the published changelog on dev
