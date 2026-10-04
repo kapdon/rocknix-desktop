@@ -41,7 +41,7 @@
 
 <!-- development-changelog:start -->
 
-<!-- development-revision: a17f97945bf74f510ceeb66371eb39bc3bdf8388 -->
+<!-- development-revision: ee2234af4eca053dd70755b9f1fa8dcaa0b29e10 -->
 
 ## Changes since v0.1.0
 
@@ -120,7 +120,8 @@
 - chore: ignore local OMC workflow state \[skip ci\] ([974f2d5](https://github.com/kapdon/rocknix-desktop/commit/974f2d5785eaded560a5e75a455e235313fab792))
 - build: cache finished layers and publish one installation bundle ([7d498cd](https://github.com/kapdon/rocknix-desktop/commit/7d498cd2146d3162838bc585f9a33dce047e8c7e))
 - build: include Docker target selection in archive cache keys ([a17f979](https://github.com/kapdon/rocknix-desktop/commit/a17f97945bf74f510ceeb66371eb39bc3bdf8388))
+- fix: stop forcing nested Gamescope windows fullscreen \[skip ci\] ([ee2234a](https://github.com/kapdon/rocknix-desktop/commit/ee2234af4eca053dd70755b9f1fa8dcaa0b29e10))
 
-[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.1.0...a17f97945bf74f510ceeb66371eb39bc3bdf8388)
+[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.1.0...ee2234af4eca053dd70755b9f1fa8dcaa0b29e10)
 
 <!-- development-changelog:end -->
