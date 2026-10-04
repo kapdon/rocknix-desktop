@@ -40,7 +40,7 @@
 
 <!-- development-changelog:start -->
 
-<!-- development-revision: ee89c1e4bb794c6fcb18155488864d06330daf72 -->
+<!-- development-revision: a17f97945bf74f510ceeb66371eb39bc3bdf8388 -->
 
 ## Changes since v0.1.0
 
@@ -115,7 +115,11 @@
 - fix: contain guest Gamescope application teardown ([611e71b](https://github.com/kapdon/rocknix-desktop/commit/611e71b185e3ab7c9e481b9276f2d9d5264a5598))
 - test: verify Gamescope cleanup and record RP6 evidence ([74229cf](https://github.com/kapdon/rocknix-desktop/commit/74229cff4099f9f13b5f22c23361a75a18731f5f))
 - docs: keep agent workflow records in ignored experiments ([ee89c1e](https://github.com/kapdon/rocknix-desktop/commit/ee89c1e4bb794c6fcb18155488864d06330daf72))
+- Keep changelog to release highlights and individual changes ([a6eef69](https://github.com/kapdon/rocknix-desktop/commit/a6eef696aab4d922a65c21b8a0a2bf15f3927122))
+- chore: ignore local OMC workflow state \[skip ci\] ([974f2d5](https://github.com/kapdon/rocknix-desktop/commit/974f2d5785eaded560a5e75a455e235313fab792))
+- build: cache finished layers and publish one installation bundle ([7d498cd](https://github.com/kapdon/rocknix-desktop/commit/7d498cd2146d3162838bc585f9a33dce047e8c7e))
+- build: include Docker target selection in archive cache keys ([a17f979](https://github.com/kapdon/rocknix-desktop/commit/a17f97945bf74f510ceeb66371eb39bc3bdf8388))
 
-[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.1.0...ee89c1e4bb794c6fcb18155488864d06330daf72)
+[Full comparison](https://github.com/kapdon/rocknix-desktop/compare/v0.1.0...a17f97945bf74f510ceeb66371eb39bc3bdf8388)
 
 <!-- development-changelog:end -->
