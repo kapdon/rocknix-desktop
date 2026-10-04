@@ -8,6 +8,7 @@ from pathlib import Path
 import runpy
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
@@ -15,11 +16,17 @@ from types import SimpleNamespace
 loader=importlib.machinery.SourceFileLoader('games','payload/bin/rocknix-games')
 spec=importlib.util.spec_from_loader(loader.name,loader)
 g=importlib.util.module_from_spec(spec);loader.exec_module(g)
+guest_loader=importlib.machinery.SourceFileLoader('guest_games','rootfs-overlay/usr/local/bin/rocknix-games')
+guest_spec=importlib.util.spec_from_loader(guest_loader.name,guest_loader)
+guest=importlib.util.module_from_spec(guest_spec);guest_loader.exec_module(guest)
 
 def stage_session(root):
     script = root / 'bin/rocknix-games-session'
     script.parent.mkdir()
-    script.write_bytes(Path('payload/bin/rocknix-games-session').read_bytes())
+    control = root / 'steam-control'
+    os.mkfifo(control)
+    script.write_text(Path('payload/bin/rocknix-games-session').read_text().replace(
+        '/run/rocknix-desktop-games/steam-control', str(control)))
     helper = root / 'guest/rocknix-gamescope'
     helper.parent.mkdir()
     helper.write_text('#!/bin/sh\nprintf "%s\\n" -W 1920 -H 953 -w 1920 -h 953\n')
@@ -171,8 +178,104 @@ raise SystemExit(status)
                 clients=json.loads((root/'clients').read_text()) if (root/'clients').exists() else []
                 self.assertEqual(len(clients),len(statuses))
                 for args in clients:
-                    self.assertEqual(args,['-deckard','-steamos3','-nobigpicture','-noshaders','-silent','steam://rungameid/526870'])
+                    self.assertEqual(args,['-deckard','-steamos3','-nobigpicture','-noshaders','steam://rungameid/526870'])
                 self.assertEqual(list(root.glob('scratch.*')),[])
+
+    def test_guest_show_follows_running_session_not_next_launch_setting(self):
+        for session_mode in ('keep', 'close', None):
+            current = {'busy': True, 'mode': 'close', 'session_mode': session_mode}
+            def choose(prompt, choices):
+                self.assertEqual(('Show Steam', 'show') in choices, session_mode == 'keep')
+                return 'show' if session_mode == 'keep' else None
+            with patch.object(guest.sys, 'argv', ['rocknix-games']), \
+                    patch.object(guest, 'state', return_value=current), \
+                    patch.object(guest, 'menu', side_effect=choose), \
+                    patch.object(guest.time, 'sleep'), patch.object(guest, 'send') as send:
+                guest.main()
+                self.assertEqual([c.args for c in send.call_args_list],
+                                 [('refresh',), ('show',)] if session_mode == 'keep' else [('refresh',)])
+
+    def test_show_steam_requires_live_keep_session_and_reader(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(g, 'LEASE', Path(tmp)), \
+                patch.object(g, 'active', return_value=True), patch.object(g, 'publish'):
+            journal = g.LEASE / 'session.json'
+            for mode in ('close', 'keep'):
+                journal.write_text(json.dumps({'mode': mode}))
+                with self.assertRaises(ValueError):
+                    g.request(['show'])
+            os.mkfifo(g.LEASE / 'steam-control')
+            with self.assertRaisesRegex(ValueError, 'retry Show Steam'):
+                g.request(['show'])  # A FIFO without a reader must not block.
+            fd = os.open(g.LEASE / 'steam-control', os.O_RDWR | os.O_NONBLOCK)
+            try:
+                g.request(['show'])
+                self.assertEqual(os.read(fd, 32), b'show\n')
+                with patch.object(g, 'active', return_value=False):
+                    with self.assertRaisesRegex(ValueError, 'No Keep Desktop'):
+                        g.request(['show'])
+                with self.assertRaises(ValueError):
+                    g.request(['show', 'steam://install/1'])
+            finally:
+                os.close(fd)
+
+    def test_keep_show_reuses_client_environment_and_listener_exits(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(g, 'LEASE', Path(tmp)), \
+                patch.object(g, 'active', return_value=True), patch.object(g, 'publish'):
+            root = Path(tmp)
+            script = stage_session(root)
+            (root / 'session.json').write_text(json.dumps({'mode': 'keep'}))
+            steam = root / 'steam'
+            steam.write_text("""#!/usr/bin/python3
+import os, sys, time
+from pathlib import Path
+root = Path(os.environ['FIXTURE_DIR'])
+if sys.argv[1:] == ['steam://open/main']:
+    (root / 'shown').write_text(os.environ['DISPLAY'])
+else:
+    (root / 'started').touch()
+    while not (root / 'finish').exists(): time.sleep(.02)
+""")
+            steam.chmod(0o755)
+            harness = r'''
+source() {
+  if [[ $1 == /usr/bin/start_steam.sh ]]; then
+    steam_scope_reexec_if_needed() { :; }
+  fi
+}
+/usr/bin/gamescope() {
+  while [[ $1 != -- ]]; do shift; done
+  shift
+  local -a command=()
+  local argument
+  for argument; do
+    [[ $argument != /storage/.local/share/Steam/steamrtarm64/steam ]] || argument=$FIXTURE_DIR/steam
+    command+=("$argument")
+  done
+  DISPLAY=:fixture "${command[@]}"
+}
+builtin source "$1" 526870 keep
+'''
+            process = subprocess.Popen(['bash', '-c', harness, str(script), str(script)],
+                env=dict(os.environ, FIXTURE_DIR=tmp), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                deadline = time.monotonic() + 5
+                while not (root / 'started').exists() and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertTrue((root / 'started').exists())
+                g.request(['show'])
+                while not (root / 'shown').exists() and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertEqual((root / 'shown').read_text(), ':fixture')
+                (root / 'finish').touch()
+                _, errors = process.communicate(timeout=5)
+                self.assertEqual(process.returncode, 0, errors)
+                with self.assertRaisesRegex(ValueError, 'retry Show Steam'):
+                    g.request(['show'])
+            finally:
+                (root / 'finish').touch()
+                if process.poll() is None:
+                    process.kill()
+                process.communicate(timeout=5)
 
     def test_missing_native_scope_helper_fails_closed(self):
         script=str(Path('payload/bin/rocknix-games-session').resolve())
@@ -223,6 +326,7 @@ raise SystemExit(status)
             with patch.object(g,'catalog',return_value=[{'id':'526870'}]),patch.object(g,'active',side_effect=lambda u:u=='rocknix-desktop.service'),patch.object(g,'steam_running',return_value=False),patch.object(g,'run',return_value=SimpleNamespace(returncode=0)) as run,patch.object(g,'publish'):
                 g.request(['launch','526870',mode])
                 args=run.call_args.args
+                self.assertIn('--property=TemporaryFileSystem=/dev/shm:rw,nosuid,nodev,mode=1777',args)
                 self.assertIn('--property=KillMode=control-group',args)
                 self.assertIn(f'--property=ExecStopPost={g.BASE}/bin/rocknix-games recover',args)
                 if mode == 'close':
@@ -318,17 +422,20 @@ raise SystemExit(status)
             with tempfile.TemporaryDirectory() as tmp,patch.object(g,'LEASE',Path(tmp)),patch.object(g.time,'sleep'),patch.object(g,'active',return_value=True):
                 journal=Path(tmp)/'session.json'
                 journal.write_text(json.dumps({'mode':'close','desktop_stopped':True,'binfmt':{},'scope':g.SCOPE}))
+                control=Path(tmp)/'steam-control';os.mkfifo(control)
                 def invoke(*args,**kwargs):
                     return SimpleNamespace(stdout=state if args[1]=='show' else 'running')
                 with patch.object(g,'run',side_effect=invoke) as run:
                     if state in ('inactive','failed'):
                         g.recover()
                         self.assertFalse(journal.exists())
+                        self.assertFalse(control.exists())
                         self.assertEqual(run.call_args_list[0].args,('systemctl','stop',g.SCOPE))
                         self.assertEqual(run.call_args_list[-1].args,('systemctl','start','rocknix-desktop.service'))
                     else:
                         with self.assertRaisesRegex(ValueError,'scope did not stop'):g.recover()
                         self.assertTrue(journal.exists())
+                        self.assertTrue(control.exists())
                         self.assertFalse(any(c.args[1]=='start' for c in run.call_args_list))
 
     def test_layer_menu_owner_identity_and_auto_priority(self):
