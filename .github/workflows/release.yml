@@ -101,3 +101,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.version }}
         run: python3 scripts/publish-versioned-components.py "$RELEASE_TAG" --repository "$GITHUB_REPOSITORY"
+      - name: Record build and packaging timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build-timings
+          path: |
+            dist/components/timings.json
+            dist/components/packaging-timings.json
+          if-no-files-found: ignore

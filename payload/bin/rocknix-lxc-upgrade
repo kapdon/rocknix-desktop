@@ -171,10 +171,9 @@ def extract(bundle, expected, target, assembled=None, components=None):
     components = components or runpy.run_path(str(helper_path('rocknix-components')))
     value = components['release'](json.loads(bundle.read_text()))
     if assembled is None:
-        files = components['materialize'](value, bundle.parent / 'components',
-                                          'kapdon/rocknix-desktop', 'update')
         assembled = target / 'components-candidate'
-        components['assemble'](value, files, assembled, 'update')
+        components['download_release'](value, bundle.parent / 'components',
+                                       'kapdon/rocknix-desktop', assembled)
     else:
         # The downloader has already assembled this root-owned candidate under
         # the installation lock. Consume it once instead of unpacking twice.

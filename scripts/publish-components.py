@@ -8,8 +8,6 @@ import runpy
 import shutil
 import subprocess
 import tempfile
-import tarfile
-import io
 
 PROJECT = Path(__file__).resolve().parents[1]
 B = runpy.run_path(str(PROJECT / 'scripts/build-components.py'))
@@ -61,31 +59,20 @@ class Publisher:
 
 
 def prepare_release(manifest, store, destination, tag):
-    """Wrap finished archives without decompressing or recompressing the rootfs."""
+    """Validate and assemble once in CI, preserving owners in one fakeroot session."""
     value = C['release'](json.loads(manifest.read_text()))
     revision = value['commit']
-    bundle = destination / 'bundle.tar'
-    with tarfile.open(bundle, 'w') as archive:
-        data = C['encoded'](value)
-        member = tarfile.TarInfo('release.json'); member.size = len(data); member.mode = 0o644
-        archive.addfile(member, io.BytesIO(data))
-        seen = set()
-        for role in C['profile_roles'](value, 'install'):
-            spec = value['components'][role]
-            source = B['Store'](store).blob(spec)
-            if spec['asset'] in seen:
-                continue
-            seen.add(spec['asset'])
-            member = tarfile.TarInfo(spec['asset']); member.size = spec['size']; member.mode = 0o644
-            with source.open('rb') as stream:
-                archive.addfile(member, stream)
+    bundle = destination / 'system.tar.xz'
+    prefix = [] if os.geteuid() == 0 else ['fakeroot', '--']
+    subprocess.run([*prefix, 'python3', PROJECT / 'scripts/package-components.py',
+                    '--manifest', manifest, '--store', store, '--output', bundle], check=True)
     if bundle.stat().st_size >= 2 * 1024**3:
         raise RuntimeError('bundle exceeds release asset limit')
     bundle_sha = C['digest'](bundle)
-    bundle = bundle.rename(destination / f'rocknix-desktop-{revision}-{bundle_sha}.tar')
+    bundle = bundle.rename(destination / f'rocknix-desktop-{revision}-{bundle_sha}.tar.xz')
     checksum = destination / (bundle.name + '.sha256')
     checksum.write_text(f'{bundle_sha}  {bundle.name}\n')
-    value['bundle'] = {'tag': tag, 'asset': bundle.name, 'sha256': bundle_sha, 'size': bundle.stat().st_size}
+    value['bundle'] = {'format': 'assembled-tar-xz', 'tag': tag, 'asset': bundle.name, 'sha256': bundle_sha, 'size': bundle.stat().st_size}
     candidate = destination / 'release.json'; candidate.write_bytes(C['encoded'](value))
     sha = C['digest'](candidate)
     candidate = candidate.rename(destination / f'rocknix-desktop-components-{revision}-{sha}.json')

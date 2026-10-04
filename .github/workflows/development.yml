@@ -111,6 +111,7 @@ jobs:
           path: |
             dist/components/plan.json
             dist/components/timings.json
+            dist/components/packaging-timings.json
             dist/components/release.json
             dist/components/development-notes.md
             dist/components/CHANGELOG.md

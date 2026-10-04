@@ -74,6 +74,10 @@ with tempfile.TemporaryDirectory() as temporary:
     def output(args, **kwargs):
         return '' if '--porcelain' in args else 'a' * 40
     def generate_notes(args, **kwargs):
+        if '--output' in args:
+            events.append(('package',))
+            Path(args[args.index('--output') + 1]).write_bytes(b'assembled system fixture')
+            return SimpleNamespace(returncode=0)
         events.append(('notes',))
         assert '--repository' in args and args[args.index('--repository') + 1] == 'owner/repo'
         assert '--changelog' in args
@@ -100,6 +104,13 @@ with tempfile.TemporaryDirectory() as temporary:
             rejects(P['publish'], manifest, work, 'owner/repo')
         assert not events
         print('PASS: changelog generation failure prevents all publication mutations')
+        events.clear()
+        def failed_package(*args, **kwargs):
+            raise RuntimeError('invalid component composition')
+        with patch.dict(state, prepare_release=failed_package):
+            rejects(P['publish'], manifest, work, 'owner/repo')
+        assert events == [('notes',)]
+        print('PASS: packaging validation failure prevents release mutation')
         events.clear(); FakePublisher.fail = True
         rejects(P['publish'], manifest, work, 'owner/repo')
         assert not any(e[:3] == ('gh', 'release', 'upload') for e in events)

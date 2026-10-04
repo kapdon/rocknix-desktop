@@ -9,11 +9,13 @@ compilation, export and compression. Cache misses rebuild only the affected
 parts, with BuildKit layer caching available for compiler work. Caches are
 optional and disposable: an empty or evicted cache causes a normal rebuild.
 
-Each release publishes one installation bundle containing eight compressed
-archives and a manifest. Wrapping those archives in an uncompressed tar avoids
-unpacking and recompressing the full root filesystem. The complete bundle is a
-durable public download; installers never depend on Actions caches or run artifacts.
-There are no individual component releases or registry packages.
+Each release publishes one assembled system archive. CI validates every component
+and the combined path/link graph, assembles the rootfs, and generates integration
+metadata before compressing the final archive. The device verifies its download
+checksum, extracts it once, and installs it; it does not assemble components or
+generate integration archives. The final archive is a durable public download;
+installers never depend on Actions caches or run artifacts. There are no individual
+component releases or registry packages.
 
 ## Components and invalidation
 
@@ -86,14 +88,14 @@ fakeroot -- python3 payload/bin/rocknix-components \
 
 Fakeroot ownership exists only for that session. Inspect or archive the result
 inside the same fakeroot session; do not deploy its loose directory as a
-metadata-preserving copy. The device installer assembles as actual host root.
+metadata-preserving copy. The device installer extracts the completed archive as actual host root.
 
 The same command with `--profile update` includes the same complete system.
-A downloaded release manifest automatically fetches its single bundle when local
-archives are missing, verifies the outer checksum and every compressed archive,
-and then assembles the system. Assembly verifies every artifact and the
-combined path/link graph before extraction. Corruption, path overlap, unsafe
-links, unrepresentable owners and insufficient free space stop assembly.
+A downloaded release manifest fetches its CI-assembled system archive, verifies
+the checksum and embedded provenance, and extracts it with numeric owners and
+permissions preserved. Component validation and integration generation run only
+in the CI packaging step. `packaging-timings.json` records assembly/validation and
+compression separately from component build timing.
 
 ## Publication and compatibility
 
@@ -140,7 +142,7 @@ does not rebuild components. Publication failure or benchmark mode leaves the
 changelog untouched. The update preserves unrelated concurrent commits and fails
 if someone edits the changelog during the build; it never force-pushes `dev`.
 
-Install and Update assemble the same complete component set, including the guest
+Install and Update extract the same CI-assembled system, including the guest
 base. Updates replace `data/rootfs`; they never run APT or copy an overlay into
 the old container. Existing monolithic LXC installations with the separated
 storage layout migrate through this same path. Home and shared storage are
@@ -154,7 +156,8 @@ finishes cleanup or rolls back and retries. Staging requires room for the comple
 new system and temporary host backup; the old rootfs is renamed, not copied.
 
 Build reuse remains component-based: unchanged immutable artifacts need no
-recompilation or recompression. Device updates still assemble a whole new rootfs.
+recompilation or per-component recompression. CI assembles and compresses the final
+system archive for each release; device updates extract that finished rootfs.
 The `trash-packages` artifact remains a build-cache dependency for the guest base;
 neither install nor update delivers an offline package transaction to the device.
 
